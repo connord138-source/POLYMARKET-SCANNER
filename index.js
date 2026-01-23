@@ -365,7 +365,6 @@ function hasEventStarted(title, slug, avgPrice) {
   const now = Date.now();
   
   // Calculate EST time (UTC - 5 hours)
-  // Note: This doesn't account for DST but is close enough for our purposes
   const EST_OFFSET = -5 * 60 * 60 * 1000;
   const estNow = new Date(now + EST_OFFSET);
   const currentHourEST = estNow.getUTCHours();
@@ -393,13 +392,36 @@ function hasEventStarted(title, slug, avgPrice) {
     lowerSlug.includes('cfb-') ||
     lowerSlug.includes('ucl-') ||
     lowerSlug.includes('ufc-') ||
+    lowerSlug.includes('atp-') ||
+    lowerSlug.includes('wta-') ||
+    lowerSlug.includes('lol-') ||
+    lowerSlug.includes('-total-') ||
     lowerTitle.includes(' vs ') ||
     lowerTitle.includes(' vs. ') ||
     lowerTitle.includes('spread:') ||
     lowerTitle.includes('o/u ') ||
     lowerTitle.includes('over/under');
   
-  // Try to extract date from slug (format: 2026-01-22)
+  // Get the event date/time using the same function used for signals
+  const eventDate = getEventDate(title, slug);
+  if (eventDate) {
+    // If event start time has passed, it has started
+    // Add 3 hour buffer for games that might still be in progress
+    const eventStartTime = eventDate.getTime();
+    const threeHoursAgo = now - (3 * 60 * 60 * 1000);
+    
+    if (eventStartTime < threeHoursAgo) {
+      // Event started more than 3 hours ago - definitely over or ending
+      return true;
+    }
+    
+    if (eventStartTime < now && isSportsEvent) {
+      // Sports event has started (past the start time)
+      return true;
+    }
+  }
+  
+  // Fallback: Try to extract date from slug (format: 2026-01-22)
   const slugDateMatch = (slug || '').match(/(\d{4})-(\d{2})-(\d{2})/);
   if (slugDateMatch) {
     const eventYear = parseInt(slugDateMatch[1]);
@@ -408,7 +430,6 @@ function hasEventStarted(title, slug, avgPrice) {
     
     // Compare just the date portions as strings (YYYY-MM-DD)
     const eventDateStr = `${eventYear}-${String(eventMonth + 1).padStart(2, '0')}-${String(eventDay).padStart(2, '0')}`;
-    // todayStr is already computed at the top of the function
     
     // If event date is before today, it has definitely started/ended
     if (eventDateStr < todayStr) {
@@ -417,7 +438,6 @@ function hasEventStarted(title, slug, avgPrice) {
     
     // Same-day filtering for sports events
     if (eventDateStr === todayStr && isSportsEvent) {
-      // Most sports events start in the evening
       // If it's after 11pm EST, most games are done or in progress
       if (currentHourEST >= 23) {
         return true;
@@ -660,7 +680,7 @@ export default {
         return new Response(JSON.stringify({
           status: "ok",
           timestamp: new Date().toISOString(),
-          version: "14.0.0 - Balanced scoring + debug endpoint",
+          version: "14.1.0 - Better event-started detection",
           cache: cacheStats
         }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" }
