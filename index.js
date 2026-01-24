@@ -587,7 +587,7 @@ export default {
         return new Response(JSON.stringify({
           status: "ok",
           timestamp: new Date().toISOString(),
-          version: "15.5.0 - Added outcome to open positions",
+          version: "15.6.1 - Tightened settled detection threshold",
           cache: cacheStats
         }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" }
@@ -1480,6 +1480,62 @@ async function getWalletPnL(address) {
     let winCount = 0;
     let lossCount = 0;
     
+    // Helper function to check if market is likely settled based on title/date
+    const isMarketLikelySettled = (title, slug, position) => {
+      const titleLower = (title || '').toLowerCase();
+      const slugLower = (slug || '').toLowerCase();
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      const currentMonth = now.getMonth() + 1;
+      
+      // Check for past years in title (2024, 2023, etc. when we're in 2026)
+      const yearMatch = titleLower.match(/\b(20\d{2})\b/);
+      if (yearMatch) {
+        const year = parseInt(yearMatch[1]);
+        if (year < currentYear) {
+          return true; // Past year = settled
+        }
+      }
+      
+      // Check for specific past dates in slug (format: 2025-10-29)
+      const dateMatch = slugLower.match(/(\d{4})-(\d{2})-(\d{2})/);
+      if (dateMatch) {
+        const eventDate = new Date(parseInt(dateMatch[1]), parseInt(dateMatch[2]) - 1, parseInt(dateMatch[3]));
+        if (eventDate < now) {
+          return true; // Past date = settled
+        }
+      }
+      
+      // Check for month+year patterns like "October 2025"
+      const monthYearPatterns = [
+        /january\s+(\d{4})/i, /february\s+(\d{4})/i, /march\s+(\d{4})/i,
+        /april\s+(\d{4})/i, /may\s+(\d{4})/i, /june\s+(\d{4})/i,
+        /july\s+(\d{4})/i, /august\s+(\d{4})/i, /september\s+(\d{4})/i,
+        /october\s+(\d{4})/i, /november\s+(\d{4})/i, /december\s+(\d{4})/i
+      ];
+      
+      for (let i = 0; i < monthYearPatterns.length; i++) {
+        const match = titleLower.match(monthYearPatterns[i]);
+        if (match) {
+          const year = parseInt(match[1]);
+          const month = i + 1;
+          // If month/year is in the past
+          if (year < currentYear || (year === currentYear && month < currentMonth)) {
+            return true;
+          }
+        }
+      }
+      
+      // Check if current price is essentially resolved (99.5%+ or 0.5%-)
+      // This is tighter than before to avoid catching in-progress games
+      const curPrice = parseFloat(position?.curPrice || position?.currentPrice || 0);
+      if (curPrice >= 0.995 || curPrice <= 0.005) {
+        return true;
+      }
+      
+      return false;
+    };
+    
     for (const [market, data] of Object.entries(marketBets)) {
       const totalBought = data.buys.reduce((sum, b) => sum + b.amount, 0);
       const totalSold = data.sells.reduce((sum, s) => sum + s.amount, 0);
@@ -1490,7 +1546,11 @@ async function getWalletPnL(address) {
       
       // Check if market is resolved (has redeems or position is closed)
       const position = positions.find(p => p.slug === market || p.conditionId === market);
-      const isOpen = position && parseFloat(position.size || 0) > 0;
+      const hasPosition = position && parseFloat(position.size || 0) > 0;
+      
+      // Check if market appears to be settled even if position shows as "open"
+      const likelySettled = isMarketLikelySettled(data.title, data.slug, position);
+      const isOpen = hasPosition && !likelySettled;
       
       if (totalRedeemed > 0) {
         // Won - got payout
@@ -1511,24 +1571,53 @@ async function getWalletPnL(address) {
           icon: data.icon
         });
       } else if (!isOpen && totalBought > 0 && totalRedeemed === 0) {
-        // Lost - bought but no redeem (market resolved against us)
-        const loss = totalBought - totalSold;
-        if (loss > 0) {
-          totalLosses += loss;
-          lossCount++;
+        // Market is settled (no position or likelySettled) with no redeem
+        // Check if this might be an unredeemed WIN based on current value
+        const currentValue = parseFloat(position?.currentValue || position?.value || 0);
+        const currentPrice = parseFloat(position?.curPrice || position?.currentPrice || 0);
+        
+        // If current value is significantly positive or price is near 100%, it's likely a win they haven't redeemed
+        if (currentValue > totalBought * 0.5 || currentPrice >= 0.95) {
+          // Likely an unredeemed WIN
+          const profit = currentValue - totalBought + totalSold;
+          if (profit > 0) {
+            totalWins += profit;
+            winCount++;
+          }
           resolvedBets.push({
             market: data.title,
             marketSlug: data.slug,
             outcome: data.outcome,
-            result: 'LOSS',
+            result: 'WIN',
             invested: Math.round(totalBought),
-            returned: Math.round(totalSold),
-            profit: Math.round(-loss),
-            profitPct: totalBought > 0 ? Math.round((-loss / totalBought) * 100) : 0,
+            returned: Math.round(currentValue + totalSold),
+            profit: Math.round(profit),
+            profitPct: totalBought > 0 ? Math.round((profit / totalBought) * 100) : 0,
             avgPrice: Math.round(avgBuyPrice * 100),
             time: data.buys[data.buys.length - 1]?.time ? new Date(data.buys[data.buys.length - 1].time).toISOString() : null,
-            icon: data.icon
+            icon: data.icon,
+            note: 'Unredeemed'
           });
+        } else {
+          // Lost - bought but no redeem and low/no value
+          const loss = totalBought - totalSold - currentValue;
+          if (loss > 0) {
+            totalLosses += loss;
+            lossCount++;
+            resolvedBets.push({
+              market: data.title,
+              marketSlug: data.slug,
+              outcome: data.outcome,
+              result: 'LOSS',
+              invested: Math.round(totalBought),
+              returned: Math.round(totalSold + currentValue),
+              profit: Math.round(-loss),
+              profitPct: totalBought > 0 ? Math.round((-loss / totalBought) * 100) : 0,
+              avgPrice: Math.round(avgBuyPrice * 100),
+              time: data.buys[data.buys.length - 1]?.time ? new Date(data.buys[data.buys.length - 1].time).toISOString() : null,
+              icon: data.icon
+            });
+          }
         }
       } else if (isOpen) {
         // Check if this is actually a resolved loss (current value is $0 or near $0)
