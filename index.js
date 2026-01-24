@@ -66,6 +66,475 @@ var WALLET_TRACK_RECORD = {
   CACHE_HOURS: 6            // How long to cache wallet stats
 };
 
+// ============================================================
+// PHASE 1: LEARNING SYSTEM
+// Auto-track wallets, store signals, learn from outcomes
+// ============================================================
+
+// Wallet tier thresholds
+var WALLET_TIERS = {
+  ELITE: { minWinRate: 70, minBets: 10, scoreBoost: 1.5, label: "🏆 ELITE" },
+  STRONG: { minWinRate: 62, minBets: 8, scoreBoost: 1.25, label: "💪 STRONG" },
+  AVERAGE: { minWinRate: 50, minBets: 5, scoreBoost: 1.0, label: "📊 AVERAGE" },
+  FADE: { maxWinRate: 45, minBets: 8, scoreBoost: 0.5, label: "🚫 FADE" }
+};
+
+// Factor tracking keys
+var TRACKABLE_FACTORS = [
+  "freshWallet", "whaleSize50k", "whaleSize25k", "whaleSize15k",
+  "lastMinute2h", "lastMinute6h", "concentrated", "coordinated",
+  "extremeOdds", "politicalMarket", "sportsMarket", "cryptoMarket"
+];
+
+// KV Keys
+var KV_KEYS = {
+  WALLETS_PREFIX: "wallet:",           // wallet:{address} -> wallet stats
+  SIGNALS_PREFIX: "signal:",           // signal:{id} -> signal details for learning
+  PENDING_SIGNALS: "pending_signals",  // Array of signal IDs awaiting settlement
+  FACTOR_STATS: "factor_stats",        // Factor performance tracking
+  LEARNING_META: "learning_meta"       // Metadata about learning system
+};
+
+// ============================================================
+// WALLET TRACKING FUNCTIONS
+// ============================================================
+
+// Get wallet tier based on stats
+function getWalletTier(stats) {
+  if (!stats || stats.totalBets < 5) return null;
+  
+  const winRate = stats.winRate || 0;
+  const totalBets = stats.totalBets || 0;
+  
+  if (winRate >= WALLET_TIERS.ELITE.minWinRate && totalBets >= WALLET_TIERS.ELITE.minBets) {
+    return { ...WALLET_TIERS.ELITE, tier: "ELITE" };
+  }
+  if (winRate >= WALLET_TIERS.STRONG.minWinRate && totalBets >= WALLET_TIERS.STRONG.minBets) {
+    return { ...WALLET_TIERS.STRONG, tier: "STRONG" };
+  }
+  if (winRate <= WALLET_TIERS.FADE.maxWinRate && totalBets >= WALLET_TIERS.FADE.minBets) {
+    return { ...WALLET_TIERS.FADE, tier: "FADE" };
+  }
+  if (totalBets >= WALLET_TIERS.AVERAGE.minBets) {
+    return { ...WALLET_TIERS.AVERAGE, tier: "AVERAGE" };
+  }
+  return null;
+}
+
+// Save/update wallet stats in KV
+async function updateWalletStats(env, walletAddress, betData) {
+  if (!env.SIGNALS_CACHE || !walletAddress) return null;
+  
+  const key = KV_KEYS.WALLETS_PREFIX + walletAddress.toLowerCase();
+  
+  try {
+    // Get existing stats
+    let stats = await env.SIGNALS_CACHE.get(key, { type: "json" });
+    
+    if (!stats) {
+      stats = {
+        address: walletAddress.toLowerCase(),
+        totalBets: 0,
+        wins: 0,
+        losses: 0,
+        pending: 0,
+        winRate: 0,
+        totalVolume: 0,
+        avgBetSize: 0,
+        profitLoss: 0,
+        lastSeen: null,
+        firstSeen: new Date().toISOString(),
+        tier: null,
+        currentStreak: 0,
+        bestStreak: 0,
+        markets: {},        // Track performance by market type
+        recentBets: []      // Last 20 bets for reference
+      };
+    }
+    
+    // Update with new bet data
+    if (betData) {
+      stats.totalVolume += betData.amount || 0;
+      stats.lastSeen = new Date().toISOString();
+      stats.pending += 1;
+      
+      // Track bet for later resolution
+      if (stats.recentBets.length >= 20) {
+        stats.recentBets.shift(); // Remove oldest
+      }
+      stats.recentBets.push({
+        signalId: betData.signalId,
+        market: betData.market,
+        marketSlug: betData.marketSlug,
+        direction: betData.direction,
+        amount: betData.amount,
+        price: betData.price,
+        time: new Date().toISOString(),
+        outcome: null // Will be filled on settlement
+      });
+      
+      // Update average bet size
+      const totalBetsIncludingPending = stats.totalBets + stats.pending;
+      if (totalBetsIncludingPending > 0) {
+        stats.avgBetSize = Math.round(stats.totalVolume / totalBetsIncludingPending);
+      }
+    }
+    
+    // Save to KV (expire after 90 days of no activity)
+    await env.SIGNALS_CACHE.put(key, JSON.stringify(stats), {
+      expirationTtl: 90 * 24 * 60 * 60
+    });
+    
+    return stats;
+  } catch (e) {
+    console.error("Error updating wallet stats:", e.message);
+    return null;
+  }
+}
+
+// Get wallet stats from KV
+async function getWalletStats(env, walletAddress) {
+  if (!env.SIGNALS_CACHE || !walletAddress) return null;
+  
+  const key = KV_KEYS.WALLETS_PREFIX + walletAddress.toLowerCase();
+  
+  try {
+    const stats = await env.SIGNALS_CACHE.get(key, { type: "json" });
+    if (stats) {
+      stats.tierInfo = getWalletTier(stats);
+    }
+    return stats;
+  } catch (e) {
+    console.error("Error getting wallet stats:", e.message);
+    return null;
+  }
+}
+
+// Record bet outcome for a wallet
+async function recordWalletOutcome(env, walletAddress, outcome, profitLoss, marketType) {
+  if (!env.SIGNALS_CACHE || !walletAddress) return null;
+  
+  const key = KV_KEYS.WALLETS_PREFIX + walletAddress.toLowerCase();
+  
+  try {
+    let stats = await env.SIGNALS_CACHE.get(key, { type: "json" });
+    if (!stats) return null;
+    
+    // Update stats
+    stats.totalBets += 1;
+    stats.pending = Math.max(0, stats.pending - 1);
+    
+    if (outcome === "WIN") {
+      stats.wins += 1;
+      stats.currentStreak = Math.max(0, stats.currentStreak) + 1;
+      stats.bestStreak = Math.max(stats.bestStreak, stats.currentStreak);
+    } else {
+      stats.losses += 1;
+      stats.currentStreak = Math.min(0, stats.currentStreak) - 1;
+    }
+    
+    stats.profitLoss += profitLoss || 0;
+    stats.winRate = stats.totalBets > 0 ? Math.round((stats.wins / stats.totalBets) * 100) : 0;
+    stats.tier = getWalletTier(stats)?.tier || null;
+    
+    // Track by market type
+    if (marketType) {
+      if (!stats.markets[marketType]) {
+        stats.markets[marketType] = { wins: 0, losses: 0, winRate: 0 };
+      }
+      if (outcome === "WIN") {
+        stats.markets[marketType].wins += 1;
+      } else {
+        stats.markets[marketType].losses += 1;
+      }
+      const mt = stats.markets[marketType];
+      mt.winRate = Math.round((mt.wins / (mt.wins + mt.losses)) * 100);
+    }
+    
+    await env.SIGNALS_CACHE.put(key, JSON.stringify(stats), {
+      expirationTtl: 90 * 24 * 60 * 60
+    });
+    
+    return stats;
+  } catch (e) {
+    console.error("Error recording wallet outcome:", e.message);
+    return null;
+  }
+}
+
+// ============================================================
+// SIGNAL STORAGE FOR LEARNING
+// ============================================================
+
+// Store signal for later learning
+async function storeSignalForLearning(env, signal, factors, wallets) {
+  if (!env.SIGNALS_CACHE) return;
+  
+  const signalData = {
+    id: signal.id,
+    marketSlug: signal.marketSlug,
+    marketTitle: signal.marketTitle,
+    direction: signal.direction,
+    score: signal.score,
+    factors: factors,           // Array of factor keys that contributed
+    wallets: wallets,           // Array of wallet addresses involved
+    largestBet: signal.largestBet,
+    totalVolume: signal.suspiciousVolume,
+    priceAtSignal: signal.avgEntryPrice,
+    priceAfter30min: null,      // Will be filled by line movement tracker
+    priceAfter1hr: null,
+    eventDate: signal.eventDate,
+    detectedAt: signal.detectedAt,
+    outcome: null,              // WIN/LOSS - filled on settlement
+    settledAt: null,
+    profitLoss: null
+  };
+  
+  try {
+    // Store individual signal
+    const signalKey = KV_KEYS.SIGNALS_PREFIX + signal.id;
+    await env.SIGNALS_CACHE.put(signalKey, JSON.stringify(signalData), {
+      expirationTtl: 30 * 24 * 60 * 60 // Keep for 30 days
+    });
+    
+    // Add to pending signals list
+    let pendingSignals = await env.SIGNALS_CACHE.get(KV_KEYS.PENDING_SIGNALS, { type: "json" }) || [];
+    
+    // Avoid duplicates
+    if (!pendingSignals.includes(signal.id)) {
+      pendingSignals.push(signal.id);
+      
+      // Keep only last 500 pending signals
+      if (pendingSignals.length > 500) {
+        pendingSignals = pendingSignals.slice(-500);
+      }
+      
+      await env.SIGNALS_CACHE.put(KV_KEYS.PENDING_SIGNALS, JSON.stringify(pendingSignals));
+    }
+    
+    console.log(`Stored signal for learning: ${signal.id}`);
+  } catch (e) {
+    console.error("Error storing signal for learning:", e.message);
+  }
+}
+
+// ============================================================
+// FACTOR PERFORMANCE TRACKING
+// ============================================================
+
+// Update factor stats after outcome
+async function updateFactorStats(env, factors, outcome) {
+  if (!env.SIGNALS_CACHE || !factors || factors.length === 0) return;
+  
+  try {
+    let factorStats = await env.SIGNALS_CACHE.get(KV_KEYS.FACTOR_STATS, { type: "json" }) || {};
+    
+    for (const factor of factors) {
+      if (!factorStats[factor]) {
+        factorStats[factor] = {
+          wins: 0,
+          losses: 0,
+          winRate: 50,
+          weight: 1.0,
+          lastUpdated: null
+        };
+      }
+      
+      if (outcome === "WIN") {
+        factorStats[factor].wins += 1;
+      } else {
+        factorStats[factor].losses += 1;
+      }
+      
+      const total = factorStats[factor].wins + factorStats[factor].losses;
+      factorStats[factor].winRate = Math.round((factorStats[factor].wins / total) * 100);
+      
+      // Adjust weight based on performance (0.5 to 2.0 range)
+      // Factors with >60% win rate get boosted, <40% get reduced
+      factorStats[factor].weight = Math.max(0.5, Math.min(2.0, 
+        0.5 + (factorStats[factor].winRate / 100) * 1.5
+      ));
+      
+      factorStats[factor].lastUpdated = new Date().toISOString();
+    }
+    
+    await env.SIGNALS_CACHE.put(KV_KEYS.FACTOR_STATS, JSON.stringify(factorStats));
+    console.log(`Updated factor stats for ${factors.length} factors`);
+  } catch (e) {
+    console.error("Error updating factor stats:", e.message);
+  }
+}
+
+// Get current factor weights for scoring
+async function getFactorWeights(env) {
+  if (!env.SIGNALS_CACHE) return {};
+  
+  try {
+    const factorStats = await env.SIGNALS_CACHE.get(KV_KEYS.FACTOR_STATS, { type: "json" }) || {};
+    const weights = {};
+    
+    for (const [factor, stats] of Object.entries(factorStats)) {
+      weights[factor] = stats.weight || 1.0;
+    }
+    
+    return weights;
+  } catch (e) {
+    console.error("Error getting factor weights:", e.message);
+    return {};
+  }
+}
+
+// ============================================================
+// SETTLEMENT CHECKER
+// ============================================================
+
+// Check if a market has settled and determine outcome
+async function checkMarketSettlement(marketSlug) {
+  try {
+    // Fetch market data from Polymarket
+    const res = await fetch(`${POLYMARKET_API}/markets/${marketSlug}`);
+    if (!res.ok) return null;
+    
+    const market = await res.json();
+    
+    // Check if resolved
+    if (market.resolved || market.closed) {
+      return {
+        settled: true,
+        winningOutcome: market.outcome || market.winningOutcome,
+        resolutionPrice: parseFloat(market.resolutionPrice || market.lastTradePrice || 0)
+      };
+    }
+    
+    // Check price - if at 0.99+ or 0.01-, effectively settled
+    const price = parseFloat(market.lastTradePrice || market.midPrice || 0.5);
+    if (price >= 0.995) {
+      return { settled: true, winningOutcome: "Yes", resolutionPrice: 1.0 };
+    }
+    if (price <= 0.005) {
+      return { settled: true, winningOutcome: "No", resolutionPrice: 0.0 };
+    }
+    
+    return { settled: false };
+  } catch (e) {
+    console.error(`Error checking settlement for ${marketSlug}:`, e.message);
+    return null;
+  }
+}
+
+// Process settled signals and update learning data
+async function processSettledSignals(env) {
+  if (!env.SIGNALS_CACHE) return { processed: 0, wins: 0, losses: 0 };
+  
+  const results = { processed: 0, wins: 0, losses: 0, errors: 0 };
+  
+  try {
+    // Get pending signals
+    let pendingSignals = await env.SIGNALS_CACHE.get(KV_KEYS.PENDING_SIGNALS, { type: "json" }) || [];
+    const stillPending = [];
+    
+    console.log(`Checking ${pendingSignals.length} pending signals for settlement...`);
+    
+    for (const signalId of pendingSignals) {
+      try {
+        // Get signal data
+        const signalKey = KV_KEYS.SIGNALS_PREFIX + signalId;
+        const signalData = await env.SIGNALS_CACHE.get(signalKey, { type: "json" });
+        
+        if (!signalData) {
+          continue; // Signal expired or deleted
+        }
+        
+        // Skip if already settled
+        if (signalData.outcome) {
+          continue;
+        }
+        
+        // Check if market settled
+        const settlement = await checkMarketSettlement(signalData.marketSlug);
+        
+        if (!settlement || !settlement.settled) {
+          stillPending.push(signalId);
+          continue;
+        }
+        
+        // Determine if our signal won or lost
+        const signalDirection = signalData.direction?.toLowerCase();
+        const winningOutcome = settlement.winningOutcome?.toLowerCase();
+        
+        let outcome = "LOSS";
+        if (signalDirection === winningOutcome || 
+            (signalDirection === "yes" && winningOutcome === "yes") ||
+            (signalDirection === "no" && winningOutcome === "no") ||
+            signalDirection === winningOutcome) {
+          outcome = "WIN";
+        }
+        
+        // Calculate profit/loss
+        const entryPrice = signalData.priceAtSignal / 100;
+        const resolutionPrice = settlement.resolutionPrice;
+        const profitPct = outcome === "WIN" 
+          ? Math.round(((resolutionPrice - entryPrice) / entryPrice) * 100)
+          : -100;
+        
+        // Update signal data
+        signalData.outcome = outcome;
+        signalData.settledAt = new Date().toISOString();
+        signalData.profitLoss = profitPct;
+        
+        await env.SIGNALS_CACHE.put(signalKey, JSON.stringify(signalData), {
+          expirationTtl: 30 * 24 * 60 * 60
+        });
+        
+        // Update factor stats
+        if (signalData.factors && signalData.factors.length > 0) {
+          await updateFactorStats(env, signalData.factors, outcome);
+        }
+        
+        // Update wallet stats for each wallet involved
+        const marketType = detectMarketType(signalData.marketTitle);
+        for (const wallet of (signalData.wallets || [])) {
+          await recordWalletOutcome(env, wallet, outcome, profitPct, marketType);
+        }
+        
+        results.processed += 1;
+        if (outcome === "WIN") {
+          results.wins += 1;
+        } else {
+          results.losses += 1;
+        }
+        
+        console.log(`Signal ${signalId} settled: ${outcome}`);
+        
+      } catch (e) {
+        console.error(`Error processing signal ${signalId}:`, e.message);
+        results.errors += 1;
+        stillPending.push(signalId); // Keep for retry
+      }
+    }
+    
+    // Update pending list
+    await env.SIGNALS_CACHE.put(KV_KEYS.PENDING_SIGNALS, JSON.stringify(stillPending));
+    
+    console.log(`Settlement check complete: ${results.processed} processed, ${results.wins} wins, ${results.losses} losses`);
+    
+  } catch (e) {
+    console.error("Error in settlement checker:", e.message);
+  }
+  
+  return results;
+}
+
+// Helper to detect market type from title
+function detectMarketType(title) {
+  const titleLower = (title || "").toLowerCase();
+  
+  if (POLITICAL_KEYWORDS.some(k => titleLower.includes(k))) return "political";
+  if (SPORTS_KEYWORDS.some(k => titleLower.includes(k))) return "sports";
+  if (CRYPTO_KEYWORDS.some(k => titleLower.includes(k))) return "crypto";
+  return "other";
+}
+
 var POLITICAL_KEYWORDS = ["election", "trump", "biden", "president", "senate", "congress", "governor", "republican", "democrat", "vote", "primary", "inauguration", "impeach", "pardon", "executive order", "cabinet", "nominee"];
 var CRYPTO_KEYWORDS = ["bitcoin", "btc", "ethereum", "eth", "crypto", "sec", "etf", "regulation", "gensler", "solana", "sol", "doge", "xrp"];
 var SPORTS_KEYWORDS = ["nba", "nfl", "mlb", "nhl", "super bowl", "championship", "playoffs", "world series", "mvp"];
@@ -567,6 +1036,160 @@ export default {
         });
       }
       
+      // ============================================
+      // LEARNING SYSTEM ENDPOINTS
+      // ============================================
+      
+      // Get learning stats overview
+      if (path === "/learning/stats") {
+        if (!env.SIGNALS_CACHE) {
+          return new Response(JSON.stringify({ error: "No cache configured" }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+        
+        try {
+          const factorStats = await env.SIGNALS_CACHE.get(KV_KEYS.FACTOR_STATS, { type: "json" }) || {};
+          const pendingSignals = await env.SIGNALS_CACHE.get(KV_KEYS.PENDING_SIGNALS, { type: "json" }) || [];
+          
+          // Calculate overall stats
+          let totalWins = 0;
+          let totalLosses = 0;
+          for (const stats of Object.values(factorStats)) {
+            totalWins += stats.wins || 0;
+            totalLosses += stats.losses || 0;
+          }
+          
+          return new Response(JSON.stringify({
+            success: true,
+            overview: {
+              totalFactorsTracked: Object.keys(factorStats).length,
+              totalSignalsProcessed: totalWins + totalLosses,
+              overallWinRate: totalWins + totalLosses > 0 
+                ? Math.round((totalWins / (totalWins + totalLosses)) * 100) 
+                : 0,
+              pendingSignals: pendingSignals.length
+            },
+            factors: factorStats
+          }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        } catch (e) {
+          return new Response(JSON.stringify({ error: e.message }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+      }
+      
+      // Get tracked wallet stats
+      if (path.startsWith("/learning/wallet/")) {
+        const address = path.split("/")[3];
+        if (!address) {
+          return new Response(JSON.stringify({ error: "Wallet address required" }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+        
+        const stats = await getWalletStats(env, address);
+        if (!stats) {
+          return new Response(JSON.stringify({ 
+            success: false, 
+            message: "Wallet not tracked yet. Stats will appear after placing significant bets." 
+          }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+        
+        return new Response(JSON.stringify({ success: true, wallet: stats }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+      
+      // Get all elite/strong wallets (leaderboard)
+      if (path === "/learning/leaderboard") {
+        if (!env.SIGNALS_CACHE) {
+          return new Response(JSON.stringify({ error: "No cache configured" }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+        
+        try {
+          // List all wallet keys and get top performers
+          // Note: In production, you'd want to maintain a separate leaderboard index
+          // For now, we return a message about how to build this over time
+          return new Response(JSON.stringify({
+            success: true,
+            message: "Leaderboard builds automatically as wallets are tracked. Check /learning/wallet/{address} for individual stats.",
+            tiers: WALLET_TIERS
+          }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        } catch (e) {
+          return new Response(JSON.stringify({ error: e.message }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+      }
+      
+      // Manually trigger settlement check
+      if (path === "/learning/settle") {
+        const results = await processSettledSignals(env);
+        return new Response(JSON.stringify({
+          success: true,
+          results
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+      
+      // Get pending signals awaiting settlement
+      if (path === "/learning/pending") {
+        if (!env.SIGNALS_CACHE) {
+          return new Response(JSON.stringify({ error: "No cache configured" }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+        
+        try {
+          const pendingIds = await env.SIGNALS_CACHE.get(KV_KEYS.PENDING_SIGNALS, { type: "json" }) || [];
+          const pendingDetails = [];
+          
+          // Get details for first 20 pending signals
+          for (const id of pendingIds.slice(0, 20)) {
+            const signalData = await env.SIGNALS_CACHE.get(KV_KEYS.SIGNALS_PREFIX + id, { type: "json" });
+            if (signalData) {
+              pendingDetails.push({
+                id: signalData.id,
+                market: signalData.marketTitle,
+                direction: signalData.direction,
+                score: signalData.score,
+                eventDate: signalData.eventDate,
+                detectedAt: signalData.detectedAt
+              });
+            }
+          }
+          
+          return new Response(JSON.stringify({
+            success: true,
+            totalPending: pendingIds.length,
+            signals: pendingDetails
+          }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        } catch (e) {
+          return new Response(JSON.stringify({ error: e.message }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+      }
+      
       if (path === "/health" || path === "/") {
         // Get cache stats
         let cacheStats = { signalCount: 0, oldestSignal: null, newestSignal: null };
@@ -587,7 +1210,7 @@ export default {
         return new Response(JSON.stringify({
           status: "ok",
           timestamp: new Date().toISOString(),
-          version: "15.6.1 - Tightened settled detection threshold",
+          version: "16.0.0 - Phase 1 Learning System",
           cache: cacheStats
         }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" }
@@ -626,6 +1249,12 @@ export default {
           console.log(`Checked ${alertableSignals.length} signals for alerts`);
         }
       }
+      
+      // Run settlement checker to learn from outcomes
+      console.log("Running settlement checker...");
+      const settlementResults = await processSettledSignals(env);
+      console.log(`Settlement: ${settlementResults.processed} processed, ${settlementResults.wins}W-${settlementResults.losses}L`);
+      
     } catch (error) {
       console.error("Cron scan failed:", error.message);
     }
@@ -1128,6 +1757,52 @@ async function runScan(hoursBack, minScore, env, debugMode = false) {
           };
         })
       };
+      
+      // ============================================
+      // LEARNING SYSTEM: Store signal and track wallets
+      // ============================================
+      
+      // Extract factors for learning
+      const factors = [];
+      if (freshWalletCount > 0 && g.largestBet >= 2000) factors.push("freshWallet");
+      if (g.largestBet >= 50000) factors.push("whaleSize50k");
+      else if (g.largestBet >= 25000) factors.push("whaleSize25k");
+      else if (g.largestBet >= 15000) factors.push("whaleSize15k");
+      if (hoursUntilEvent && hoursUntilEvent <= 2) factors.push("lastMinute2h");
+      else if (hoursUntilEvent && hoursUntilEvent <= 6) factors.push("lastMinute6h");
+      if (breakdown["🎯 Concentrated (100% from 1 wallet)"] || breakdown["🎯 Concentrated (90%)"]) factors.push("concentrated");
+      if (breakdown["🔗 Coordinated (3+ wallets, ALL $5k+)"] || breakdown["Coordinated (3+ wallets, ALL $2k+)"]) factors.push("coordinated");
+      if (avgEntry >= 85 || avgEntry <= 15) factors.push("extremeOdds");
+      
+      const marketType = detectMarketType(g.marketTitle);
+      if (marketType === "political") factors.push("politicalMarket");
+      if (marketType === "sports") factors.push("sportsMarket");
+      if (marketType === "crypto") factors.push("cryptoMarket");
+      
+      // Get wallet addresses involved
+      const involvedWallets = Array.from(g.wallets).slice(0, 10);
+      
+      // Store signal for learning (async, don't await)
+      if (env.SIGNALS_CACHE && score >= 50) {
+        storeSignalForLearning(env, signal, factors, involvedWallets).catch(e => 
+          console.error("Error storing signal for learning:", e.message)
+        );
+        
+        // Track wallets that placed significant bets
+        for (const trade of g.trades) {
+          if (trade._usdValue >= 5000) {
+            const wallet = trade.proxyWallet || trade.user || trade.maker;
+            updateWalletStats(env, wallet, {
+              signalId: signal.id,
+              market: g.marketTitle,
+              marketSlug: g.marketSlug,
+              direction: g.direction,
+              amount: trade._usdValue,
+              price: Math.round(parseFloat(trade.price || 0) * 100)
+            }).catch(e => console.error("Error updating wallet:", e.message));
+          }
+        }
+      }
       
       newSignals.push(signal);
     }
