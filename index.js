@@ -1,36 +1,37 @@
 // src/index.js
 var POLYMARKET_API = "https://data-api.polymarket.com";
-// SCORING SYSTEM v6 - Balanced whale/insider probability
-// Higher score = higher confidence this is insider/whale activity
-// Target: 100+ score should be "very likely insider", not impossible to reach
+// SCORING SYSTEM v7 - Realistic thresholds for actual betting activity
+// Most real bets are $1k-$25k range, not $50k+
 var SCORES = {
   // WHALE BET SIZE (single bet)
-  WHALE_BET_MASSIVE: 70,    // $75k+ single bet - definite whale
-  WHALE_BET_LARGE: 50,      // $30k+ single bet - very likely whale
-  WHALE_BET_NOTABLE: 30,    // $15k+ single bet - possible whale
-  WHALE_BET_MEDIUM: 15,     // $8k+ single bet - notable bet
-  // Bets under $8k get 0 points
+  WHALE_BET_MASSIVE: 80,    // $50k+ single bet - definite whale
+  WHALE_BET_LARGE: 60,      // $25k+ single bet - large whale
+  WHALE_BET_NOTABLE: 45,    // $15k+ single bet - notable bet
+  WHALE_BET_MEDIUM: 30,     // $8k+ single bet - solid bet
+  WHALE_BET_SMALL: 15,      // $3k+ single bet - worth noting
   
   // CONCENTRATION (few wallets controlling the action)
-  CONCENTRATION_SINGLE_WHALE: 25,  // 1 wallet has >80% AND bet $15k+
-  CONCENTRATION_WHALE_DUO: 15,     // 2 wallets have >80% AND both bet $8k+
-  CONCENTRATION_HIGH: 10,          // Top wallet has >60% of volume AND $10k+
+  CONCENTRATION_SINGLE_WHALE: 25,  // 1 wallet has >80% AND bet $10k+
+  CONCENTRATION_WHALE_DUO: 15,     // 2 wallets have >80% AND both bet $5k+
+  CONCENTRATION_HIGH: 10,          // Top wallet has >60% of volume AND $5k+
   
-  // FRESH WALLET + BIG MONEY (hiding identity - strong insider signal)
+  // FRESH WALLET + MONEY (hiding identity - insider signal)
   // Does NOT stack with whale bet - it's one or the other
-  FRESH_WHALE_HUGE: 60,     // Fresh wallet betting $50k+ (VERY suspicious)
-  FRESH_WHALE_LARGE: 45,    // Fresh wallet betting $25k+
-  FRESH_WHALE_NOTABLE: 30,  // Fresh wallet betting $10k+
-  FRESH_WHALE_MEDIUM: 15,   // Fresh wallet betting $5k+
+  FRESH_WHALE_HUGE: 80,     // Fresh wallet betting $50k+
+  FRESH_WHALE_LARGE: 60,    // Fresh wallet betting $25k+
+  FRESH_WHALE_NOTABLE: 45,  // Fresh wallet betting $10k+
+  FRESH_WHALE_MEDIUM: 30,   // Fresh wallet betting $5k+
+  FRESH_WALLET_SMALL: 15,   // Fresh wallet betting $2k+
   
   // COORDINATED (multiple wallets acting together)
-  COORDINATED_WHALES: 30,   // 3+ wallets ALL betting $8k+ within 2hrs
-  COORDINATED_LARGE: 15,    // 3+ wallets ALL betting $3k+ within 2hrs
+  COORDINATED_WHALES: 30,   // 3+ wallets ALL betting $5k+ within 2hrs
+  COORDINATED_LARGE: 15,    // 3+ wallets ALL betting $2k+ within 2hrs
   
   // VOLUME
-  VOLUME_MASSIVE: 15,       // >$150k total
-  VOLUME_LARGE: 10,         // >$75k total
-  VOLUME_NOTABLE: 5,        // >$40k total
+  VOLUME_MASSIVE: 20,       // >$100k total
+  VOLUME_LARGE: 15,         // >$50k total
+  VOLUME_NOTABLE: 10,       // >$25k total
+  VOLUME_MEDIUM: 5,         // >$10k total
   
   // MARKET TYPE (minor factor)
   POLITICAL: 5,             // Elections can have insider info
@@ -38,24 +39,23 @@ var SCORES = {
   CRYPTO: 3,                // Less insider advantage
   
   // TIMING/ODDS
-  EXTREME_ODDS: 10,         // Betting heavy on long shots (>80% or <20%)
+  EXTREME_ODDS: 15,         // Betting heavy on long shots (>85% or <15%)
+  MODERATE_ODDS: 5,         // Betting on favorites/underdogs (>75% or <25%)
   RAPID_ACCUMULATION: 10,   // Large position built quickly
   
   // LAST-MINUTE WHALE (urgent insider info)
-  // Only applies if bet is $15k+ AND placed close to event
-  LAST_MINUTE_WHALE_2H: 25, // $15k+ whale bet within 2 hours of event
-  LAST_MINUTE_WHALE_6H: 15, // $15k+ whale bet within 6 hours of event
-  LAST_MINUTE_WHALE_12H: 10, // $15k+ whale bet within 12 hours of event
+  LAST_MINUTE_WHALE_2H: 25, // $10k+ bet within 2 hours of event
+  LAST_MINUTE_WHALE_6H: 15, // $10k+ bet within 6 hours of event
+  LAST_MINUTE_WHALE_12H: 10, // $10k+ bet within 12 hours of event
   
   // PROVEN WINNER WALLET (track record - THE HOLY GRAIL)
-  // Requires 10+ resolved bets in last 30 days AND $50k+ current bet
-  PROVEN_WINNER_ELITE: 80,  // 70%+ win rate - this wallet KNOWS something
-  PROVEN_WINNER_STRONG: 50, // 65-70% win rate - very profitable bettor
-  PROVEN_WINNER_GOOD: 30,   // 60-65% win rate - consistently profitable
-  PROVEN_WINNER_EDGE: 15,   // 55-60% win rate - slight edge
+  PROVEN_WINNER_ELITE: 80,  // 70%+ win rate
+  PROVEN_WINNER_STRONG: 50, // 65-70% win rate
+  PROVEN_WINNER_GOOD: 30,   // 60-65% win rate
+  PROVEN_WINNER_EDGE: 15,   // 55-60% win rate
   
   // WHALE + PROVEN WINNER COMBO
-  WHALE_PROVEN_WINNER: 30   // $50k+ bet from a proven winner wallet
+  WHALE_PROVEN_WINNER: 30   // $25k+ bet from a proven winner wallet
 };
 
 // Minimum requirements for wallet track record
@@ -110,8 +110,10 @@ function getEventDate(title, slug) {
     const eventYear = parseInt(slugDateMatch[1]);
     const eventMonth = parseInt(slugDateMatch[2]) - 1;
     const eventDay = parseInt(slugDateMatch[3]);
-    // Assume event is at 7pm EST (common for sports)
-    return new Date(eventYear, eventMonth, eventDay, 19, 0, 0);
+    // Assume event is at 7pm EST = midnight UTC (next day technically, but close enough)
+    // 7pm EST = 00:00 UTC next day, so we use 23:59 UTC same day as a safe approximation
+    // This means we assume games end by midnight UTC
+    return new Date(Date.UTC(eventYear, eventMonth, eventDay, 23, 59, 0));
   }
   
   // Try to extract date from title
@@ -141,8 +143,8 @@ function getEventDate(title, slug) {
       return null;
     }
     
-    // Assume event is at 7pm EST
-    return new Date(year, month, day, 19, 0, 0);
+    // Assume event ends by midnight UTC
+    return new Date(Date.UTC(year, month, day, 23, 59, 0));
   }
   
   // Check for ISO date in title
@@ -360,7 +362,6 @@ function getWinRateBonus(walletStats) {
 }
 
 // Check if event has already started based on date in title or slug
-// Now properly handles same-day events based on typical start times
 function hasEventStarted(title, slug, avgPrice) {
   const now = Date.now();
   
@@ -375,127 +376,33 @@ function hasEventStarted(title, slug, avgPrice) {
   const todayDay = estNow.getUTCDate();
   const todayStr = `${todayYear}-${String(todayMonth).padStart(2, '0')}-${String(todayDay).padStart(2, '0')}`;
   
-  // If odds are VERY extreme (>95% or <5%), event is likely decided or in progress
-  if (avgPrice > 0.95 || avgPrice < 0.05) {
+  // If odds are VERY extreme (>97% or <3%), event is likely decided
+  if (avgPrice > 0.97 || avgPrice < 0.03) {
     return true;
   }
   
-  // Check if this looks like a sports event
-  const lowerTitle = (title || '').toLowerCase();
-  const lowerSlug = (slug || '').toLowerCase();
-  const isSportsEvent = 
-    lowerSlug.includes('nba-') || 
-    lowerSlug.includes('nfl-') || 
-    lowerSlug.includes('nhl-') || 
-    lowerSlug.includes('mlb-') ||
-    lowerSlug.includes('cbb-') ||
-    lowerSlug.includes('cfb-') ||
-    lowerSlug.includes('ucl-') ||
-    lowerSlug.includes('ufc-') ||
-    lowerSlug.includes('atp-') ||
-    lowerSlug.includes('wta-') ||
-    lowerSlug.includes('lol-') ||
-    lowerSlug.includes('-total-') ||
-    lowerTitle.includes(' vs ') ||
-    lowerTitle.includes(' vs. ') ||
-    lowerTitle.includes('spread:') ||
-    lowerTitle.includes('o/u ') ||
-    lowerTitle.includes('over/under');
-  
-  // Get the event date/time using the same function used for signals
-  const eventDate = getEventDate(title, slug);
-  if (eventDate) {
-    // If event start time has passed, it has started
-    // Add 3 hour buffer for games that might still be in progress
-    const eventStartTime = eventDate.getTime();
-    const threeHoursAgo = now - (3 * 60 * 60 * 1000);
-    
-    if (eventStartTime < threeHoursAgo) {
-      // Event started more than 3 hours ago - definitely over or ending
-      return true;
-    }
-    
-    if (eventStartTime < now && isSportsEvent) {
-      // Sports event has started (past the start time)
-      return true;
-    }
-  }
-  
-  // Fallback: Try to extract date from slug (format: 2026-01-22)
+  // Try to extract date from slug (format: 2026-01-22)
   const slugDateMatch = (slug || '').match(/(\d{4})-(\d{2})-(\d{2})/);
   if (slugDateMatch) {
     const eventYear = parseInt(slugDateMatch[1]);
-    const eventMonth = parseInt(slugDateMatch[2]) - 1; // 0-indexed
+    const eventMonth = parseInt(slugDateMatch[2]);
     const eventDay = parseInt(slugDateMatch[3]);
     
     // Compare just the date portions as strings (YYYY-MM-DD)
-    const eventDateStr = `${eventYear}-${String(eventMonth + 1).padStart(2, '0')}-${String(eventDay).padStart(2, '0')}`;
+    const eventDateStr = `${eventYear}-${String(eventMonth).padStart(2, '0')}-${String(eventDay).padStart(2, '0')}`;
     
-    // If event date is before today, it has definitely started/ended
+    // If event date is before today, it has definitely ended
     if (eventDateStr < todayStr) {
       return true;
     }
     
-    // Same-day filtering for sports events
-    if (eventDateStr === todayStr && isSportsEvent) {
-      // If it's after 11pm EST, most games are done or in progress
-      if (currentHourEST >= 23) {
-        return true;
-      }
-      // If odds are getting extreme on game day, likely in progress
-      if (currentHourEST >= 19 && (avgPrice > 0.90 || avgPrice < 0.10)) {
+    // For same-day events, only filter if it's very late AND odds are extreme
+    if (eventDateStr === todayStr) {
+      // After 11pm EST with somewhat extreme odds = likely over
+      if (currentHourEST >= 23 && (avgPrice > 0.90 || avgPrice < 0.10)) {
         return true;
       }
     }
-  }
-  
-  // Try to extract date from title (various formats)
-  const titleText = title || '';
-  const monthNames = ['january', 'february', 'march', 'april', 'may', 'june', 
-                      'july', 'august', 'september', 'october', 'november', 'december',
-                      'jan', 'feb', 'mar', 'apr', 'may', 'jun', 
-                      'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
-  
-  const titleDateMatch = titleText.toLowerCase().match(
-    new RegExp(`(${monthNames.join('|')})\\s+(\\d{1,2})(?:,?\\s+(\\d{4}))?`, 'i')
-  );
-  
-  if (titleDateMatch) {
-    const monthStr = titleDateMatch[1].toLowerCase();
-    const day = parseInt(titleDateMatch[2]);
-    const year = titleDateMatch[3] ? parseInt(titleDateMatch[3]) : new Date().getFullYear();
-    
-    let month;
-    const fullMonthIndex = monthNames.slice(0, 12).indexOf(monthStr);
-    const shortMonthIndex = monthNames.slice(12).indexOf(monthStr);
-    if (fullMonthIndex !== -1) {
-      month = fullMonthIndex;
-    } else if (shortMonthIndex !== -1) {
-      month = shortMonthIndex;
-    } else {
-      return false;
-    }
-    
-    const eventDateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    // todayStr is already computed at the top of the function
-    
-    if (eventDateStr < todayStr) {
-      return true;
-    }
-    
-    if (eventDateStr === todayStr && isSportsEvent && currentHourEST >= 23) {
-      return true;
-    }
-  }
-  
-  // Match "on 2026-01-21" format in title
-  const isoDateMatch = titleText.match(/(\d{4})-(\d{2})-(\d{2})/);
-  if (isoDateMatch) {
-    const eventDateStr = `${isoDateMatch[1]}-${isoDateMatch[2]}-${isoDateMatch[3]}`;
-    if (eventDateStr < todayStr) {
-      return true;
-    }
-    // REMOVED: Same-day time-based filtering
   }
   
   return false;
@@ -680,7 +587,7 @@ export default {
         return new Response(JSON.stringify({
           status: "ok",
           timestamp: new Date().toISOString(),
-          version: "14.1.0 - Better event-started detection",
+          version: "15.5.0 - Added outcome to open positions",
           cache: cacheStats
         }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" }
@@ -744,10 +651,31 @@ async function runScan(hoursBack, minScore, env, debugMode = false) {
     passed: 0
   };
   
+  const gamblingMarketSamples = []; // Track some examples
+  const tradeSamples = []; // Track a few full trades for debugging
+  
   const validTrades = allTrades.filter((t) => {
     const marketTitle = t.title || t.market || '';
+    
+    // Track first 5 trades to see data structure
+    if (tradeSamples.length < 5) {
+      tradeSamples.push({
+        title: t.title,
+        market: t.market,
+        slug: t.slug,
+        outcome: t.outcome,
+        side: t.side,
+        usd_value: t.usd_value,
+        size: t.size,
+        price: t.price
+      });
+    }
+    
     if (isShortTermGamblingMarket(marketTitle)) {
       debugCounts.gamblingMarket++;
+      if (gamblingMarketSamples.length < 10) {
+        gamblingMarketSamples.push(marketTitle);
+      }
       return false;
     }
     
@@ -852,7 +780,8 @@ async function runScan(hoursBack, minScore, env, debugMode = false) {
   const groups = {};
   validTrades.forEach((t) => {
     const marketKey = t.slug || t.eventSlug || t.conditionId;
-    const direction = t.side === "BUY" ? "YES" : "NO";
+    // Use actual outcome from trade data, fallback to inferring from side
+    const direction = t.outcome || (t.side === "BUY" ? "Yes" : "No");
     const key = `${marketKey}:${direction}`;
     
     if (!groups[key]) {
@@ -882,6 +811,7 @@ async function runScan(hoursBack, minScore, env, debugMode = false) {
   
   // Score each group and create signals
   const newSignals = [];
+  const debugGroups = []; // Track why groups don't become signals
   
   for (const [key, g] of Object.entries(groups)) {
     if (isShortTermGamblingMarket(g.marketTitle)) {
@@ -925,53 +855,58 @@ async function runScan(hoursBack, minScore, env, debugMode = false) {
     // WHALE BET SIZE OR FRESH WALLET (one or the other, not both)
     // ============================================
     if (isLargestBetFresh && largestFreshWalletBet >= 50000) {
-      // Fresh wallet with huge bet - use fresh wallet scoring (higher value)
       score += SCORES.FRESH_WHALE_HUGE;
-      breakdown[`🚨 Fresh wallet WHALE ($${Math.round(largestFreshWalletBet / 1000)}k bet)`] = SCORES.FRESH_WHALE_HUGE;
+      breakdown[`🚨 Fresh wallet WHALE ($${Math.round(largestFreshWalletBet / 1000)}k)`] = SCORES.FRESH_WHALE_HUGE;
     } else if (isLargestBetFresh && largestFreshWalletBet >= 25000) {
       score += SCORES.FRESH_WHALE_LARGE;
-      breakdown[`🚨 Fresh wallet whale ($${Math.round(largestFreshWalletBet / 1000)}k bet)`] = SCORES.FRESH_WHALE_LARGE;
+      breakdown[`🚨 Fresh wallet large ($${Math.round(largestFreshWalletBet / 1000)}k)`] = SCORES.FRESH_WHALE_LARGE;
     } else if (isLargestBetFresh && largestFreshWalletBet >= 10000) {
       score += SCORES.FRESH_WHALE_NOTABLE;
-      breakdown[`⚠️ Fresh wallet bet ($${Math.round(largestFreshWalletBet / 1000)}k)`] = SCORES.FRESH_WHALE_NOTABLE;
+      breakdown[`⚠️ Fresh wallet ($${Math.round(largestFreshWalletBet / 1000)}k)`] = SCORES.FRESH_WHALE_NOTABLE;
     } else if (isLargestBetFresh && largestFreshWalletBet >= 5000) {
       score += SCORES.FRESH_WHALE_MEDIUM;
       breakdown[`Fresh wallet ($${Math.round(largestFreshWalletBet / 1000)}k)`] = SCORES.FRESH_WHALE_MEDIUM;
-    } else if (g.largestBet >= 75000) {
+    } else if (isLargestBetFresh && largestFreshWalletBet >= 2000) {
+      score += SCORES.FRESH_WALLET_SMALL;
+      breakdown[`Fresh wallet ($${Math.round(largestFreshWalletBet / 1000)}k)`] = SCORES.FRESH_WALLET_SMALL;
+    } else if (g.largestBet >= 50000) {
       // Not fresh - use regular whale scoring
       score += SCORES.WHALE_BET_MASSIVE;
-      breakdown[`🐋 Massive whale bet ($${Math.round(g.largestBet / 1000)}k)`] = SCORES.WHALE_BET_MASSIVE;
-    } else if (g.largestBet >= 30000) {
+      breakdown[`🐋 Massive whale ($${Math.round(g.largestBet / 1000)}k)`] = SCORES.WHALE_BET_MASSIVE;
+    } else if (g.largestBet >= 25000) {
       score += SCORES.WHALE_BET_LARGE;
-      breakdown[`🐋 Large whale bet ($${Math.round(g.largestBet / 1000)}k)`] = SCORES.WHALE_BET_LARGE;
+      breakdown[`🐋 Large whale ($${Math.round(g.largestBet / 1000)}k)`] = SCORES.WHALE_BET_LARGE;
     } else if (g.largestBet >= 15000) {
       score += SCORES.WHALE_BET_NOTABLE;
-      breakdown[`🐋 Notable whale bet ($${Math.round(g.largestBet / 1000)}k)`] = SCORES.WHALE_BET_NOTABLE;
+      breakdown[`🐋 Notable bet ($${Math.round(g.largestBet / 1000)}k)`] = SCORES.WHALE_BET_NOTABLE;
     } else if (g.largestBet >= 8000) {
       score += SCORES.WHALE_BET_MEDIUM;
-      breakdown[`Whale bet ($${Math.round(g.largestBet / 1000)}k)`] = SCORES.WHALE_BET_MEDIUM;
+      breakdown[`Solid bet ($${Math.round(g.largestBet / 1000)}k)`] = SCORES.WHALE_BET_MEDIUM;
+    } else if (g.largestBet >= 3000) {
+      score += SCORES.WHALE_BET_SMALL;
+      breakdown[`Notable bet ($${Math.round(g.largestBet / 1000)}k)`] = SCORES.WHALE_BET_SMALL;
     }
     
     // ============================================
-    // CONCENTRATION (whale-sized AND concentrated)
+    // CONCENTRATION (few wallets controlling action)
     // ============================================
     const topWalletPct = topWalletVolume / g.totalVolume;
     const top2Pct = top2WalletsVolume / g.totalVolume;
     
-    // Single whale concentration: 1 wallet has >80% AND that wallet bet $15k+
-    if (numWallets <= 2 && topWalletPct >= 0.80 && topWalletVolume >= 15000) {
+    // Single whale concentration: 1 wallet has >80% AND bet $10k+
+    if (numWallets <= 2 && topWalletPct >= 0.80 && topWalletVolume >= 10000) {
       score += SCORES.CONCENTRATION_SINGLE_WHALE;
-      breakdown[`🎯 Concentrated whale (${Math.round(topWalletPct * 100)}% from 1 wallet)`] = SCORES.CONCENTRATION_SINGLE_WHALE;
+      breakdown[`🎯 Concentrated (${Math.round(topWalletPct * 100)}% from 1 wallet)`] = SCORES.CONCENTRATION_SINGLE_WHALE;
     } 
-    // Whale duo: 2 wallets have >80% AND both bet $8k+
-    else if (numWallets === 2 && top2Pct >= 0.80 && topWalletVolume >= 8000 && secondWalletVolume >= 8000) {
+    // Whale duo: 2 wallets have >80% AND both bet $5k+
+    else if (numWallets === 2 && top2Pct >= 0.80 && topWalletVolume >= 5000 && secondWalletVolume >= 5000) {
       score += SCORES.CONCENTRATION_WHALE_DUO;
-      breakdown[`🎯 Whale duo (2 wallets, both $8k+)`] = SCORES.CONCENTRATION_WHALE_DUO;
+      breakdown[`🎯 Whale duo (both $5k+)`] = SCORES.CONCENTRATION_WHALE_DUO;
     }
     // High concentration with decent bet
-    else if (topWalletPct >= 0.60 && topWalletVolume >= 10000) {
+    else if (topWalletPct >= 0.60 && topWalletVolume >= 5000) {
       score += SCORES.CONCENTRATION_HIGH;
-      breakdown[`🎯 High concentration (${Math.round(topWalletPct * 100)}% from top wallet)`] = SCORES.CONCENTRATION_HIGH;
+      breakdown[`🎯 Concentrated (${Math.round(topWalletPct * 100)}%)`] = SCORES.CONCENTRATION_HIGH;
     }
     
     // ============================================
@@ -1016,7 +951,7 @@ async function runScan(hoursBack, minScore, env, debugMode = false) {
     }
     
     // ============================================
-    // COORDINATED (only valuable if bets are large)
+    // COORDINATED (multiple wallets betting together)
     // ============================================
     if (numWallets >= 3 && g.timestamps.length >= 3) {
       const sortedTimes = [...g.timestamps].sort((a, b) => a - b);
@@ -1024,17 +959,15 @@ async function runScan(hoursBack, minScore, env, debugMode = false) {
       const twoHours = 2 * 60 * 60 * 1000;
       
       if (timeSpan <= twoHours) {
-        // Check if ALL wallets are whales, not just average
+        // Check if ALL wallets are betting decent amounts
         const minBetInGroup = Math.min(...sortedWalletVolumes.slice(0, numWallets));
         
-        if (minBetInGroup >= 8000) {
-          // ALL wallets bet $8k+ = real coordinated whales
+        if (minBetInGroup >= 5000) {
           score += SCORES.COORDINATED_WHALES;
-          breakdown[`🔗 Coordinated whales (${numWallets} wallets, ALL $8k+)`] = SCORES.COORDINATED_WHALES;
-        } else if (minBetInGroup >= 3000) {
-          // ALL wallets bet $3k+ = coordinated large
+          breakdown[`🔗 Coordinated (${numWallets} wallets, ALL $5k+)`] = SCORES.COORDINATED_WHALES;
+        } else if (minBetInGroup >= 2000) {
           score += SCORES.COORDINATED_LARGE;
-          breakdown[`Coordinated (${numWallets} wallets, ALL $3k+)`] = SCORES.COORDINATED_LARGE;
+          breakdown[`Coordinated (${numWallets} wallets, ALL $2k+)`] = SCORES.COORDINATED_LARGE;
         }
       }
     }
@@ -1042,15 +975,18 @@ async function runScan(hoursBack, minScore, env, debugMode = false) {
     // ============================================
     // VOLUME
     // ============================================
-    if (g.totalVolume >= 150000) {
+    if (g.totalVolume >= 100000) {
       score += SCORES.VOLUME_MASSIVE;
-      breakdown[`Volume >$150k`] = SCORES.VOLUME_MASSIVE;
-    } else if (g.totalVolume >= 75000) {
+      breakdown[`Volume >$100k`] = SCORES.VOLUME_MASSIVE;
+    } else if (g.totalVolume >= 50000) {
       score += SCORES.VOLUME_LARGE;
-      breakdown[`Volume >$75k`] = SCORES.VOLUME_LARGE;
-    } else if (g.totalVolume >= 40000) {
+      breakdown[`Volume >$50k`] = SCORES.VOLUME_LARGE;
+    } else if (g.totalVolume >= 25000) {
       score += SCORES.VOLUME_NOTABLE;
-      breakdown[`Volume >$40k`] = SCORES.VOLUME_NOTABLE;
+      breakdown[`Volume >$25k`] = SCORES.VOLUME_NOTABLE;
+    } else if (g.totalVolume >= 10000) {
+      score += SCORES.VOLUME_MEDIUM;
+      breakdown[`Volume >$10k`] = SCORES.VOLUME_MEDIUM;
     }
     
     // ============================================
@@ -1060,9 +996,9 @@ async function runScan(hoursBack, minScore, env, debugMode = false) {
     const timeSpan = sortedTimes[sortedTimes.length - 1] - sortedTimes[0];
     const thirtyMinutes = 30 * 60 * 1000;
     
-    if (timeSpan <= thirtyMinutes && g.totalVolume >= 25000) {
+    if (timeSpan <= thirtyMinutes && g.totalVolume >= 10000) {
       score += SCORES.RAPID_ACCUMULATION;
-      breakdown[`Rapid accumulation ($${Math.round(g.totalVolume / 1000)}k in ${Math.round(timeSpan / 60000)}min)`] = SCORES.RAPID_ACCUMULATION;
+      breakdown[`Rapid ($${Math.round(g.totalVolume / 1000)}k in ${Math.round(timeSpan / 60000)}min)`] = SCORES.RAPID_ACCUMULATION;
     }
     
     // ============================================
@@ -1081,20 +1017,22 @@ async function runScan(hoursBack, minScore, env, debugMode = false) {
     }
     
     // ============================================
-    // EXTREME ODDS (betting on long shots)
+    // EXTREME ODDS (betting on long shots or heavy favorites)
     // ============================================
     const avgPrice = g.trades.reduce((sum, t) => sum + parseFloat(t.price || 0), 0) / g.trades.length;
-    if ((avgPrice < 0.20 || avgPrice > 0.80) && g.largestBet >= 5000) {
+    if ((avgPrice < 0.15 || avgPrice > 0.85) && g.largestBet >= 2000) {
       score += SCORES.EXTREME_ODDS;
-      breakdown[`Extreme odds bet (${Math.round(avgPrice * 100)}%)`] = SCORES.EXTREME_ODDS;
+      breakdown[`Extreme odds (${Math.round(avgPrice * 100)}%)`] = SCORES.EXTREME_ODDS;
+    } else if ((avgPrice < 0.25 || avgPrice > 0.75) && g.largestBet >= 3000) {
+      score += SCORES.MODERATE_ODDS;
+      breakdown[`Strong odds (${Math.round(avgPrice * 100)}%)`] = SCORES.MODERATE_ODDS;
     }
     
     // ============================================
-    // LAST-MINUTE WHALE (urgent insider info)
-    // Only for $15k+ bets close to event
+    // LAST-MINUTE BETTING (close to event)
     // ============================================
     const eventDate = getEventDate(g.marketTitle, g.marketSlug);
-    if (eventDate && g.largestBet >= 15000) {
+    if (eventDate && g.largestBet >= 10000) {
       const lastTradeTimestamp = Math.max(...g.timestamps);
       const hoursUntilEvent = (eventDate.getTime() - lastTradeTimestamp) / (1000 * 60 * 60);
       
@@ -1102,23 +1040,42 @@ async function runScan(hoursBack, minScore, env, debugMode = false) {
       if (hoursUntilEvent > 0 && hoursUntilEvent <= 12) {
         if (hoursUntilEvent <= 2) {
           score += SCORES.LAST_MINUTE_WHALE_2H;
-          breakdown[`⏰ Last-minute whale (${hoursUntilEvent.toFixed(1)}h before)`] = SCORES.LAST_MINUTE_WHALE_2H;
+          breakdown[`⏰ Last-minute (${hoursUntilEvent.toFixed(1)}h before)`] = SCORES.LAST_MINUTE_WHALE_2H;
         } else if (hoursUntilEvent <= 6) {
           score += SCORES.LAST_MINUTE_WHALE_6H;
-          breakdown[`⏰ Pre-event whale (${hoursUntilEvent.toFixed(1)}h before)`] = SCORES.LAST_MINUTE_WHALE_6H;
+          breakdown[`⏰ Pre-event (${hoursUntilEvent.toFixed(1)}h before)`] = SCORES.LAST_MINUTE_WHALE_6H;
         } else if (hoursUntilEvent <= 12) {
           score += SCORES.LAST_MINUTE_WHALE_12H;
-          breakdown[`⏰ Same-day whale (${hoursUntilEvent.toFixed(1)}h before)`] = SCORES.LAST_MINUTE_WHALE_12H;
+          breakdown[`⏰ Same-day (${hoursUntilEvent.toFixed(1)}h before)`] = SCORES.LAST_MINUTE_WHALE_12H;
         }
       }
     }
     
     // Skip events that have already started
     if (hasEventStarted(g.marketTitle, g.marketSlug, avgPrice)) {
+      debugGroups.push({
+        market: g.marketTitle,
+        reason: 'hasEventStarted',
+        largestBet: Math.round(g.largestBet),
+        volume: Math.round(g.totalVolume),
+        score
+      });
       continue;
     }
     
-    // Store signals with score >= 15 (lowered threshold to catch more signals)
+    // Track groups that don't meet score threshold
+    if (score < 15) {
+      debugGroups.push({
+        market: g.marketTitle,
+        reason: `score ${score} < 15`,
+        largestBet: Math.round(g.largestBet),
+        volume: Math.round(g.totalVolume),
+        score,
+        breakdown
+      });
+    }
+    
+    // Store signals with score >= 15
     if (score >= 15) {
       const sortedTimes = [...g.timestamps].sort((a, b) => a - b);
       const firstTradeTime = new Date(sortedTimes[0]);
@@ -1294,7 +1251,10 @@ async function runScan(hoursBack, minScore, env, debugMode = false) {
       ...(debugMode && { 
         scoreDistribution, 
         allSignalsBeforeScoreFilter: debugAllSignals,
-        minScoreUsed: minScore
+        minScoreUsed: minScore,
+        groupsFiltered: debugGroups.slice(0, 30),
+        gamblingMarketSamples,
+        tradeSamples
       })
     }
   };
@@ -1343,20 +1303,66 @@ async function getWalletDetails(address) {
         totalVolume: Math.round(totalVolume),
         firstSeen: formatTimestamp(firstSeen)
       },
-      recentActivity: trades.slice(0, 50).map((t) => ({
-        market: t.title || t.slug || 'Unknown Market',
-        marketSlug: t.slug,
-        eventSlug: t.eventSlug,
-        marketUrl: t.slug ? `https://polymarket.com/market/${t.slug}` : null,
-        side: t.side,
-        outcome: t.outcome,
-        amount: Math.round(parseFloat(t.usdcSize) || 0),
-        size: parseFloat(t.size) || 0,
-        price: Math.round((parseFloat(t.price) || 0) * 100),
-        time: formatTimestamp(t.timestamp),
-        transactionHash: t.transactionHash,
-        icon: t.icon
-      }))
+      // Aggregate trades by market
+      recentActivity: (() => {
+        const marketAgg = {};
+        
+        trades.forEach(t => {
+          const market = t.title || t.slug || 'Unknown Market';
+          const amount = parseFloat(t.usdcSize) || 0;
+          const side = t.side;
+          const key = `${market}-${side}-${t.outcome || 'YES'}`;
+          
+          if (!marketAgg[key]) {
+            marketAgg[key] = {
+              market: market,
+              marketSlug: t.slug,
+              eventSlug: t.eventSlug,
+              marketUrl: t.slug ? `https://polymarket.com/market/${t.slug}` : null,
+              side: side,
+              outcome: t.outcome,
+              totalAmount: 0,
+              tradeCount: 0,
+              avgPrice: 0,
+              priceSum: 0,
+              lastTime: 0,
+              firstTime: Infinity,
+              icon: t.icon
+            };
+          }
+          
+          marketAgg[key].totalAmount += amount;
+          marketAgg[key].tradeCount += 1;
+          marketAgg[key].priceSum += (parseFloat(t.price) || 0);
+          
+          const timestamp = t.timestamp < 1e12 ? t.timestamp * 1000 : t.timestamp;
+          if (timestamp > marketAgg[key].lastTime) {
+            marketAgg[key].lastTime = timestamp;
+          }
+          if (timestamp < marketAgg[key].firstTime) {
+            marketAgg[key].firstTime = timestamp;
+          }
+        });
+        
+        // Convert to array and calculate averages
+        return Object.values(marketAgg)
+          .map(m => ({
+            market: m.market,
+            marketSlug: m.marketSlug,
+            eventSlug: m.eventSlug,
+            marketUrl: m.marketUrl,
+            side: m.side,
+            outcome: m.outcome,
+            amount: Math.round(m.totalAmount),
+            tradeCount: m.tradeCount,
+            price: Math.round((m.priceSum / m.tradeCount) * 100),
+            time: formatTimestamp(m.lastTime),
+            icon: m.icon
+          }))
+          .filter(m => m.amount >= 10) // Filter out tiny aggregates
+          .sort((a, b) => new Date(b.time) - new Date(a.time))
+          .slice(0, 30);
+      })()
     };
   } catch (error) {
     return { success: false, error: error.message };
@@ -1414,65 +1420,170 @@ async function getWalletPositions(address) {
 // Get closed positions (resolved bets) and calculate PnL
 async function getWalletPnL(address) {
   try {
-    // Fetch closed/resolved positions
-    const closedRes = await fetch(`${POLYMARKET_API}/positions?user=${address}&status=closed`);
-    const openRes = await fetch(`${POLYMARKET_API}/positions?user=${address}`);
-    const activityRes = await fetch(`${POLYMARKET_API}/activity?user=${address}&limit=500&type=REDEEM`);
+    // Fetch all activity to analyze bets
+    const [activityRes, positionsRes] = await Promise.all([
+      fetch(`${POLYMARKET_API}/activity?user=${address}&limit=500`),
+      fetch(`${POLYMARKET_API}/positions?user=${address}`)
+    ]);
     
-    let closedPositions = [];
-    let openPositions = [];
-    let redeems = [];
+    let activity = [];
+    let positions = [];
     
-    if (closedRes.ok) {
-      closedPositions = await closedRes.json() || [];
-    }
-    if (openRes.ok) {
-      openPositions = await openRes.json() || [];
-    }
     if (activityRes.ok) {
-      redeems = await activityRes.json() || [];
+      activity = await activityRes.json() || [];
+    }
+    if (positionsRes.ok) {
+      positions = await positionsRes.json() || [];
     }
     
-    // Calculate realized PnL from redeems (winning bets that were cashed out)
-    let realizedPnL = 0;
-    let wins = 0;
-    let losses = 0;
+    // Group activity by market to track full bet lifecycle
+    const marketBets = {};
     
-    const resolvedBets = [];
-    
-    // Process redeems as wins
-    redeems.forEach(r => {
-      const payout = parseFloat(r.usdcSize) || 0;
-      if (payout > 0) {
-        realizedPnL += payout;
-        wins++;
-        resolvedBets.push({
-          market: r.title || r.slug || 'Unknown',
-          marketSlug: r.slug,
-          outcome: r.outcome,
-          result: 'WIN',
-          payout: Math.round(payout),
-          time: r.timestamp < 1e12 ? new Date(r.timestamp * 1000).toISOString() : new Date(r.timestamp).toISOString(),
-          icon: r.icon
-        });
+    activity.forEach(a => {
+      const market = a.slug || a.conditionId;
+      if (!market) return;
+      
+      if (!marketBets[market]) {
+        marketBets[market] = {
+          title: a.title || market,
+          slug: a.slug,
+          icon: a.icon,
+          buys: [],
+          sells: [],
+          redeems: [],
+          outcome: a.outcome
+        };
+      }
+      
+      // Update outcome if we get one (some activities might have it, some might not)
+      if (a.outcome && !marketBets[market].outcome) {
+        marketBets[market].outcome = a.outcome;
+      }
+      
+      const usdValue = parseFloat(a.usdcSize) || parseFloat(a.usd_value) || 0;
+      const timestamp = a.timestamp < 1e12 ? a.timestamp * 1000 : a.timestamp;
+      
+      if (a.type === 'BUY' || a.side === 'BUY') {
+        marketBets[market].buys.push({ amount: usdValue, time: timestamp, price: parseFloat(a.price) || 0, outcome: a.outcome });
+      } else if (a.type === 'SELL' || a.side === 'SELL') {
+        marketBets[market].sells.push({ amount: usdValue, time: timestamp, price: parseFloat(a.price) || 0 });
+      } else if (a.type === 'REDEEM') {
+        marketBets[market].redeems.push({ amount: usdValue, time: timestamp });
       }
     });
     
-    // Calculate unrealized PnL from open positions
-    let unrealizedPnL = 0;
-    openPositions.forEach(p => {
-      const initial = parseFloat(p.initialValue) || 0;
-      const current = parseFloat(p.currentValue) || parseFloat(p.value) || 0;
-      unrealizedPnL += (current - initial);
-    });
+    // Analyze each market bet
+    const resolvedBets = [];
+    const openBets = [];
+    let totalWins = 0;
+    let totalLosses = 0;
+    let winCount = 0;
+    let lossCount = 0;
     
-    // Get total invested from activity
-    const buyActivityRes = await fetch(`${POLYMARKET_API}/activity?user=${address}&limit=500&side=BUY`);
-    let totalInvested = 0;
-    if (buyActivityRes.ok) {
-      const buys = await buyActivityRes.json() || [];
-      totalInvested = buys.reduce((sum, b) => sum + (parseFloat(b.usdcSize) || 0), 0);
+    for (const [market, data] of Object.entries(marketBets)) {
+      const totalBought = data.buys.reduce((sum, b) => sum + b.amount, 0);
+      const totalSold = data.sells.reduce((sum, s) => sum + s.amount, 0);
+      const totalRedeemed = data.redeems.reduce((sum, r) => sum + r.amount, 0);
+      const avgBuyPrice = data.buys.length > 0 
+        ? data.buys.reduce((sum, b) => sum + b.price, 0) / data.buys.length 
+        : 0;
+      
+      // Check if market is resolved (has redeems or position is closed)
+      const position = positions.find(p => p.slug === market || p.conditionId === market);
+      const isOpen = position && parseFloat(position.size || 0) > 0;
+      
+      if (totalRedeemed > 0) {
+        // Won - got payout
+        const profit = totalRedeemed - totalBought + totalSold;
+        totalWins += Math.max(0, profit);
+        winCount++;
+        resolvedBets.push({
+          market: data.title,
+          marketSlug: data.slug,
+          outcome: data.outcome,
+          result: 'WIN',
+          invested: Math.round(totalBought),
+          returned: Math.round(totalRedeemed + totalSold),
+          profit: Math.round(profit),
+          profitPct: totalBought > 0 ? Math.round((profit / totalBought) * 100) : 0,
+          avgPrice: Math.round(avgBuyPrice * 100),
+          time: data.redeems[0]?.time ? new Date(data.redeems[0].time).toISOString() : null,
+          icon: data.icon
+        });
+      } else if (!isOpen && totalBought > 0 && totalRedeemed === 0) {
+        // Lost - bought but no redeem (market resolved against us)
+        const loss = totalBought - totalSold;
+        if (loss > 0) {
+          totalLosses += loss;
+          lossCount++;
+          resolvedBets.push({
+            market: data.title,
+            marketSlug: data.slug,
+            outcome: data.outcome,
+            result: 'LOSS',
+            invested: Math.round(totalBought),
+            returned: Math.round(totalSold),
+            profit: Math.round(-loss),
+            profitPct: totalBought > 0 ? Math.round((-loss / totalBought) * 100) : 0,
+            avgPrice: Math.round(avgBuyPrice * 100),
+            time: data.buys[data.buys.length - 1]?.time ? new Date(data.buys[data.buys.length - 1].time).toISOString() : null,
+            icon: data.icon
+          });
+        }
+      } else if (isOpen) {
+        // Check if this is actually a resolved loss (current value is $0 or near $0)
+        const currentValue = parseFloat(position.currentValue || position.value || 0);
+        const currentPrice = parseFloat(position.curPrice || position.currentPrice || 0);
+        
+        // If current value is $0 (or very small) and they invested significant money, it's a loss
+        // Also check if current price is near 0 (market resolved against this position)
+        if ((currentValue < 1 || currentPrice < 0.02) && totalBought > 100) {
+          // This is a resolved loss, not an open position
+          const loss = totalBought - totalSold;
+          totalLosses += loss;
+          lossCount++;
+          resolvedBets.push({
+            market: data.title,
+            marketSlug: data.slug,
+            outcome: data.outcome,
+            result: 'LOSS',
+            invested: Math.round(totalBought),
+            returned: Math.round(totalSold),
+            profit: Math.round(-loss),
+            profitPct: totalBought > 0 ? Math.round((-loss / totalBought) * 100) : 0,
+            avgPrice: Math.round(avgBuyPrice * 100),
+            time: data.buys[data.buys.length - 1]?.time ? new Date(data.buys[data.buys.length - 1].time).toISOString() : null,
+            icon: data.icon
+          });
+        } else {
+          // Actually still open - use position outcome as fallback
+          const outcomeToUse = data.outcome || position.outcome || 
+            (data.buys.length > 0 ? data.buys[0].outcome : null);
+          const unrealizedPnL = currentValue - totalBought + totalSold;
+          openBets.push({
+            market: data.title,
+            marketSlug: data.slug,
+            outcome: outcomeToUse,
+            invested: Math.round(totalBought),
+            currentValue: Math.round(currentValue),
+            unrealizedPnL: Math.round(unrealizedPnL),
+            unrealizedPct: totalBought > 0 ? Math.round((unrealizedPnL / totalBought) * 100) : 0,
+            avgPrice: Math.round(avgBuyPrice * 100),
+            currentPrice: Math.round((parseFloat(position.curPrice) || 0) * 100),
+            icon: data.icon
+          });
+        }
+      }
     }
+    
+    // Sort resolved bets by time (most recent first)
+    resolvedBets.sort((a, b) => new Date(b.time || 0) - new Date(a.time || 0));
+    
+    const totalInvested = Object.values(marketBets).reduce((sum, m) => 
+      sum + m.buys.reduce((s, b) => s + b.amount, 0), 0);
+    
+    const realizedPnL = totalWins - totalLosses;
+    const unrealizedPnL = openBets.reduce((sum, b) => sum + b.unrealizedPnL, 0);
     
     return {
       success: true,
@@ -1481,24 +1592,15 @@ async function getWalletPnL(address) {
         realizedPnL: Math.round(realizedPnL),
         unrealizedPnL: Math.round(unrealizedPnL),
         totalPnL: Math.round(realizedPnL + unrealizedPnL),
-        winRate: wins + losses > 0 ? Math.round((wins / (wins + losses)) * 100) : 0,
-        wins,
-        losses,
-        openPositions: openPositions.length
+        totalWins: Math.round(totalWins),
+        totalLosses: Math.round(totalLosses),
+        winCount,
+        lossCount,
+        winRate: winCount + lossCount > 0 ? Math.round((winCount / (winCount + lossCount)) * 100) : 0,
+        openPositions: openBets.length
       },
       resolvedBets: resolvedBets.slice(0, 50),
-      openPositions: openPositions.slice(0, 20).map(p => ({
-        market: p.title || p.market || 'Unknown',
-        marketSlug: p.slug,
-        outcome: p.outcome,
-        avgPrice: Math.round((parseFloat(p.avgPrice) || 0) * 100),
-        currentPrice: Math.round((parseFloat(p.curPrice) || parseFloat(p.currentPrice) || 0) * 100),
-        size: parseFloat(p.size) || 0,
-        initialValue: Math.round(parseFloat(p.initialValue) || 0),
-        currentValue: Math.round(parseFloat(p.currentValue) || parseFloat(p.value) || 0),
-        pnl: Math.round((parseFloat(p.currentValue) || 0) - (parseFloat(p.initialValue) || 0)),
-        icon: p.icon
-      }))
+      openBets: openBets.slice(0, 20)
     };
   } catch (error) {
     return { success: false, error: error.message };
