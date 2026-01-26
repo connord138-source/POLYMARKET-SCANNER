@@ -156,6 +156,8 @@ async function updateWalletStats(env, walletAddress, betData) {
     // Get existing stats
     let stats = await env.SIGNALS_CACHE.get(key, { type: "json" });
     
+    const isNewWallet = !stats;
+    
     if (!stats) {
       stats = {
         address: walletAddress.toLowerCase(),
@@ -209,6 +211,25 @@ async function updateWalletStats(env, walletAddress, betData) {
     await env.SIGNALS_CACHE.put(key, JSON.stringify(stats), {
       expirationTtl: 90 * 24 * 60 * 60
     });
+    
+    // Add to wallet index if new
+    if (isNewWallet) {
+      try {
+        let index = await env.SIGNALS_CACHE.get("tracked_wallet_index", { type: "json" }) || [];
+        if (!index.includes(walletAddress.toLowerCase())) {
+          index.push(walletAddress.toLowerCase());
+          // Keep only last 500 wallets
+          if (index.length > 500) {
+            index = index.slice(-500);
+          }
+          await env.SIGNALS_CACHE.put("tracked_wallet_index", JSON.stringify(index), {
+            expirationTtl: 90 * 24 * 60 * 60
+          });
+        }
+      } catch (e) {
+        console.log("Error updating wallet index:", e.message);
+      }
+    }
     
     return stats;
   } catch (e) {
@@ -414,33 +435,131 @@ async function getFactorWeights(env) {
 // ============================================================
 
 // Check if a market has settled and determine outcome
-async function checkMarketSettlement(marketSlug) {
+async function checkMarketSettlement(marketSlug, signalDirection) {
   try {
-    // Fetch market data from Polymarket
-    const res = await fetch(`${POLYMARKET_API}/markets/${marketSlug}`);
-    if (!res.ok) return null;
+    // Since Polymarket doesn't have direct market lookup, we check recent trades
+    // If a market's last trade price is at 0.95+ or 0.05-, it's effectively settled
     
-    const market = await res.json();
+    // Fetch recent trades and look for ones matching our slug
+    const tradesRes = await fetch(`${POLYMARKET_API}/trades?limit=2000`);
+    if (!tradesRes.ok) {
+      console.log(`Trades API error: ${tradesRes.status}`);
+      return null;
+    }
     
-    // Check if resolved
-    if (market.resolved || market.closed) {
-      return {
-        settled: true,
-        winningOutcome: market.outcome || market.winningOutcome,
-        resolutionPrice: parseFloat(market.resolutionPrice || market.lastTradePrice || 0)
+    const trades = await tradesRes.json();
+    
+    // Find trades for this market - EXACT match only on slug or eventSlug
+    let marketTrades = trades.filter(t => 
+      t.slug === marketSlug || 
+      t.eventSlug === marketSlug
+    );
+    
+    // If no exact match and this is a spread/total market, try matching base event slug
+    if (marketTrades.length === 0 && (marketSlug.includes('-spread') || marketSlug.includes('-total') || marketSlug.includes('-over') || marketSlug.includes('-under'))) {
+      // Extract base slug without the spread/total suffix
+      const baseSlug = marketSlug.replace(/-spread.*$/, '').replace(/-total.*$/, '').replace(/-over.*$/, '').replace(/-under.*$/, '');
+      
+      // Only match if the trade slug EXACTLY equals our base slug
+      marketTrades = trades.filter(t => 
+        t.slug === baseSlug ||
+        t.eventSlug === baseSlug
+      );
+    }
+    
+    // Check event date for time-based settlement
+    const slugDateMatch = (marketSlug || '').match(/(\d{4})-(\d{2})-(\d{2})/);
+    let hoursSinceEvent = 0;
+    
+    if (slugDateMatch) {
+      const eventDate = new Date(
+        parseInt(slugDateMatch[1]),
+        parseInt(slugDateMatch[2]) - 1,
+        parseInt(slugDateMatch[3]),
+        23, 59, 59
+      );
+      
+      const now = new Date();
+      hoursSinceEvent = (now.getTime() - eventDate.getTime()) / (1000 * 60 * 60);
+    }
+    
+    if (marketTrades.length === 0) {
+      // No trades found for this market
+      
+      // Sports events typically end within a few hours of their scheduled date
+      // If it's been 12+ hours since end of event day (23:59 UTC) and no trades,
+      // the market is definitely settled but we can't determine winner
+      if (hoursSinceEvent > 12) {
+        console.log(`Market ${marketSlug} is ${Math.round(hoursSinceEvent)}h past event with no recent trades - marking UNKNOWN`);
+        return { 
+          settled: true, 
+          winningOutcome: "UNKNOWN", 
+          resolutionPrice: 0,
+          note: `Event ${Math.round(hoursSinceEvent)}h ago, no recent trades to determine outcome`
+        };
+      }
+      
+      // Return debug info about why not settling
+      console.log(`No trades found for ${marketSlug} (event ${Math.round(hoursSinceEvent)}h ago, need >12h)`);
+      return { 
+        settled: false, 
+        debug: {
+          tradesFound: 0,
+          hoursSinceEvent: Math.round(hoursSinceEvent),
+          needsHours: 12,
+          slugDateMatch: slugDateMatch ? slugDateMatch[0] : null
+        }
       };
     }
     
-    // Check price - if at 0.99+ or 0.01-, effectively settled
-    const price = parseFloat(market.lastTradePrice || market.midPrice || 0.5);
-    if (price >= 0.995) {
-      return { settled: true, winningOutcome: "Yes", resolutionPrice: 1.0 };
-    }
-    if (price <= 0.005) {
-      return { settled: true, winningOutcome: "No", resolutionPrice: 0.0 };
+    // Sort by timestamp to get most recent
+    marketTrades.sort((a, b) => b.timestamp - a.timestamp);
+    const latestTrade = marketTrades[0];
+    const latestPrice = parseFloat(latestTrade.price);
+    
+    console.log(`Market ${marketSlug}: found ${marketTrades.length} trades, latest price=${latestPrice}, outcome=${latestTrade.outcome}, event ${Math.round(hoursSinceEvent)}h ago`);
+    
+    // STRICT settlement thresholds: 95%/5%
+    // We don't want to falsely settle markets where someone is betting at 80-90%
+    // Those bets could still lose!
+    if (latestPrice >= 0.95) {
+      return {
+        settled: true,
+        winningOutcome: latestTrade.outcome || "Yes",
+        resolutionPrice: latestPrice
+      };
     }
     
-    return { settled: false };
+    if (latestPrice <= 0.05) {
+      let winningOutcome = "No";
+      if (latestTrade.outcome === "No") {
+        winningOutcome = "Yes";
+      } else if (latestTrade.outcome === "Yes") {
+        winningOutcome = "No";
+      }
+      return {
+        settled: true,
+        winningOutcome: winningOutcome,
+        resolutionPrice: 1 - latestPrice,
+        losingOutcome: latestTrade.outcome
+      };
+    }
+    
+    // If event was long ago with ambiguous price, mark as unknown
+    // 24h should be plenty of time for price to reach settlement levels
+    if (hoursSinceEvent > 24) {
+      console.log(`Market ${marketSlug} is ${Math.round(hoursSinceEvent)}h past event with ambiguous price ${latestPrice} - marking UNKNOWN`);
+      return { 
+        settled: true, 
+        winningOutcome: "UNKNOWN", 
+        resolutionPrice: latestPrice,
+        note: `Event ${Math.round(hoursSinceEvent)}h ago, price=${latestPrice} ambiguous`
+      };
+    }
+    
+    // Not settled yet
+    return { settled: false, currentPrice: latestPrice };
+    
   } catch (e) {
     console.error(`Error checking settlement for ${marketSlug}:`, e.message);
     return null;
@@ -483,29 +602,72 @@ async function processSettledSignals(env) {
           continue;
         }
         
-        // Determine if our signal won or lost
-        const signalDirection = signalData.direction?.toLowerCase();
-        const winningOutcome = settlement.winningOutcome?.toLowerCase();
+        // Handle UNKNOWN outcomes (API data unavailable but event passed)
+        if (settlement.winningOutcome === "UNKNOWN") {
+          console.log(`Signal ${signalId} has unknown outcome - removing from pending`);
+          signalData.outcome = "UNKNOWN";
+          signalData.settledAt = new Date().toISOString();
+          signalData.note = settlement.note;
+          await env.SIGNALS_CACHE.put(signalKey, JSON.stringify(signalData), {
+            expirationTtl: 7 * 24 * 60 * 60  // Keep for 7 days for review
+          });
+          results.processed += 1;
+          continue;
+        }
         
+        // Determine if our signal won or lost
+        const signalDirection = (signalData.direction || "").toLowerCase();
+        const winningOutcome = (settlement.winningOutcome || "").toLowerCase();
+        
+        // Normalize direction names for comparison
+        // Handle cases like "Hornets" vs "yes", "Cortes-Acosta" vs "Yes"
         let outcome = "LOSS";
-        if (signalDirection === winningOutcome || 
-            (signalDirection === "yes" && winningOutcome === "yes") ||
-            (signalDirection === "no" && winningOutcome === "no") ||
-            signalDirection === winningOutcome) {
+        
+        // Direct match
+        if (signalDirection === winningOutcome) {
           outcome = "WIN";
+        }
+        // Yes/No normalization
+        else if ((signalDirection === "yes" || signalDirection === "true") && 
+                 (winningOutcome === "yes" || winningOutcome === "true")) {
+          outcome = "WIN";
+        }
+        else if ((signalDirection === "no" || signalDirection === "false") && 
+                 (winningOutcome === "no" || winningOutcome === "false")) {
+          outcome = "WIN";
+        }
+        // If direction contains team name and outcome is "yes", check if it was the favored team
+        // This is tricky - for now, if price went to 0.95+ and we bet on that side, we won
+        else if (settlement.resolutionPrice >= 0.90) {
+          // High price = YES won
+          // Check if signal direction indicates YES
+          if (signalDirection === "yes" || 
+              signalDirection.includes("over") ||
+              signalDirection.includes("cover")) {
+            outcome = "WIN";
+          }
+        }
+        else if (settlement.resolutionPrice <= 0.10) {
+          // Low price = NO won
+          if (signalDirection === "no" ||
+              signalDirection.includes("under") ||
+              signalDirection.includes("fail")) {
+            outcome = "WIN";
+          }
         }
         
         // Calculate profit/loss
         const entryPrice = signalData.priceAtSignal / 100;
         const resolutionPrice = settlement.resolutionPrice;
         const profitPct = outcome === "WIN" 
-          ? Math.round(((resolutionPrice - entryPrice) / entryPrice) * 100)
+          ? Math.round(((1 - entryPrice) / entryPrice) * 100)  // Payout is $1 for a win
           : -100;
         
         // Update signal data
         signalData.outcome = outcome;
         signalData.settledAt = new Date().toISOString();
         signalData.profitLoss = profitPct;
+        signalData.winningOutcome = settlement.winningOutcome;
         
         await env.SIGNALS_CACHE.put(signalKey, JSON.stringify(signalData), {
           expirationTtl: 30 * 24 * 60 * 60
@@ -597,14 +759,28 @@ async function trackLineMovement(env, marketSlug, direction, entryPrice, signalI
 
 async function checkLineMovement(env, marketSlug) {
   try {
-    // Fetch current market price
-    const res = await fetch(`${POLYMARKET_API}/markets/${marketSlug}`);
-    if (!res.ok) return null;
+    // Fetch recent trades and find ones for this market
+    const tradesRes = await fetch(`${POLYMARKET_API}/trades?limit=500`);
+    if (!tradesRes.ok) return null;
     
-    const market = await res.json();
-    const currentPrice = parseFloat(market.lastTradePrice || market.midPrice || 0);
+    const trades = await tradesRes.json();
     
-    return { currentPrice, market };
+    // Find trades for this market
+    const marketTrades = trades.filter(t => 
+      t.slug === marketSlug || 
+      t.eventSlug === marketSlug ||
+      (t.slug && t.slug.includes(marketSlug)) ||
+      (marketSlug && marketSlug.includes(t.slug))
+    );
+    
+    if (marketTrades.length === 0) return null;
+    
+    // Get most recent trade price
+    marketTrades.sort((a, b) => b.timestamp - a.timestamp);
+    const latestTrade = marketTrades[0];
+    const currentPrice = parseFloat(latestTrade.price);
+    
+    return { currentPrice, market: latestTrade };
   } catch (e) {
     console.error("Error checking line movement:", e.message);
     return null;
@@ -632,10 +808,16 @@ async function updateLineMovements(env) {
       
       // Check current price
       const priceCheck = await checkLineMovement(env, lineData.marketSlug);
-      if (!priceCheck) continue;
       
-      const currentPrice = priceCheck.currentPrice * 100;  // Convert to percentage
+      let currentPrice = lineData.entryPrice;  // Default to entry if no update
+      if (priceCheck && priceCheck.currentPrice) {
+        currentPrice = priceCheck.currentPrice * 100;  // Convert to percentage
+      }
+      
       const entryPrice = lineData.entryPrice;
+      
+      // ALWAYS store current price for UI display
+      lineData.currentPrice = Math.round(currentPrice);
       
       // Update price snapshots based on elapsed time
       let updated = false;
@@ -1410,142 +1592,28 @@ async function getWalletWinRate(walletAddress, env) {
     }
   }
   
-  // Fetch from Polymarket API
+  // Use the more accurate PnL calculation for win rate
   try {
-    // Get wallet's activity including resolved positions
-    const [activityRes, positionsRes] = await Promise.all([
-      fetch(`${POLYMARKET_API}/activity?user=${walletAddress}&limit=500`),
-      fetch(`${POLYMARKET_API}/positions?user=${walletAddress}&status=all`)
-    ]);
+    const pnlResult = await getWalletPnL(walletAddress);
     
-    if (!activityRes.ok || !positionsRes.ok) {
+    if (!pnlResult || !pnlResult.success) {
       return null;
     }
     
-    const activity = await activityRes.json();
-    const positions = await positionsRes.json();
-    
-    // Calculate cutoff date (30 days ago)
-    const cutoffDate = Date.now() - (WALLET_TRACK_RECORD.LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
-    
-    // Find REDEEM events (winning bets that paid out)
-    const redeems = (activity || []).filter(a => {
-      if (a.type !== 'REDEEM') return false;
-      const timestamp = a.timestamp < 1e12 ? a.timestamp * 1000 : a.timestamp;
-      return timestamp >= cutoffDate;
-    });
-    
-    // Find resolved positions (both winning and losing)
-    // A position is "resolved" if the market has ended
-    // We need to look at positions with outcome determined
-    
-    let wins = 0;
-    let losses = 0;
-    let totalResolved = 0;
-    let totalWinnings = 0;
-    let totalLost = 0;
-    const resolvedBets = [];
-    
-    // Process redeems as wins
-    for (const redeem of redeems) {
-      const payout = parseFloat(redeem.usdcSize) || 0;
-      if (payout > 0) {
-        wins++;
-        totalWinnings += payout;
-        totalResolved++;
-        resolvedBets.push({
-          market: redeem.title || redeem.slug,
-          result: 'WIN',
-          payout: payout,
-          timestamp: redeem.timestamp < 1e12 ? redeem.timestamp * 1000 : redeem.timestamp
-        });
-      }
-    }
-    
-    // To find losses, we need to look at positions where:
-    // 1. The position is no longer active (resolved)
-    // 2. There was no corresponding REDEEM (they lost)
-    // This is tricky - we'll estimate based on activity patterns
-    
-    // Look for TRADE buys that don't have matching REDEEMs on resolved markets
-    const trades = (activity || []).filter(a => {
-      if (a.type !== 'TRADE' || a.side !== 'BUY') return false;
-      const timestamp = a.timestamp < 1e12 ? a.timestamp * 1000 : a.timestamp;
-      return timestamp >= cutoffDate;
-    });
-    
-    // Group trades by market
-    const marketTrades = {};
-    for (const trade of trades) {
-      const marketKey = trade.slug || trade.conditionId;
-      if (!marketTrades[marketKey]) {
-        marketTrades[marketKey] = {
-          market: trade.title || trade.slug,
-          totalInvested: 0,
-          outcome: trade.outcome,
-          trades: []
-        };
-      }
-      marketTrades[marketKey].totalInvested += parseFloat(trade.usdcSize) || 0;
-      marketTrades[marketKey].trades.push(trade);
-    }
-    
-    // Check which markets have redeems (wins) vs no redeems (potential losses)
-    const redeemMarkets = new Set(redeems.map(r => r.slug || r.conditionId));
-    
-    // Markets with trades but no redeems could be:
-    // 1. Still open (not resolved)
-    // 2. Resolved as a loss
-    // We need to check if the market is resolved
-    
-    // For now, use positions endpoint to get more accurate data
-    // Positions with curPrice = 0 or 1 and no value = resolved
-    for (const pos of (positions || [])) {
-      const curPrice = parseFloat(pos.curPrice) || parseFloat(pos.currentPrice) || 0;
-      const initialValue = parseFloat(pos.initialValue) || 0;
-      const currentValue = parseFloat(pos.currentValue) || parseFloat(pos.value) || 0;
-      
-      // Check if this is a resolved position (price went to 0 or 1)
-      if (curPrice <= 0.02 || curPrice >= 0.98) {
-        // Check timestamp if available
-        const marketKey = pos.slug || pos.conditionId;
-        
-        if (curPrice >= 0.98 && currentValue > initialValue * 0.5) {
-          // Likely a win (price went to 1 and has value)
-          // Already counted in redeems probably
-        } else if (curPrice <= 0.02 && currentValue < initialValue * 0.1) {
-          // Likely a loss (price went to 0)
-          if (!redeemMarkets.has(marketKey) && initialValue > 0) {
-            losses++;
-            totalLost += initialValue;
-            totalResolved++;
-            resolvedBets.push({
-              market: pos.title || pos.slug,
-              result: 'LOSS',
-              lost: initialValue,
-              timestamp: Date.now() // We don't have exact resolution time
-            });
-          }
-        }
-      }
-    }
-    
-    // Calculate win rate
-    const winRate = totalResolved > 0 ? (wins / totalResolved) * 100 : 0;
-    const profitLoss = totalWinnings - totalLost;
+    const { summary } = pnlResult;
     
     const stats = {
       walletAddress,
-      wins,
-      losses,
-      totalResolved,
-      winRate: Math.round(winRate * 10) / 10,
-      totalWinnings: Math.round(totalWinnings),
-      totalLost: Math.round(totalLost),
-      profitLoss: Math.round(profitLoss),
-      meetsMinimum: totalResolved >= WALLET_TRACK_RECORD.MIN_BETS,
+      wins: summary.winCount,
+      losses: summary.lossCount,
+      totalResolved: summary.winCount + summary.lossCount,
+      winRate: summary.winRate,
+      totalWinnings: summary.totalWins,
+      totalLost: summary.totalLosses,
+      profitLoss: summary.realizedPnL,
+      meetsMinimum: (summary.winCount + summary.lossCount) >= WALLET_TRACK_RECORD.MIN_BETS,
       cachedAt: Date.now(),
-      recentBets: resolvedBets.slice(0, 10)
+      recentBets: pnlResult.resolvedBets?.slice(0, 10) || []
     };
     
     // Cache the results
@@ -1603,8 +1671,9 @@ function hasEventStarted(title, slug, avgPrice) {
   const todayDay = estNow.getUTCDate();
   const todayStr = `${todayYear}-${String(todayMonth).padStart(2, '0')}-${String(todayDay).padStart(2, '0')}`;
   
-  // If odds are VERY extreme (>97% or <3%), event is likely decided
-  if (avgPrice > 0.97 || avgPrice < 0.03) {
+  // If odds are extreme (>95% or <5%), event is likely decided/in-progress
+  // Lowered threshold from 97/3 to catch more resolved games
+  if (avgPrice > 0.95 || avgPrice < 0.05) {
     return true;
   }
   
@@ -1623,10 +1692,25 @@ function hasEventStarted(title, slug, avgPrice) {
       return true;
     }
     
-    // For same-day events, only filter if it's very late AND odds are extreme
+    // For same-day events, use time-based heuristics
     if (eventDateStr === todayStr) {
-      // After 11pm EST with somewhat extreme odds = likely over
-      if (currentHourEST >= 23 && (avgPrice > 0.90 || avgPrice < 0.10)) {
+      // Sports events typically:
+      // - NCAA/NBA games: Usually 2-3 hours long, start in afternoon/evening
+      // - NFL games: 3-4 hours
+      // 
+      // If it's after 6pm EST and odds are somewhat directional (>75% or <25%), 
+      // the game is likely in progress or finished
+      if (currentHourEST >= 18 && (avgPrice > 0.75 || avgPrice < 0.25)) {
+        return true;
+      }
+      
+      // After 10pm EST with any directional odds = likely over
+      if (currentHourEST >= 22 && (avgPrice > 0.65 || avgPrice < 0.35)) {
+        return true;
+      }
+      
+      // After 11pm EST = most US sports are done
+      if (currentHourEST >= 23) {
         return true;
       }
     }
@@ -1876,13 +1960,164 @@ export default {
         }
         
         try {
-          // List all wallet keys and get top performers
-          // Note: In production, you'd want to maintain a separate leaderboard index
-          // For now, we return a message about how to build this over time
+          // First try to get wallets from the dedicated index (fast path)
+          let walletAddresses = await env.SIGNALS_CACHE.get("tracked_wallet_index", { type: "json" }) || [];
+          
+          // If index is empty, try building from pending signals (slower fallback)
+          if (walletAddresses.length === 0) {
+            const pendingIds = await env.SIGNALS_CACHE.get(KV_KEYS.PENDING_SIGNALS, { type: "json" }) || [];
+            const walletSet = new Set();
+            
+            // Fetch signals in parallel batches of 10
+            for (let i = 0; i < Math.min(pendingIds.length, 30); i += 10) {
+              const batch = pendingIds.slice(i, i + 10);
+              const results = await Promise.all(
+                batch.map(id => env.SIGNALS_CACHE.get(KV_KEYS.SIGNALS_PREFIX + id, { type: "json" }))
+              );
+              results.forEach(signalData => {
+                if (signalData?.wallets) {
+                  signalData.wallets.forEach(w => walletSet.add(w.toLowerCase()));
+                }
+              });
+            }
+            walletAddresses = Array.from(walletSet);
+          }
+          
+          // Fetch wallet stats in parallel batches
+          const walletStats = [];
+          for (let i = 0; i < walletAddresses.length; i += 10) {
+            const batch = walletAddresses.slice(i, i + 10);
+            const results = await Promise.all(
+              batch.map(addr => getWalletStats(env, addr))
+            );
+            results.forEach(stats => {
+              // Include wallets with settled bets OR pending bets (being tracked)
+              if (stats && (stats.totalBets > 0 || stats.pending > 0)) {
+                walletStats.push(stats);
+              }
+            });
+          }
+          
+          // Sort: wallets with settled bets first, then by win rate, then by pending count
+          walletStats.sort((a, b) => {
+            // Settled bets first
+            if (a.totalBets > 0 && b.totalBets === 0) return -1;
+            if (b.totalBets > 0 && a.totalBets === 0) return 1;
+            
+            // Among settled, sort by qualified status then win rate
+            const aQualified = a.totalBets >= 3;
+            const bQualified = b.totalBets >= 3;
+            if (aQualified && !bQualified) return -1;
+            if (!aQualified && bQualified) return 1;
+            if (a.winRate !== b.winRate) return b.winRate - a.winRate;
+            
+            // Among unsettled, sort by volume
+            return b.totalVolume - a.totalVolume;
+          });
+          
+          // Calculate summary stats
+          const eliteCount = walletStats.filter(w => w.tier === 'ELITE').length;
+          const strongCount = walletStats.filter(w => w.tier === 'STRONG').length;
+          const totalWins = walletStats.reduce((sum, w) => sum + (w.wins || 0), 0);
+          const totalLosses = walletStats.reduce((sum, w) => sum + (w.losses || 0), 0);
+          const avgWinRate = totalWins + totalLosses > 0 
+            ? Math.round((totalWins / (totalWins + totalLosses)) * 100) 
+            : 0;
+          
           return new Response(JSON.stringify({
             success: true,
-            message: "Leaderboard builds automatically as wallets are tracked. Check /learning/wallet/{address} for individual stats.",
-            tiers: WALLET_TIERS
+            // Top-level for backwards compatibility
+            eliteCount,
+            strongCount,
+            totalTracked: walletStats.length,
+            avgWinRate,
+            // Also in summary object
+            summary: {
+              eliteCount,
+              strongCount,
+              totalTracked: walletStats.length,
+              avgWinRate
+            },
+            tiers: WALLET_TIERS,
+            leaderboard: walletStats.slice(0, 50).map(w => ({
+              address: w.address,
+              tier: w.tier || (w.pending > 0 ? 'PENDING' : null),
+              winRate: w.winRate,
+              record: `${w.wins}W-${w.losses}L`,
+              totalBets: w.totalBets,
+              pending: w.pending,
+              totalVolume: w.totalVolume,
+              avgBetSize: w.avgBetSize,
+              currentStreak: w.currentStreak,
+              bestStreak: w.bestStreak,
+              lastSeen: w.lastSeen,
+              markets: w.markets
+            }))
+          }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        } catch (e) {
+          return new Response(JSON.stringify({ error: e.message }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+      }
+      
+      // Get ALL tracked wallets (for frontend Whale Watchers)
+      if (path === "/learning/tracked-wallets") {
+        if (!env.SIGNALS_CACHE) {
+          return new Response(JSON.stringify({ error: "No cache configured" }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+        
+        try {
+          // Try to get wallets from a dedicated index first
+          let trackedWallets = await env.SIGNALS_CACHE.get("tracked_wallet_index", { type: "json" }) || [];
+          
+          // Fetch wallet stats in parallel batches
+          const walletData = [];
+          for (let i = 0; i < Math.min(trackedWallets.length, 100); i += 10) {
+            const batch = trackedWallets.slice(i, i + 10);
+            const results = await Promise.all(
+              batch.map(addr => getWalletStats(env, addr))
+            );
+            results.forEach(stats => {
+              if (stats) {
+                walletData.push({
+                  address: stats.address,
+                  tier: stats.tier,
+                  winRate: stats.winRate,
+                  wins: stats.wins,
+                  losses: stats.losses,
+                  pending: stats.pending,
+                  totalVolume: stats.totalVolume,
+                  avgBetSize: stats.avgBetSize,
+                  currentStreak: stats.currentStreak,
+                  bestStreak: stats.bestStreak,
+                  lastSeen: stats.lastSeen,
+                  firstSeen: stats.firstSeen,
+                  markets: stats.markets,
+                  recentBets: stats.recentBets?.slice(0, 5) || []
+                });
+              }
+            });
+          }
+          
+          // Sort: ELITE first, then STRONG, then by win rate
+          walletData.sort((a, b) => {
+            const tierOrder = { ELITE: 0, STRONG: 1, AVERAGE: 2, FADE: 3, null: 4 };
+            const tierDiff = (tierOrder[a.tier] || 4) - (tierOrder[b.tier] || 4);
+            if (tierDiff !== 0) return tierDiff;
+            return b.winRate - a.winRate;
+          });
+          
+          return new Response(JSON.stringify({
+            success: true,
+            count: walletData.length,
+            wallets: walletData
           }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" }
           });
@@ -1901,6 +2136,221 @@ export default {
           success: true,
           results
         }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+      
+      // Debug: Check wallet index status
+      if (path === "/learning/debug-wallets") {
+        const walletIndex = await env.SIGNALS_CACHE.get("tracked_wallet_index", { type: "json" }) || [];
+        const pendingSignals = await env.SIGNALS_CACHE.get(KV_KEYS.PENDING_SIGNALS, { type: "json" }) || [];
+        
+        // Get a sample of wallet stats
+        const sampleStats = [];
+        for (const addr of walletIndex.slice(0, 5)) {
+          const stats = await getWalletStats(env, addr);
+          if (stats) sampleStats.push(stats);
+        }
+        
+        return new Response(JSON.stringify({
+          success: true,
+          walletIndexCount: walletIndex.length,
+          walletIndexSample: walletIndex.slice(0, 10),
+          pendingSignalsCount: pendingSignals.length,
+          sampleWalletStats: sampleStats
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+      
+      // Debug: Check settlement status for a specific signal
+      if (path === "/learning/debug-settle") {
+        const signalId = url.searchParams.get("id");
+        
+        if (!signalId) {
+          // If no ID provided, check first pending signal
+          const pendingIds = await env.SIGNALS_CACHE.get(KV_KEYS.PENDING_SIGNALS, { type: "json" }) || [];
+          if (pendingIds.length === 0) {
+            return new Response(JSON.stringify({ error: "No pending signals" }), {
+              status: 404,
+              headers: { ...corsHeaders, "Content-Type": "application/json" }
+            });
+          }
+          
+          // Also fetch trades to debug matching
+          let tradeSlugs = [];
+          try {
+            const tradesRes = await fetch(`${POLYMARKET_API}/trades?limit=100`);
+            if (tradesRes.ok) {
+              const trades = await tradesRes.json();
+              // Get unique slugs from trades
+              const slugSet = new Set();
+              trades.forEach(t => {
+                if (t.slug) slugSet.add(t.slug);
+                if (t.eventSlug) slugSet.add(t.eventSlug);
+              });
+              tradeSlugs = Array.from(slugSet).slice(0, 30);
+            }
+          } catch (e) {
+            tradeSlugs = ["Error fetching: " + e.message];
+          }
+          
+          // Check first 3 signals for debugging
+          const debugResults = [];
+          for (const id of pendingIds.slice(0, 3)) {
+            const signalData = await env.SIGNALS_CACHE.get(KV_KEYS.SIGNALS_PREFIX + id, { type: "json" });
+            if (signalData) {
+              const settlement = await checkMarketSettlement(signalData.marketSlug);
+              debugResults.push({
+                signalId: id,
+                marketSlug: signalData.marketSlug,
+                marketTitle: signalData.marketTitle,
+                direction: signalData.direction,
+                eventDate: signalData.eventDate,
+                settlement
+              });
+            }
+          }
+          
+          return new Response(JSON.stringify({
+            success: true,
+            pendingCount: pendingIds.length,
+            recentTradeSlugs: tradeSlugs,
+            debugResults
+          }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+        
+        const signalData = await env.SIGNALS_CACHE.get(KV_KEYS.SIGNALS_PREFIX + signalId, { type: "json" });
+        if (!signalData) {
+          return new Response(JSON.stringify({ error: "Signal not found" }), {
+            status: 404,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+        
+        const settlement = await checkMarketSettlement(signalData.marketSlug);
+        
+        return new Response(JSON.stringify({
+          success: true,
+          signal: signalData,
+          settlement
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+      
+      // Debug: Test raw API responses for a slug
+      if (path === "/learning/debug-api") {
+        const slug = url.searchParams.get("slug") || "nba-was-cha-2026-01-24";
+        const apiResults = {};
+        
+        // Try events endpoint
+        try {
+          const eventRes = await fetch(`${POLYMARKET_API}/events/${slug}`);
+          apiResults.eventsEndpoint = {
+            status: eventRes.status,
+            ok: eventRes.ok,
+            data: eventRes.ok ? await eventRes.json() : null
+          };
+        } catch (e) {
+          apiResults.eventsEndpoint = { error: e.message };
+        }
+        
+        // Try markets endpoint
+        try {
+          const marketRes = await fetch(`${POLYMARKET_API}/markets/${slug}`);
+          apiResults.marketsEndpoint = {
+            status: marketRes.status,
+            ok: marketRes.ok,
+            data: marketRes.ok ? await marketRes.json() : null
+          };
+        } catch (e) {
+          apiResults.marketsEndpoint = { error: e.message };
+        }
+        
+        // Try markets query
+        try {
+          const queryRes = await fetch(`${POLYMARKET_API}/markets?slug=${slug}`);
+          apiResults.marketsQuery = {
+            status: queryRes.status,
+            ok: queryRes.ok,
+            data: queryRes.ok ? await queryRes.json() : null
+          };
+        } catch (e) {
+          apiResults.marketsQuery = { error: e.message };
+        }
+        
+        // Try events query
+        try {
+          const eventsQueryRes = await fetch(`${POLYMARKET_API}/events?slug=${slug}`);
+          apiResults.eventsQuery = {
+            status: eventsQueryRes.status,
+            ok: eventsQueryRes.ok,
+            data: eventsQueryRes.ok ? await eventsQueryRes.json() : null
+          };
+        } catch (e) {
+          apiResults.eventsQuery = { error: e.message };
+        }
+        
+        // Also get a sample trade to see data structure
+        try {
+          const tradeRes = await fetch(`${POLYMARKET_API}/trades?limit=1`);
+          if (tradeRes.ok) {
+            const trades = await tradeRes.json();
+            apiResults.sampleTrade = trades[0] || null;
+            
+            // If we got a trade, try to look up by conditionId
+            if (trades[0]?.conditionId) {
+              const conditionId = trades[0].conditionId;
+              
+              // Try market by conditionId
+              try {
+                const condRes = await fetch(`${POLYMARKET_API}/markets?conditionId=${conditionId}`);
+                apiResults.marketByConditionId = {
+                  status: condRes.status,
+                  ok: condRes.ok,
+                  data: condRes.ok ? await condRes.json() : null
+                };
+              } catch (e) {
+                apiResults.marketByConditionId = { error: e.message };
+              }
+              
+              // Try condition endpoint directly
+              try {
+                const condRes2 = await fetch(`${POLYMARKET_API}/conditions/${conditionId}`);
+                apiResults.conditionEndpoint = {
+                  status: condRes2.status,
+                  ok: condRes2.ok,
+                  data: condRes2.ok ? await condRes2.json() : null
+                };
+              } catch (e) {
+                apiResults.conditionEndpoint = { error: e.message };
+              }
+              
+              // Try prices endpoint
+              try {
+                const priceRes = await fetch(`${POLYMARKET_API}/prices?conditionId=${conditionId}`);
+                apiResults.pricesByConditionId = {
+                  status: priceRes.status,
+                  ok: priceRes.ok,
+                  data: priceRes.ok ? await priceRes.json() : null
+                };
+              } catch (e) {
+                apiResults.pricesByConditionId = { error: e.message };
+              }
+            }
+          }
+        } catch (e) {
+          apiResults.sampleTrade = { error: e.message };
+        }
+        
+        return new Response(JSON.stringify({
+          success: true,
+          testedSlug: slug,
+          apiResults
+        }, null, 2), {
           headers: { ...corsHeaders, "Content-Type": "application/json" }
         });
       }
@@ -1970,9 +2420,11 @@ export default {
                 marketSlug: data.marketSlug,
                 direction: data.direction,
                 entryPrice: data.entryPrice,
+                currentPrice: data.currentPrice || data.priceAfter1hr || data.priceAfter30min || data.priceAfter5min || data.entryPrice,
                 priceAfter5min: data.priceAfter5min,
                 priceAfter30min: data.priceAfter30min,
                 priceAfter1hr: data.priceAfter1hr,
+                priceAfter2hr: data.priceAfter2hr,
                 movementPct: data.movementPct,
                 confirmed: data.confirmed,
                 trackedAt: new Date(data.trackedAt).toISOString()
@@ -2129,7 +2581,7 @@ export default {
         return new Response(JSON.stringify({
           status: "ok",
           timestamp: new Date().toISOString(),
-          version: "16.2.0 - Phase 3 Intelligence System",
+          version: "16.3.1 - Show pending wallets + fix line tracking",
           cache: cacheStats
         }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" }
@@ -2207,6 +2659,7 @@ async function runScan(hoursBack, minScore, env, debugMode = false) {
   let debugCounts = {
     tooOld: 0,
     settlement: 0,
+    sureBet: 0,    // NEW: Track "sure bet" trades (odds too extreme to be meaningful)
     tooSmall: 0,
     gamblingMarket: 0,
     passed: 0
@@ -2251,8 +2704,18 @@ async function runScan(hoursBack, minScore, env, debugMode = false) {
     t._tradeTime = tradeTime;
     
     const price = parseFloat(t.price) || 0;
+    
+    // Filter out settlement-level prices (basically resolved)
     if (price >= 0.99 || price <= 0.01) {
       debugCounts.settlement++;
+      return false;
+    }
+    
+    // NEW: Filter out "sure bet" trades - odds too extreme to be meaningful signals
+    // These inflate win rates because betting at 85%+ is almost guaranteed to win
+    // They're not real "alpha" - just risk-free money grabs
+    if (price >= 0.85 || price <= 0.15) {
+      debugCounts.sureBet++;
       return false;
     }
     
@@ -2787,18 +3250,20 @@ async function runScan(hoursBack, minScore, env, debugMode = false) {
           console.error("Error tracking line movement:", e.message)
         );
         
-        // Track wallets that placed significant bets
+        // Track wallets that placed significant bets ($1k+ for tracking purposes)
         for (const trade of g.trades) {
-          if (trade._usdValue >= 5000) {
+          if (trade._usdValue >= 1000) {
             const wallet = trade.proxyWallet || trade.user || trade.maker;
-            updateWalletStats(env, wallet, {
-              signalId: signal.id,
-              market: g.marketTitle,
-              marketSlug: g.marketSlug,
-              direction: g.direction,
-              amount: trade._usdValue,
-              price: Math.round(parseFloat(trade.price || 0) * 100)
-            }).catch(e => console.error("Error updating wallet:", e.message));
+            if (wallet) {
+              updateWalletStats(env, wallet, {
+                signalId: signal.id,
+                market: g.marketTitle,
+                marketSlug: g.marketSlug,
+                direction: g.direction,
+                amount: trade._usdValue,
+                price: Math.round(parseFloat(trade.price || 0) * 100)
+              }).catch(e => console.error("Error updating wallet:", e.message));
+            }
           }
         }
       }
@@ -2865,18 +3330,44 @@ async function runScan(hoursBack, minScore, env, debugMode = false) {
   });
   
   // Filter out events that have already started (check cached signals too)
-  // Using less aggressive hasEventStarted now
+  // This is a quick heuristic filter based on date/time
   const activeSignals = filteredSignals.filter(s => {
     return !hasEventStarted(s.marketTitle, s.marketSlug, s.avgEntryPrice / 100);
   });
   
+  // Additional filter: Check if market appears resolved based on current price
+  // If we have the current market price and it's at 99%+ or 1%-, market is resolved
+  const trulyActiveSignals = activeSignals.filter(s => {
+    // If currentPrice is at resolution levels, filter it out
+    const price = s.currentPrice || s.avgEntryPrice;
+    if (price >= 99 || price <= 1) {
+      console.log(`Filtering resolved market: ${s.marketTitle} (price: ${price}%)`);
+      return false;
+    }
+    
+    // Check if event date has passed (more thorough check)
+    const eventDate = getEventDate(s.marketTitle, s.marketSlug);
+    if (eventDate) {
+      const now = new Date();
+      // If event date + 6 hours has passed, filter it out
+      // This gives buffer for games to finish
+      const eventEndTime = new Date(eventDate.getTime() + 6 * 60 * 60 * 1000);
+      if (now > eventEndTime) {
+        console.log(`Filtering past event: ${s.marketTitle} (event: ${eventDate.toISOString()})`);
+        return false;
+      }
+    }
+    
+    return true;
+  });
+  
   // Filter by min score and sort
-  const finalSignals = activeSignals
+  const finalSignals = trulyActiveSignals
     .filter(s => s.score >= minScore)
     .sort((a, b) => b.score - a.score);
   
   // In debug mode, include all signals before score filtering
-  const debugAllSignals = debugMode ? activeSignals.sort((a, b) => b.score - a.score).map(s => ({
+  const debugAllSignals = debugMode ? trulyActiveSignals.sort((a, b) => b.score - a.score).map(s => ({
     market: s.marketTitle,
     score: s.score,
     largestBet: s.largestBet,
@@ -2889,13 +3380,13 @@ async function runScan(hoursBack, minScore, env, debugMode = false) {
   
   // Score distribution for debug
   const scoreDistribution = debugMode ? {
-    '100+': activeSignals.filter(s => s.score >= 100).length,
-    '80-99': activeSignals.filter(s => s.score >= 80 && s.score < 100).length,
-    '60-79': activeSignals.filter(s => s.score >= 60 && s.score < 80).length,
-    '40-59': activeSignals.filter(s => s.score >= 40 && s.score < 60).length,
-    '20-39': activeSignals.filter(s => s.score >= 20 && s.score < 40).length,
-    '1-19': activeSignals.filter(s => s.score >= 1 && s.score < 20).length,
-    '0': activeSignals.filter(s => s.score === 0).length
+    '100+': trulyActiveSignals.filter(s => s.score >= 100).length,
+    '80-99': trulyActiveSignals.filter(s => s.score >= 80 && s.score < 100).length,
+    '60-79': trulyActiveSignals.filter(s => s.score >= 60 && s.score < 80).length,
+    '40-59': trulyActiveSignals.filter(s => s.score >= 40 && s.score < 60).length,
+    '20-39': trulyActiveSignals.filter(s => s.score >= 20 && s.score < 40).length,
+    '1-19': trulyActiveSignals.filter(s => s.score >= 1 && s.score < 20).length,
+    '0': trulyActiveSignals.filter(s => s.score === 0).length
   } : null;
   
   // REMOVED: .slice(0, 50) - now returns ALL signals
