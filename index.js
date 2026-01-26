@@ -2318,6 +2318,19 @@ export default {
         });
       }
       
+      // View cron job status - when it last ran and what it did
+      if (path === "/cron-status") {
+        const cronStatus = await env.SIGNALS_CACHE.get("cron_last_run", { type: "json" });
+        return new Response(JSON.stringify({
+          success: true,
+          lastRun: cronStatus || { message: "No cron runs recorded yet" },
+          cronSchedule: "Every 5 minutes",
+          note: "Settlement runs automatically. Sports events settle ~12h after game ends."
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+      
       // Debug: List ALL pending signals with their market slugs
       if (path === "/learning/pending-all") {
         const pendingSignals = await env.SIGNALS_CACHE.get(KV_KEYS.PENDING_SIGNALS, { type: "json" }) || [];
@@ -2835,7 +2848,7 @@ export default {
         return new Response(JSON.stringify({
           status: "ok",
           timestamp: new Date().toISOString(),
-          version: "16.4.1 - Fix settlement for old events",
+          version: "16.4.3 - Clearer direction display",
           cache: cacheStats
         }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" }
@@ -2860,10 +2873,23 @@ export default {
   // Cron trigger handler - runs every 5 minutes
   async scheduled(event, env, ctx) {
     console.log("Cron triggered at:", new Date().toISOString());
+    const cronStatus = {
+      startedAt: new Date().toISOString(),
+      scan: null,
+      settlement: null,
+      lines: null,
+      optimization: null,
+      error: null
+    };
+    
     try {
       // Run scan with 48h window and low minScore to capture everything
       const result = await runScan(48, 30, env);
       console.log("Cron scan completed successfully");
+      cronStatus.scan = {
+        signals: result.signals?.length || 0,
+        success: result.success
+      };
       
       // Check for new high-value signals and send alerts
       if (result.success && result.signals && result.signals.length > 0) {
@@ -2879,11 +2905,13 @@ export default {
       console.log("Running settlement checker...");
       const settlementResults = await processSettledSignals(env);
       console.log(`Settlement: ${settlementResults.processed} processed, ${settlementResults.wins}W-${settlementResults.losses}L`);
+      cronStatus.settlement = settlementResults;
       
       // PHASE 2: Update line movements for active signals
       console.log("Checking line movements...");
       const lineResults = await updateLineMovements(env);
       console.log(`Line movements: ${lineResults.updated} updated, ${lineResults.confirmed} confirmed`);
+      cronStatus.lines = lineResults;
       
       // PHASE 3: Optimize factor weights periodically (every ~hour based on 5min cron)
       // Only run if we've processed some signals
@@ -2891,10 +2919,21 @@ export default {
         console.log("Optimizing factor weights...");
         const optimizeResults = await optimizeFactorWeights(env);
         console.log(`Optimization: ${optimizeResults.totalOptimized} factors updated`);
+        cronStatus.optimization = optimizeResults;
       }
+      
+      cronStatus.completedAt = new Date().toISOString();
       
     } catch (error) {
       console.error("Cron scan failed:", error.message);
+      cronStatus.error = error.message;
+    }
+    
+    // Save cron status to KV for visibility
+    if (env.SIGNALS_CACHE) {
+      await env.SIGNALS_CACHE.put("cron_last_run", JSON.stringify(cronStatus), {
+        expirationTtl: 24 * 60 * 60  // Keep for 24 hours
+      });
     }
   }
 };
@@ -3054,7 +3093,69 @@ async function runScan(hoursBack, minScore, env, debugMode = false) {
   
   console.log(`Fetched win rates for ${Object.keys(walletWinRates).length} wallets`);
   
-  // Group trades by market+direction
+  // Format direction for clearer display
+// Polymarket outcomes can be confusing like "Under 76" or "Hawks Fails"
+function formatDirectionForDisplay(direction, marketTitle, marketSlug) {
+  if (!direction) return "Unknown";
+  
+  const dir = direction.toString();
+  const title = (marketTitle || "").toLowerCase();
+  const slug = (marketSlug || "").toLowerCase();
+  
+  // Check if this is an Over/Under market
+  if (title.includes('o/u') || title.includes('over/under') || slug.includes('-total-') || slug.includes('-over-') || slug.includes('-under-')) {
+    // Extract the total number from the title if possible
+    const totalMatch = title.match(/o\/u\s*([\d.]+)/i) || title.match(/total[:\s]*([\d.]+)/i) || slug.match(/total-([\d]+pt[\d]+)/);
+    
+    if (dir.toLowerCase().includes('over')) {
+      return totalMatch ? `Over ${totalMatch[1].replace('pt', '.')}` : 'Over';
+    }
+    if (dir.toLowerCase().includes('under')) {
+      return totalMatch ? `Under ${totalMatch[1].replace('pt', '.')}` : 'Under';
+    }
+    // If direction doesn't say over/under but market is O/U, check the direction
+    // Sometimes Polymarket uses weird outcomes like "Under 76" which should be "Under"
+    if (dir.match(/^under\s*\d/i)) {
+      return totalMatch ? `Under ${totalMatch[1].replace('pt', '.')}` : 'Under';
+    }
+    if (dir.match(/^over\s*\d/i)) {
+      return totalMatch ? `Over ${totalMatch[1].replace('pt', '.')}` : 'Over';
+    }
+  }
+  
+  // Check if this is a Spread market
+  if (title.includes('spread') || slug.includes('-spread-')) {
+    // "Hawks Fails" should become "Against Hawks" or "Fade Hawks"
+    if (dir.toLowerCase().includes('fails') || dir.toLowerCase().includes('fail')) {
+      const teamMatch = dir.match(/^(\w+)\s*fails?/i);
+      if (teamMatch) {
+        return `Fade ${teamMatch[1]}`;
+      }
+    }
+    // "Hawks Covers" should stay as is or become "Hawks -5.5"
+    if (dir.toLowerCase().includes('covers') || dir.toLowerCase().includes('cover')) {
+      const teamMatch = dir.match(/^(\w+)\s*covers?/i);
+      if (teamMatch) {
+        return `${teamMatch[1]} Cover`;
+      }
+    }
+    // If it's just a team name in a spread market, add context
+    const spreadMatch = title.match(/spread[:\s]*(\w+)\s*\(([-+]?[\d.]+)\)/i);
+    if (spreadMatch && dir.toLowerCase() === spreadMatch[1].toLowerCase()) {
+      return `${dir} ${spreadMatch[2]}`;
+    }
+  }
+  
+  // For Yes/No markets, keep as is
+  if (dir.toLowerCase() === 'yes' || dir.toLowerCase() === 'no') {
+    return dir;
+  }
+  
+  // Default: return the direction as-is but clean up weird suffixes
+  return dir.replace(/\s*(fails?|covers?)\s*$/i, '').trim() || dir;
+}
+
+// Group trades by market+direction
   const groups = {};
   validTrades.forEach((t) => {
     const marketKey = t.slug || t.eventSlug || t.conditionId;
@@ -3411,7 +3512,8 @@ async function runScan(hoursBack, minScore, env, debugMode = false) {
         marketSlug: g.marketSlug,
         marketUrl: `https://polymarket.com/market/${g.marketSlug}`,
         marketIcon: g.marketIcon,
-        direction: g.direction,
+        direction: formatDirectionForDisplay(g.direction, g.marketTitle, g.marketSlug),
+        directionRaw: g.direction, // Keep raw for settlement matching
         currentPrice: avgEntry,
         avgEntryPrice: avgEntry,
         suspiciousVolume: Math.round(g.totalVolume),
@@ -3513,7 +3615,8 @@ async function runScan(hoursBack, minScore, env, debugMode = false) {
                 signalId: signal.id,
                 market: g.marketTitle,
                 marketSlug: g.marketSlug,
-                direction: g.direction,
+                direction: formatDirectionForDisplay(g.direction, g.marketTitle, g.marketSlug),
+                directionRaw: g.direction,
                 amount: trade._usdValue,
                 price: Math.round(parseFloat(trade.price || 0) * 100)
               }).catch(e => console.error("Error updating wallet:", e.message));
