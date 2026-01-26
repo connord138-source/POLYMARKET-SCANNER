@@ -2312,6 +2312,59 @@ export default {
         });
       }
       
+      // Debug: Check why signals aren't settling
+      if (path === "/learning/debug-pending") {
+        const pendingIds = await env.SIGNALS_CACHE.get(KV_KEYS.PENDING_SIGNALS, { type: "json" }) || [];
+        const debugResults = [];
+        const now = new Date();
+        
+        for (const signalId of pendingIds.slice(0, 10)) {
+          const signalData = await env.SIGNALS_CACHE.get(KV_KEYS.SIGNALS_PREFIX + signalId, { type: "json" });
+          
+          if (!signalData) {
+            debugResults.push({ signalId, error: "Signal data not found" });
+            continue;
+          }
+          
+          // Extract date from slug
+          const slugDateMatch = (signalData.marketSlug || '').match(/(\d{4})-(\d{2})-(\d{2})/);
+          let hoursSinceEvent = 0;
+          let eventDateStr = null;
+          
+          if (slugDateMatch) {
+            const eventDate = new Date(
+              parseInt(slugDateMatch[1]),
+              parseInt(slugDateMatch[2]) - 1,
+              parseInt(slugDateMatch[3]),
+              23, 59, 59
+            );
+            eventDateStr = eventDate.toISOString();
+            hoursSinceEvent = (now.getTime() - eventDate.getTime()) / (1000 * 60 * 60);
+          }
+          
+          debugResults.push({
+            signalId,
+            marketSlug: signalData.marketSlug,
+            direction: signalData.direction,
+            outcome: signalData.outcome || "PENDING",
+            extractedDate: slugDateMatch ? slugDateMatch[0] : null,
+            eventDateISO: eventDateStr,
+            nowISO: now.toISOString(),
+            hoursSinceEvent: Math.round(hoursSinceEvent * 10) / 10,
+            shouldSettle: hoursSinceEvent > 12
+          });
+        }
+        
+        return new Response(JSON.stringify({
+          success: true,
+          serverTime: now.toISOString(),
+          pendingCount: pendingIds.length,
+          debugResults
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+      
       // Debug: Check settlement status for a specific signal
       if (path === "/learning/debug-settle") {
         const signalId = url.searchParams.get("id");
