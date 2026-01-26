@@ -98,17 +98,19 @@ var WALLET_TRACK_RECORD = {
 
 // Wallet tier thresholds
 var WALLET_TIERS = {
-  ELITE: { minWinRate: 70, minBets: 10, scoreBoost: 1.5, label: "🏆 ELITE" },
-  STRONG: { minWinRate: 62, minBets: 8, scoreBoost: 1.25, label: "💪 STRONG" },
-  AVERAGE: { minWinRate: 50, minBets: 5, scoreBoost: 1.0, label: "📊 AVERAGE" },
-  FADE: { maxWinRate: 45, minBets: 8, scoreBoost: 0.5, label: "🚫 FADE" }
+  INSIDER: { minWinRate: 75, minBets: 15, minVolume: 100000, scoreBoost: 2.0, label: "🎯 INSIDER", color: "#ff00ff" },
+  ELITE: { minWinRate: 68, minBets: 10, minVolume: 50000, scoreBoost: 1.5, label: "🏆 ELITE", color: "#fbbf24" },
+  STRONG: { minWinRate: 60, minBets: 8, minVolume: 20000, scoreBoost: 1.25, label: "💪 STRONG", color: "#3b82f6" },
+  AVERAGE: { minWinRate: 50, minBets: 5, minVolume: 0, scoreBoost: 1.0, label: "📊 AVERAGE", color: "#6b7280" },
+  FADE: { maxWinRate: 42, minBets: 8, minVolume: 0, scoreBoost: 0.5, label: "🚫 FADE", color: "#ef4444" }
 };
 
 // Factor tracking keys
 var TRACKABLE_FACTORS = [
   "freshWallet", "whaleSize50k", "whaleSize25k", "whaleSize15k",
   "lastMinute2h", "lastMinute6h", "concentrated", "coordinated",
-  "extremeOdds", "politicalMarket", "sportsMarket", "cryptoMarket"
+  "extremeOdds", "politicalMarket", "sportsMarket", "cryptoMarket",
+  "insiderWallet", "eliteWallet", "strongWallet", "fadeWallet"
 ];
 
 // KV Keys
@@ -124,25 +126,51 @@ var KV_KEYS = {
 // WALLET TRACKING FUNCTIONS
 // ============================================================
 
-// Get wallet tier based on stats
+// Get wallet tier based on stats - considers volume + win rate + consistency
 function getWalletTier(stats) {
   if (!stats || stats.totalBets < 5) return null;
   
   const winRate = stats.winRate || 0;
   const totalBets = stats.totalBets || 0;
+  const totalVolume = stats.totalVolume || 0;
+  const edgeMetrics = stats.edgeMetrics || {};
   
-  if (winRate >= WALLET_TIERS.ELITE.minWinRate && totalBets >= WALLET_TIERS.ELITE.minBets) {
+  // INSIDER: Exceptional performance across all metrics
+  // High win rate + high volume + good consistency + profitable big bets
+  if (winRate >= WALLET_TIERS.INSIDER.minWinRate && 
+      totalBets >= WALLET_TIERS.INSIDER.minBets &&
+      totalVolume >= WALLET_TIERS.INSIDER.minVolume) {
+    // Additional check: big bet win rate should be good too
+    const bigBetWR = edgeMetrics.bigBetWinRate || winRate;
+    if (bigBetWR >= 65) {
+      return { ...WALLET_TIERS.INSIDER, tier: "INSIDER" };
+    }
+  }
+  
+  // ELITE: Very strong performance
+  if (winRate >= WALLET_TIERS.ELITE.minWinRate && 
+      totalBets >= WALLET_TIERS.ELITE.minBets &&
+      totalVolume >= WALLET_TIERS.ELITE.minVolume) {
     return { ...WALLET_TIERS.ELITE, tier: "ELITE" };
   }
-  if (winRate >= WALLET_TIERS.STRONG.minWinRate && totalBets >= WALLET_TIERS.STRONG.minBets) {
+  
+  // STRONG: Good performance
+  if (winRate >= WALLET_TIERS.STRONG.minWinRate && 
+      totalBets >= WALLET_TIERS.STRONG.minBets &&
+      totalVolume >= WALLET_TIERS.STRONG.minVolume) {
     return { ...WALLET_TIERS.STRONG, tier: "STRONG" };
   }
+  
+  // FADE: Consistently loses - bet against them!
   if (winRate <= WALLET_TIERS.FADE.maxWinRate && totalBets >= WALLET_TIERS.FADE.minBets) {
     return { ...WALLET_TIERS.FADE, tier: "FADE" };
   }
+  
+  // AVERAGE: Has enough data but not exceptional
   if (totalBets >= WALLET_TIERS.AVERAGE.minBets) {
     return { ...WALLET_TIERS.AVERAGE, tier: "AVERAGE" };
   }
+  
   return null;
 }
 
@@ -174,8 +202,21 @@ async function updateWalletStats(env, walletAddress, betData) {
         tier: null,
         currentStreak: 0,
         bestStreak: 0,
+        worstStreak: 0,
         markets: {},        // Track performance by market type
-        recentBets: []      // Last 20 bets for reference
+        recentBets: [],     // Last 20 bets for reference
+        // EDGE METRICS - what makes a wallet "smart money"
+        edgeMetrics: {
+          avgOdds: 0,           // Average odds they bet at (lower = more confident)
+          avgBetTiming: 0,      // How close to event start they bet (minutes)
+          consistencyScore: 0,  // How consistent their win rate is
+          bigBetWinRate: 0,     // Win rate on bets >$10k
+          sportWinRate: 0,      // Win rate on sports
+          politicalWinRate: 0,  // Win rate on political
+          cryptoWinRate: 0,     // Win rate on crypto
+          totalBigBets: 0,      // Number of $10k+ bets
+          roi: 0                // Return on investment %
+        }
       };
     }
     
@@ -204,6 +245,17 @@ async function updateWalletStats(env, walletAddress, betData) {
       const totalBetsIncludingPending = stats.totalBets + stats.pending;
       if (totalBetsIncludingPending > 0) {
         stats.avgBetSize = Math.round(stats.totalVolume / totalBetsIncludingPending);
+      }
+      
+      // Track big bets
+      if (betData.amount >= 10000) {
+        stats.edgeMetrics.totalBigBets = (stats.edgeMetrics.totalBigBets || 0) + 1;
+      }
+      
+      // Track average odds
+      if (betData.price > 0) {
+        const currentTotal = (stats.edgeMetrics.avgOdds || 0) * (totalBetsIncludingPending - 1);
+        stats.edgeMetrics.avgOdds = Math.round((currentTotal + betData.price) / totalBetsIncludingPending);
       }
     }
     
@@ -257,7 +309,7 @@ async function getWalletStats(env, walletAddress) {
 }
 
 // Record bet outcome for a wallet
-async function recordWalletOutcome(env, walletAddress, outcome, profitLoss, marketType) {
+async function recordWalletOutcome(env, walletAddress, outcome, profitLoss, marketType, betAmount = 0) {
   if (!env.SIGNALS_CACHE || !walletAddress) return null;
   
   const key = KV_KEYS.WALLETS_PREFIX + walletAddress.toLowerCase();
@@ -266,6 +318,18 @@ async function recordWalletOutcome(env, walletAddress, outcome, profitLoss, mark
     let stats = await env.SIGNALS_CACHE.get(key, { type: "json" });
     if (!stats) return null;
     
+    // Initialize edge metrics if missing
+    if (!stats.edgeMetrics) {
+      stats.edgeMetrics = {
+        avgOdds: 0,
+        consistencyScore: 0,
+        bigBetWinRate: 0,
+        totalBigBets: 0,
+        bigBetWins: 0,
+        roi: 0
+      };
+    }
+    
     // Update stats
     stats.totalBets += 1;
     stats.pending = Math.max(0, stats.pending - 1);
@@ -273,15 +337,42 @@ async function recordWalletOutcome(env, walletAddress, outcome, profitLoss, mark
     if (outcome === "WIN") {
       stats.wins += 1;
       stats.currentStreak = Math.max(0, stats.currentStreak) + 1;
-      stats.bestStreak = Math.max(stats.bestStreak, stats.currentStreak);
-    } else {
+      stats.bestStreak = Math.max(stats.bestStreak || 0, stats.currentStreak);
+      
+      // Track big bet wins
+      if (betAmount >= 10000) {
+        stats.edgeMetrics.bigBetWins = (stats.edgeMetrics.bigBetWins || 0) + 1;
+      }
+    } else if (outcome === "LOSS") {
       stats.losses += 1;
       stats.currentStreak = Math.min(0, stats.currentStreak) - 1;
+      stats.worstStreak = Math.min(stats.worstStreak || 0, stats.currentStreak);
     }
+    // UNKNOWN outcomes don't affect win/loss
     
     stats.profitLoss += profitLoss || 0;
     stats.winRate = stats.totalBets > 0 ? Math.round((stats.wins / stats.totalBets) * 100) : 0;
     stats.tier = getWalletTier(stats)?.tier || null;
+    
+    // Calculate edge metrics
+    // Big bet win rate (bets >= $10k)
+    if (stats.edgeMetrics.totalBigBets > 0) {
+      stats.edgeMetrics.bigBetWinRate = Math.round(
+        ((stats.edgeMetrics.bigBetWins || 0) / stats.edgeMetrics.totalBigBets) * 100
+      );
+    }
+    
+    // ROI calculation
+    if (stats.totalVolume > 0) {
+      stats.edgeMetrics.roi = Math.round((stats.profitLoss / stats.totalVolume) * 100);
+    }
+    
+    // Consistency score: penalize high variance
+    // A wallet with 70% WR over 20 bets is more reliable than 70% over 5 bets
+    const sampleSize = stats.totalBets;
+    const baseScore = stats.winRate;
+    const sampleBonus = Math.min(sampleSize / 20, 1) * 10; // Max +10 for 20+ bets
+    stats.edgeMetrics.consistencyScore = Math.round(baseScore + sampleBonus);
     
     // Track by market type
     if (marketType) {
@@ -290,11 +381,17 @@ async function recordWalletOutcome(env, walletAddress, outcome, profitLoss, mark
       }
       if (outcome === "WIN") {
         stats.markets[marketType].wins += 1;
-      } else {
+      } else if (outcome === "LOSS") {
         stats.markets[marketType].losses += 1;
       }
       const mt = stats.markets[marketType];
-      mt.winRate = Math.round((mt.wins / (mt.wins + mt.losses)) * 100);
+      const mtTotal = mt.wins + mt.losses;
+      mt.winRate = mtTotal > 0 ? Math.round((mt.wins / mtTotal) * 100) : 0;
+      
+      // Update market-specific win rates in edge metrics
+      if (marketType === 'sports') stats.edgeMetrics.sportWinRate = mt.winRate;
+      if (marketType === 'political') stats.edgeMetrics.politicalWinRate = mt.winRate;
+      if (marketType === 'crypto') stats.edgeMetrics.cryptoWinRate = mt.winRate;
     }
     
     await env.SIGNALS_CACHE.put(key, JSON.stringify(stats), {
@@ -1894,14 +1991,57 @@ export default {
         try {
           const factorStats = await env.SIGNALS_CACHE.get(KV_KEYS.FACTOR_STATS, { type: "json" }) || {};
           const pendingSignals = await env.SIGNALS_CACHE.get(KV_KEYS.PENDING_SIGNALS, { type: "json" }) || [];
+          const walletIndex = await env.SIGNALS_CACHE.get("tracked_wallet_index", { type: "json" }) || [];
           
-          // Calculate overall stats
+          // Calculate overall stats from factors
           let totalWins = 0;
           let totalLosses = 0;
           for (const stats of Object.values(factorStats)) {
             totalWins += stats.wins || 0;
             totalLosses += stats.losses || 0;
           }
+          
+          // Get wallet tier counts
+          let insiderCount = 0;
+          let eliteCount = 0;
+          let strongCount = 0;
+          let fadeCount = 0;
+          const topWallets = [];
+          
+          // Fetch wallet stats in parallel
+          for (let i = 0; i < Math.min(walletIndex.length, 50); i += 10) {
+            const batch = walletIndex.slice(i, i + 10);
+            const results = await Promise.all(
+              batch.map(addr => getWalletStats(env, addr))
+            );
+            results.forEach(stats => {
+              if (stats) {
+                if (stats.tier === 'INSIDER') insiderCount++;
+                else if (stats.tier === 'ELITE') eliteCount++;
+                else if (stats.tier === 'STRONG') strongCount++;
+                else if (stats.tier === 'FADE') fadeCount++;
+                
+                // Track top performers for display
+                if (stats.totalBets >= 5 && stats.winRate >= 60) {
+                  topWallets.push({
+                    address: stats.address,
+                    tier: stats.tier,
+                    winRate: stats.winRate,
+                    record: `${stats.wins}W-${stats.losses}L`,
+                    totalVolume: stats.totalVolume,
+                    edgeMetrics: stats.edgeMetrics
+                  });
+                }
+              }
+            });
+          }
+          
+          // Sort top wallets by edge (win rate * consistency)
+          topWallets.sort((a, b) => {
+            const aEdge = (a.winRate || 0) * (a.edgeMetrics?.consistencyScore || 1);
+            const bEdge = (b.winRate || 0) * (b.edgeMetrics?.consistencyScore || 1);
+            return bEdge - aEdge;
+          });
           
           return new Response(JSON.stringify({
             success: true,
@@ -1913,7 +2053,16 @@ export default {
                 : 0,
               pendingSignals: pendingSignals.length
             },
-            factors: factorStats
+            walletEdge: {
+              totalTracked: walletIndex.length,
+              insiderCount,
+              eliteCount,
+              strongCount,
+              fadeCount,
+              topPerformers: topWallets.slice(0, 10)
+            },
+            factors: factorStats,
+            tiers: WALLET_TIERS
           }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" }
           });
@@ -2581,7 +2730,7 @@ export default {
         return new Response(JSON.stringify({
           status: "ok",
           timestamp: new Date().toISOString(),
-          version: "16.3.1 - Show pending wallets + fix line tracking",
+          version: "16.4.0 - Edge-focused wallet tracking + INSIDER tier",
           cache: cacheStats
         }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" }
