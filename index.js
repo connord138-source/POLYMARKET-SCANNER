@@ -532,7 +532,7 @@ async function getFactorWeights(env) {
 // ============================================================
 
 // Check if a market has settled and determine outcome
-async function checkMarketSettlement(marketSlug, signalDirection) {
+async function checkMarketSettlement(marketSlug, signalDetectedAt = null) {
   try {
     // Since Polymarket doesn't have direct market lookup, we check recent trades
     // If a market's last trade price is at 0.95+ or 0.05-, it's effectively settled
@@ -578,6 +578,12 @@ async function checkMarketSettlement(marketSlug, signalDirection) {
       
       const now = new Date();
       hoursSinceEvent = (now.getTime() - eventDate.getTime()) / (1000 * 60 * 60);
+    } else if (signalDetectedAt) {
+      // For events without dates in slug, use time since signal was detected
+      // If signal was detected 48+ hours ago and no trades, likely settled
+      const detectedTime = new Date(signalDetectedAt).getTime();
+      const hoursSinceDetected = (Date.now() - detectedTime) / (1000 * 60 * 60);
+      hoursSinceEvent = hoursSinceDetected;
     }
     
     if (marketTrades.length === 0) {
@@ -692,7 +698,7 @@ async function processSettledSignals(env) {
         }
         
         // Check if market settled
-        const settlement = await checkMarketSettlement(signalData.marketSlug);
+        const settlement = await checkMarketSettlement(signalData.marketSlug, signalData.detectedAt);
         
         if (!settlement || !settlement.settled) {
           stillPending.push(signalId);
@@ -2312,6 +2318,52 @@ export default {
         });
       }
       
+      // Debug: List ALL pending signals with their market slugs
+      if (path === "/learning/pending-all") {
+        const pendingSignals = await env.SIGNALS_CACHE.get(KV_KEYS.PENDING_SIGNALS, { type: "json" }) || [];
+        const signalDetails = [];
+        
+        for (const signalId of pendingSignals) {
+          const signalData = await env.SIGNALS_CACHE.get(KV_KEYS.SIGNALS_PREFIX + signalId, { type: "json" });
+          if (signalData) {
+            // Check if slug has date
+            const slugDateMatch = (signalData.marketSlug || '').match(/(\d{4})-(\d{2})-(\d{2})/);
+            let hoursSinceEvent = 0;
+            if (slugDateMatch) {
+              const eventDate = new Date(
+                parseInt(slugDateMatch[1]),
+                parseInt(slugDateMatch[2]) - 1,
+                parseInt(slugDateMatch[3]),
+                23, 59, 59
+              );
+              hoursSinceEvent = (Date.now() - eventDate.getTime()) / (1000 * 60 * 60);
+            }
+            
+            signalDetails.push({
+              signalId: signalData.id,
+              marketSlug: signalData.marketSlug,
+              direction: signalData.direction,
+              detectedAt: signalData.detectedAt,
+              hasDateInSlug: !!slugDateMatch,
+              slugDate: slugDateMatch ? slugDateMatch[0] : null,
+              hoursSinceEvent: Math.round(hoursSinceEvent),
+              shouldSettle: hoursSinceEvent > 12
+            });
+          }
+        }
+        
+        // Sort by hoursSinceEvent descending (oldest first)
+        signalDetails.sort((a, b) => b.hoursSinceEvent - a.hoursSinceEvent);
+        
+        return new Response(JSON.stringify({
+          success: true,
+          totalPending: pendingSignals.length,
+          signals: signalDetails
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+      
       // Debug: Check why signals aren't settling
       if (path === "/learning/debug-pending") {
         const pendingIds = await env.SIGNALS_CACHE.get(KV_KEYS.PENDING_SIGNALS, { type: "json" }) || [];
@@ -2783,7 +2835,7 @@ export default {
         return new Response(JSON.stringify({
           status: "ok",
           timestamp: new Date().toISOString(),
-          version: "16.4.0 - Edge-focused wallet tracking + INSIDER tier",
+          version: "16.4.1 - Fix settlement for old events",
           cache: cacheStats
         }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" }
