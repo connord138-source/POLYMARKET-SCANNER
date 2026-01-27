@@ -2844,7 +2844,7 @@ export default {
       // Get Vegas odds for comparison with Polymarket
       // Usage: /odds/compare?sport=nba or /odds/compare?sport=nfl
       if (path === "/odds/compare") {
-        const sport = params.get("sport") || "nba";
+        const sport = url.searchParams.get("sport") || "nba";
         const sportKey = SPORT_KEY_MAP[sport];
         
         if (!sportKey) {
@@ -2950,8 +2950,8 @@ export default {
       // Get game scores for settlement verification
       // Usage: /odds/scores?sport=nba&days=3
       if (path === "/odds/scores") {
-        const sport = params.get("sport") || "nba";
-        const days = parseInt(params.get("days") || "3");
+        const sport = url.searchParams.get("sport") || "nba";
+        const days = parseInt(url.searchParams.get("days") || "3");
         const sportKey = SPORT_KEY_MAP[sport];
         
         if (!sportKey) {
@@ -3511,7 +3511,7 @@ export default {
         return new Response(JSON.stringify({
           status: "ok",
           timestamp: new Date().toISOString(),
-          version: "17.0.0 - The Odds API integration for accurate sports settlement",
+          version: "17.0.1 - Fix params reference in odds endpoints",
           cache: cacheStats
         }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" }
