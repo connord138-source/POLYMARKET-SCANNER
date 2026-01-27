@@ -1,4 +1,344 @@
 // src/index.js
+
+// ============================================================
+// THE ODDS API INTEGRATION
+// For accurate sports settlement and Vegas odds comparison
+// ============================================================
+
+var ODDS_API_BASE = "https://api.the-odds-api.com/v4";
+
+// Sport key mapping: Polymarket slug patterns -> The Odds API sport keys
+var SPORT_KEY_MAP = {
+  'nfl': 'americanfootball_nfl',
+  'nba': 'basketball_nba',
+  'mlb': 'baseball_mlb',
+  'nhl': 'icehockey_nhl',
+  'ncaaf': 'americanfootball_ncaaf',
+  'ncaab': 'basketball_ncaab',
+  'mma': 'mma_mixed_martial_arts',
+  'ufc': 'mma_mixed_martial_arts',
+  'epl': 'soccer_epl',
+  'ucl': 'soccer_uefa_champions_league',
+  'mls': 'soccer_usa_mls',
+  'wta': 'tennis_wta_australian_open',
+  'atp': 'tennis_atp_australian_open',
+  'lol': null, // LoL esports not supported
+  'csgo': null, // CS:GO not supported
+};
+
+// Team name normalization for matching
+var TEAM_ALIASES = {
+  // NFL
+  'patriots': 'New England Patriots', 'ne': 'New England Patriots',
+  'broncos': 'Denver Broncos', 'den': 'Denver Broncos',
+  'chiefs': 'Kansas City Chiefs', 'kc': 'Kansas City Chiefs',
+  'bills': 'Buffalo Bills', 'buf': 'Buffalo Bills',
+  'dolphins': 'Miami Dolphins', 'mia': 'Miami Dolphins',
+  'jets': 'New York Jets', 'nyj': 'New York Jets',
+  'ravens': 'Baltimore Ravens', 'bal': 'Baltimore Ravens',
+  'steelers': 'Pittsburgh Steelers', 'pit': 'Pittsburgh Steelers',
+  'bengals': 'Cincinnati Bengals', 'cin': 'Cincinnati Bengals',
+  'browns': 'Cleveland Browns', 'cle': 'Cleveland Browns',
+  'texans': 'Houston Texans', 'hou': 'Houston Texans',
+  'colts': 'Indianapolis Colts', 'ind': 'Indianapolis Colts',
+  'jaguars': 'Jacksonville Jaguars', 'jax': 'Jacksonville Jaguars',
+  'titans': 'Tennessee Titans', 'ten': 'Tennessee Titans',
+  'cowboys': 'Dallas Cowboys', 'dal': 'Dallas Cowboys',
+  'eagles': 'Philadelphia Eagles', 'phi': 'Philadelphia Eagles',
+  'giants': 'New York Giants', 'nyg': 'New York Giants',
+  'commanders': 'Washington Commanders', 'was': 'Washington Commanders',
+  'bears': 'Chicago Bears', 'chi': 'Chicago Bears',
+  'lions': 'Detroit Lions', 'det': 'Detroit Lions',
+  'packers': 'Green Bay Packers', 'gb': 'Green Bay Packers',
+  'vikings': 'Minnesota Vikings', 'min': 'Minnesota Vikings',
+  'falcons': 'Atlanta Falcons', 'atl': 'Atlanta Falcons',
+  'panthers': 'Carolina Panthers', 'car': 'Carolina Panthers',
+  'saints': 'New Orleans Saints', 'no': 'New Orleans Saints',
+  'buccaneers': 'Tampa Bay Buccaneers', 'tb': 'Tampa Bay Buccaneers',
+  'cardinals': 'Arizona Cardinals', 'ari': 'Arizona Cardinals',
+  '49ers': 'San Francisco 49ers', 'sf': 'San Francisco 49ers',
+  'seahawks': 'Seattle Seahawks', 'sea': 'Seattle Seahawks',
+  'rams': 'Los Angeles Rams', 'lar': 'Los Angeles Rams', 'la': 'Los Angeles Rams',
+  'chargers': 'Los Angeles Chargers', 'lac': 'Los Angeles Chargers',
+  'raiders': 'Las Vegas Raiders', 'lv': 'Las Vegas Raiders',
+  // NBA
+  'lakers': 'Los Angeles Lakers', 'lal': 'Los Angeles Lakers',
+  'celtics': 'Boston Celtics', 'bos': 'Boston Celtics',
+  'warriors': 'Golden State Warriors', 'gsw': 'Golden State Warriors',
+  'bucks': 'Milwaukee Bucks', 'mil': 'Milwaukee Bucks',
+  'heat': 'Miami Heat',
+  'nuggets': 'Denver Nuggets',
+  'suns': 'Phoenix Suns', 'phx': 'Phoenix Suns',
+  'mavericks': 'Dallas Mavericks',
+  'clippers': 'Los Angeles Clippers', 'lac': 'Los Angeles Clippers',
+  'sixers': 'Philadelphia 76ers',
+  '76ers': 'Philadelphia 76ers',
+  'nets': 'Brooklyn Nets', 'bkn': 'Brooklyn Nets',
+  'knicks': 'New York Knicks', 'nyk': 'New York Knicks',
+  'raptors': 'Toronto Raptors', 'tor': 'Toronto Raptors',
+  'bulls': 'Chicago Bulls',
+  'cavaliers': 'Cleveland Cavaliers', 'cavs': 'Cleveland Cavaliers',
+  'pistons': 'Detroit Pistons',
+  'pacers': 'Indiana Pacers',
+  'hawks': 'Atlanta Hawks',
+  'hornets': 'Charlotte Hornets', 'cha': 'Charlotte Hornets',
+  'magic': 'Orlando Magic', 'orl': 'Orlando Magic',
+  'wizards': 'Washington Wizards',
+  'timberwolves': 'Minnesota Timberwolves', 'wolves': 'Minnesota Timberwolves',
+  'thunder': 'Oklahoma City Thunder', 'okc': 'Oklahoma City Thunder',
+  'blazers': 'Portland Trail Blazers', 'por': 'Portland Trail Blazers',
+  'jazz': 'Utah Jazz', 'uta': 'Utah Jazz',
+  'grizzlies': 'Memphis Grizzlies', 'mem': 'Memphis Grizzlies',
+  'pelicans': 'New Orleans Pelicans', 'nop': 'New Orleans Pelicans',
+  'spurs': 'San Antonio Spurs', 'sas': 'San Antonio Spurs',
+  'rockets': 'Houston Rockets',
+  'kings': 'Sacramento Kings', 'sac': 'Sacramento Kings',
+};
+
+// Detect sport from Polymarket slug
+function detectSportFromSlug(slug) {
+  if (!slug) return null;
+  var slugLower = slug.toLowerCase();
+  
+  if (slugLower.startsWith('nfl-') || slugLower.includes('-nfl-')) return 'nfl';
+  if (slugLower.startsWith('nba-') || slugLower.includes('-nba-')) return 'nba';
+  if (slugLower.startsWith('mlb-') || slugLower.includes('-mlb-')) return 'mlb';
+  if (slugLower.startsWith('nhl-') || slugLower.includes('-nhl-')) return 'nhl';
+  if (slugLower.startsWith('ncaaf-') || slugLower.includes('college-football')) return 'ncaaf';
+  if (slugLower.startsWith('ncaab-') || slugLower.includes('college-basketball')) return 'ncaab';
+  if (slugLower.startsWith('ufc-') || slugLower.startsWith('mma-')) return 'mma';
+  if (slugLower.startsWith('epl-') || slugLower.includes('premier-league')) return 'epl';
+  if (slugLower.startsWith('wta-')) return 'wta';
+  if (slugLower.startsWith('atp-')) return 'atp';
+  if (slugLower.startsWith('lol-')) return 'lol';
+  
+  return null;
+}
+
+// Extract team codes from Polymarket slug
+function extractTeamsFromSlug(slug) {
+  if (!slug) return null;
+  
+  // Pattern: nfl-ne-den-2026-01-25, nba-lal-bos-2026-01-25
+  var match = slug.match(/^(?:nfl|nba|mlb|nhl|ncaaf|ncaab)-([a-z0-9]+)-([a-z0-9]+)-\d{4}-\d{2}-\d{2}/i);
+  if (match) {
+    return { away: match[1].toLowerCase(), home: match[2].toLowerCase() };
+  }
+  return null;
+}
+
+// Get full team name from code
+function getTeamFullName(code) {
+  if (!code) return code;
+  return TEAM_ALIASES[code.toLowerCase()] || code;
+}
+
+// Get scores/results from The Odds API
+async function getGameScores(env, sportKey, daysFrom) {
+  if (!env.ODDS_API_KEY) {
+    console.log("No ODDS_API_KEY configured");
+    return null;
+  }
+  
+  try {
+    var url = ODDS_API_BASE + "/sports/" + sportKey + "/scores/?apiKey=" + env.ODDS_API_KEY + "&daysFrom=" + (daysFrom || 3);
+    var response = await fetch(url);
+    
+    if (!response.ok) {
+      console.error("Odds API scores error: " + response.status);
+      return null;
+    }
+    
+    return await response.json();
+  } catch (e) {
+    console.error("Error fetching scores:", e.message);
+    return null;
+  }
+}
+
+// Get current odds from The Odds API
+async function getGameOdds(env, sportKey, markets) {
+  if (!env.ODDS_API_KEY) {
+    console.log("No ODDS_API_KEY configured");
+    return null;
+  }
+  
+  try {
+    var url = ODDS_API_BASE + "/sports/" + sportKey + "/odds/?apiKey=" + env.ODDS_API_KEY + "&regions=us&markets=" + (markets || 'h2h,spreads') + "&oddsFormat=american";
+    var response = await fetch(url);
+    
+    if (!response.ok) {
+      console.error("Odds API odds error: " + response.status);
+      return null;
+    }
+    
+    return await response.json();
+  } catch (e) {
+    console.error("Error fetching odds:", e.message);
+    return null;
+  }
+}
+
+// Find matching game in Odds API results
+function findMatchingGame(games, homeTeamCode, awayTeamCode) {
+  if (!games || !Array.isArray(games)) return null;
+  
+  var homeFullName = getTeamFullName(homeTeamCode);
+  var awayFullName = getTeamFullName(awayTeamCode);
+  
+  for (var i = 0; i < games.length; i++) {
+    var game = games[i];
+    var gameHome = (game.home_team || '').toLowerCase();
+    var gameAway = (game.away_team || '').toLowerCase();
+    var homeMatch = homeFullName.toLowerCase();
+    var awayMatch = awayFullName.toLowerCase();
+    
+    // Check for match
+    if ((gameHome.includes(homeMatch) || homeMatch.includes(gameHome)) &&
+        (gameAway.includes(awayMatch) || awayMatch.includes(gameAway))) {
+      return game;
+    }
+    // Try reversed (home/away might be swapped)
+    if ((gameHome.includes(awayMatch) || awayMatch.includes(gameHome)) &&
+        (gameAway.includes(homeMatch) || homeMatch.includes(gameAway))) {
+      return game;
+    }
+  }
+  
+  return null;
+}
+
+// Convert American odds to implied probability
+function americanToProb(odds) {
+  if (odds > 0) {
+    return 100 / (odds + 100);
+  } else {
+    return Math.abs(odds) / (Math.abs(odds) + 100);
+  }
+}
+
+// Convert probability to American odds
+function probToAmerican(prob) {
+  if (prob >= 0.5) {
+    return Math.round(-100 * prob / (1 - prob));
+  } else {
+    return Math.round(100 * (1 - prob) / prob);
+  }
+}
+
+// Calculate edge: Polymarket price vs Vegas odds
+function calculateEdge(polymarketPrice, vegasOdds) {
+  var polyProb = polymarketPrice / 100;
+  var vegasProb = americanToProb(vegasOdds);
+  var edge = vegasProb - polyProb;
+  
+  return {
+    polymarketProb: Math.round(polyProb * 100),
+    vegasProb: Math.round(vegasProb * 100),
+    edge: Math.round(edge * 100),
+    vegasOdds: vegasOdds,
+    isValue: edge > 0.03
+  };
+}
+
+// Settle sports bet using actual game results from The Odds API
+async function settleWithOddsAPI(env, marketSlug, direction) {
+  var sport = detectSportFromSlug(marketSlug);
+  if (!sport) return null;
+  
+  var sportKey = SPORT_KEY_MAP[sport];
+  if (!sportKey) return null;
+  
+  var teams = extractTeamsFromSlug(marketSlug);
+  if (!teams) return null;
+  
+  var scores = await getGameScores(env, sportKey, 3);
+  if (!scores) return null;
+  
+  var game = findMatchingGame(scores, teams.home, teams.away);
+  if (!game) {
+    console.log("No matching game found for " + marketSlug);
+    return null;
+  }
+  
+  if (!game.completed) {
+    return { status: 'pending', game: game };
+  }
+  
+  if (!game.scores || game.scores.length < 2) {
+    return { status: 'no_scores', game: game };
+  }
+  
+  var homeScore = parseInt(game.scores.find(function(s) { return s.name === game.home_team; })?.score || 0);
+  var awayScore = parseInt(game.scores.find(function(s) { return s.name === game.away_team; })?.score || 0);
+  
+  // Determine winner
+  var winner;
+  if (homeScore > awayScore) {
+    winner = game.home_team;
+  } else if (awayScore > homeScore) {
+    winner = game.away_team;
+  } else {
+    winner = 'tie';
+  }
+  
+  // Check if this is a spread bet
+  var isSpread = marketSlug.includes('spread');
+  if (isSpread) {
+    var spreadMatch = marketSlug.match(/spread-(home|away)-(\d+)pt?(\d)?/i);
+    if (spreadMatch) {
+      var spreadSide = spreadMatch[1].toLowerCase();
+      var spreadPoints = parseFloat(spreadMatch[2] + '.' + (spreadMatch[3] || '5'));
+      
+      var margin = homeScore - awayScore;
+      var spreadWinner;
+      
+      if (spreadSide === 'away') {
+        // Away team getting points (e.g., Broncos +3.5)
+        spreadWinner = (awayScore + spreadPoints) > homeScore ? game.away_team : game.home_team;
+      } else {
+        // Home team giving points
+        spreadWinner = margin > spreadPoints ? game.home_team : game.away_team;
+      }
+      
+      // Check if direction won
+      var dirTeam = getTeamFullName(direction);
+      var didWin = spreadWinner.toLowerCase().includes(dirTeam.toLowerCase()) ||
+                   dirTeam.toLowerCase().includes(spreadWinner.toLowerCase());
+      
+      return {
+        status: 'settled',
+        outcome: didWin ? 'WIN' : 'LOSS',
+        game: game,
+        homeScore: homeScore,
+        awayScore: awayScore,
+        spread: spreadPoints,
+        spreadWinner: spreadWinner,
+        source: 'odds-api'
+      };
+    }
+  }
+  
+  // Regular moneyline bet
+  var dirTeam = getTeamFullName(direction);
+  var didWin = winner.toLowerCase().includes(dirTeam.toLowerCase()) ||
+               dirTeam.toLowerCase().includes(winner.toLowerCase());
+  
+  return {
+    status: 'settled',
+    outcome: didWin ? 'WIN' : 'LOSS',
+    game: game,
+    homeScore: homeScore,
+    awayScore: awayScore,
+    winner: winner,
+    source: 'odds-api'
+  };
+}
+
+// ============================================================
+// END ODDS API INTEGRATION
+// ============================================================
+
 var POLYMARKET_API = "https://data-api.polymarket.com";
 // SCORING SYSTEM v8 - Adaptive Learning System
 // Base scores that get multiplied by learned factor weights
@@ -709,7 +1049,60 @@ async function processSettledSignals(env) {
         }
         
         // Check if market settled
-        const settlement = await checkMarketSettlement(signalData.marketSlug, signalData.detectedAt);
+        // For sports markets, try The Odds API first for accurate results
+        let settlement = null;
+        const sport = detectSportFromSlug(signalData.marketSlug);
+        
+        if (sport && SPORT_KEY_MAP[sport] && env.ODDS_API_KEY) {
+          // Try The Odds API for sports
+          const oddsApiResult = await settleWithOddsAPI(env, signalData.marketSlug, signalData.direction);
+          
+          if (oddsApiResult && oddsApiResult.status === 'settled') {
+            // We have definitive result from Odds API
+            const outcome = oddsApiResult.outcome;
+            const profitPct = outcome === "WIN" 
+              ? Math.round(((1 - (signalData.priceAtSignal / 100)) / (signalData.priceAtSignal / 100)) * 100)
+              : -100;
+            
+            // Update signal data
+            signalData.outcome = outcome;
+            signalData.settledAt = new Date().toISOString();
+            signalData.profitLoss = profitPct;
+            signalData.winningOutcome = oddsApiResult.winner || oddsApiResult.spreadWinner;
+            signalData.gameScore = `${oddsApiResult.homeScore}-${oddsApiResult.awayScore}`;
+            signalData.settledBy = 'odds-api';
+            
+            await env.SIGNALS_CACHE.put(signalKey, JSON.stringify(signalData), {
+              expirationTtl: 30 * 24 * 60 * 60
+            });
+            
+            // Update factor stats
+            if (signalData.factors && signalData.factors.length > 0) {
+              await updateFactorStats(env, signalData.factors, outcome);
+            }
+            
+            // Update wallet stats
+            const marketType = detectMarketType(signalData.marketTitle);
+            for (const wallet of (signalData.wallets || [])) {
+              await recordWalletOutcome(env, wallet, outcome, profitPct, marketType, signalData.largestBet || 0, signalId);
+            }
+            
+            results.processed += 1;
+            if (outcome === "WIN") results.wins += 1;
+            else results.losses += 1;
+            
+            console.log(`Signal ${signalId} settled via Odds API: ${outcome} (${oddsApiResult.homeScore}-${oddsApiResult.awayScore})`);
+            continue;
+          } else if (oddsApiResult && oddsApiResult.status === 'pending') {
+            // Game not completed yet
+            stillPending.push(signalId);
+            continue;
+          }
+          // If Odds API failed or no match, fall back to Polymarket trades method
+        }
+        
+        // Fall back to Polymarket trades method
+        settlement = await checkMarketSettlement(signalData.marketSlug, signalData.detectedAt);
         
         if (!settlement || !settlement.settled) {
           stillPending.push(signalId);
@@ -2448,6 +2841,159 @@ export default {
         }
       }
       
+      // Get Vegas odds for comparison with Polymarket
+      // Usage: /odds/compare?sport=nba or /odds/compare?sport=nfl
+      if (path === "/odds/compare") {
+        const sport = params.get("sport") || "nba";
+        const sportKey = SPORT_KEY_MAP[sport];
+        
+        if (!sportKey) {
+          return new Response(JSON.stringify({
+            success: false,
+            error: "Sport not supported. Try: nba, nfl, mlb, nhl"
+          }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+        
+        if (!env.ODDS_API_KEY) {
+          return new Response(JSON.stringify({
+            success: false,
+            error: "Odds API not configured. Add ODDS_API_KEY to secrets."
+          }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+        
+        try {
+          const oddsData = await getGameOdds(env, sportKey, 'h2h,spreads');
+          
+          if (!oddsData || oddsData.length === 0) {
+            return new Response(JSON.stringify({
+              success: true,
+              sport: sport,
+              games: [],
+              message: "No upcoming games found"
+            }), {
+              headers: { ...corsHeaders, "Content-Type": "application/json" }
+            });
+          }
+          
+          // Format games with consensus odds
+          const games = oddsData.map(game => {
+            // Get consensus odds from FanDuel or DraftKings (most liquid books)
+            const preferredBooks = ['fanduel', 'draftkings', 'betmgm'];
+            let h2hOdds = null;
+            let spreadOdds = null;
+            
+            for (const bookKey of preferredBooks) {
+              const book = game.bookmakers?.find(b => b.key === bookKey);
+              if (book) {
+                if (!h2hOdds) {
+                  const h2hMarket = book.markets?.find(m => m.key === 'h2h');
+                  if (h2hMarket) h2hOdds = h2hMarket.outcomes;
+                }
+                if (!spreadOdds) {
+                  const spreadMarket = book.markets?.find(m => m.key === 'spreads');
+                  if (spreadMarket) spreadOdds = spreadMarket.outcomes;
+                }
+              }
+              if (h2hOdds && spreadOdds) break;
+            }
+            
+            return {
+              id: game.id,
+              homeTeam: game.home_team,
+              awayTeam: game.away_team,
+              commenceTime: game.commence_time,
+              moneyline: h2hOdds ? {
+                home: h2hOdds.find(o => o.name === game.home_team)?.price,
+                away: h2hOdds.find(o => o.name === game.away_team)?.price,
+                homeProb: h2hOdds.find(o => o.name === game.home_team)?.price ? 
+                  Math.round(americanToProb(h2hOdds.find(o => o.name === game.home_team).price) * 100) : null,
+                awayProb: h2hOdds.find(o => o.name === game.away_team)?.price ?
+                  Math.round(americanToProb(h2hOdds.find(o => o.name === game.away_team).price) * 100) : null
+              } : null,
+              spread: spreadOdds ? {
+                home: {
+                  line: spreadOdds.find(o => o.name === game.home_team)?.point,
+                  odds: spreadOdds.find(o => o.name === game.home_team)?.price
+                },
+                away: {
+                  line: spreadOdds.find(o => o.name === game.away_team)?.point,
+                  odds: spreadOdds.find(o => o.name === game.away_team)?.price
+                }
+              } : null
+            };
+          });
+          
+          return new Response(JSON.stringify({
+            success: true,
+            sport: sport,
+            sportKey: sportKey,
+            gamesCount: games.length,
+            games: games
+          }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+          
+        } catch (e) {
+          return new Response(JSON.stringify({
+            success: false,
+            error: e.message
+          }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+      }
+      
+      // Get game scores for settlement verification
+      // Usage: /odds/scores?sport=nba&days=3
+      if (path === "/odds/scores") {
+        const sport = params.get("sport") || "nba";
+        const days = parseInt(params.get("days") || "3");
+        const sportKey = SPORT_KEY_MAP[sport];
+        
+        if (!sportKey) {
+          return new Response(JSON.stringify({
+            success: false,
+            error: "Sport not supported"
+          }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+        
+        if (!env.ODDS_API_KEY) {
+          return new Response(JSON.stringify({
+            success: false,
+            error: "Odds API not configured"
+          }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+        
+        try {
+          const scores = await getGameScores(env, sportKey, days);
+          
+          return new Response(JSON.stringify({
+            success: true,
+            sport: sport,
+            daysBack: days,
+            games: scores || []
+          }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+          
+        } catch (e) {
+          return new Response(JSON.stringify({
+            success: false,
+            error: e.message
+          }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+      }
+      
       // Debug: List ALL pending signals with their market slugs
       if (path === "/learning/pending-all") {
         const pendingSignals = await env.SIGNALS_CACHE.get(KV_KEYS.PENDING_SIGNALS, { type: "json" }) || [];
@@ -2965,7 +3511,7 @@ export default {
         return new Response(JSON.stringify({
           status: "ok",
           timestamp: new Date().toISOString(),
-          version: "16.5.0 - Fix wallet outcome tracking + reprocess endpoint",
+          version: "17.0.0 - The Odds API integration for accurate sports settlement",
           cache: cacheStats
         }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" }
