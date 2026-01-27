@@ -2841,6 +2841,58 @@ export default {
         }
       }
       
+      // Debug endpoint to see Polymarket sports trades
+      // Usage: /debug/poly-sports?sport=nba
+      if (path === "/debug/poly-sports") {
+        const sport = url.searchParams.get("sport") || "nba";
+        
+        try {
+          const tradesRes = await fetch(`${POLYMARKET_API}/trades?limit=2000`);
+          const allTrades = tradesRes.ok ? await tradesRes.json() : [];
+          
+          // Get unique slugs that might be sports
+          const sportsKeywords = ['nba', 'nfl', 'mlb', 'nhl', 'spread', 'moneyline', 'over', 'under', 'winner'];
+          const potentialSportsTrades = allTrades.filter(t => {
+            const slug = (t.eventSlug || t.slug || '').toLowerCase();
+            return sportsKeywords.some(kw => slug.includes(kw));
+          });
+          
+          // Get unique event slugs
+          const uniqueSlugs = [...new Set(potentialSportsTrades.map(t => t.eventSlug || t.slug))];
+          
+          // Sample trades for the requested sport
+          const sportPrefix = sport.toLowerCase();
+          const sportTrades = allTrades.filter(t => {
+            const slug = (t.eventSlug || t.slug || '').toLowerCase();
+            return slug.includes(sportPrefix);
+          }).slice(0, 20);
+          
+          return new Response(JSON.stringify({
+            success: true,
+            totalTrades: allTrades.length,
+            potentialSportsCount: potentialSportsTrades.length,
+            uniqueSportsSlugs: uniqueSlugs.slice(0, 50),
+            sampleTradesForSport: sportTrades.map(t => ({
+              eventSlug: t.eventSlug,
+              slug: t.slug,
+              outcome: t.outcome,
+              price: t.price,
+              timestamp: t.timestamp
+            }))
+          }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+          
+        } catch (e) {
+          return new Response(JSON.stringify({
+            success: false,
+            error: e.message
+          }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+      }
+      
       // Get Vegas odds WITH Polymarket prices for comparison
       // Usage: /odds/compare-all?sport=nba
       // Returns both Vegas odds and current Polymarket prices for each game
@@ -3775,7 +3827,7 @@ export default {
         return new Response(JSON.stringify({
           status: "ok",
           timestamp: new Date().toISOString(),
-          version: "17.1.0 - Vegas vs Polymarket comparison endpoint",
+          version: "17.1.1 - Add debug endpoint for Polymarket sports slugs",
           cache: cacheStats
         }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" }
