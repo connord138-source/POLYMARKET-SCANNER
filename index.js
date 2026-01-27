@@ -2964,37 +2964,69 @@ export default {
               polyPrices[gameKey].lastUpdate = trade.timestamp;
             }
             
+            // Get full team names for matching
+            const awayTeamFull = getTeamFullName(match[2]).toLowerCase();
+            const homeTeamFull = getTeamFullName(match[3]).toLowerCase();
+            const outcomeLower = outcome.toLowerCase();
+            
+            // Determine which team this price is for based on outcome
+            let isAwayTeam = false;
+            let isHomeTeam = false;
+            
+            // Check if outcome matches away team
+            if (outcomeLower.includes(awayTeamFull) || awayTeamFull.includes(outcomeLower) ||
+                outcomeLower === match[2].toLowerCase()) {
+              isAwayTeam = true;
+            }
+            // Check if outcome matches home team  
+            else if (outcomeLower.includes(homeTeamFull) || homeTeamFull.includes(outcomeLower) ||
+                     outcomeLower === match[3].toLowerCase()) {
+              isHomeTeam = true;
+            }
+            // Try partial match on team name (e.g., "Thunder" matches "Oklahoma City Thunder")
+            else {
+              const awayWords = awayTeamFull.split(' ');
+              const homeWords = homeTeamFull.split(' ');
+              if (awayWords.some(w => w.length > 3 && outcomeLower.includes(w))) {
+                isAwayTeam = true;
+              } else if (homeWords.some(w => w.length > 3 && outcomeLower.includes(w))) {
+                isHomeTeam = true;
+              }
+            }
+            
             if (isSpread) {
-              // Spread bet - parse which side
-              if (slug.includes('-spread-away') || slug.includes('-spread-home')) {
-                const spreadSide = slug.includes('-spread-away') ? 'away' : 'home';
-                const spreadMatch = slug.match(/(\d+)pt(\d)?/);
-                const spreadLine = spreadMatch ? parseFloat(`${spreadMatch[1]}.${spreadMatch[2] || '5'}`) : null;
-                
-                polyPrices[gameKey].spread[spreadSide] = {
+              // Spread bet
+              if (isAwayTeam) {
+                polyPrices[gameKey].spread.away = {
                   price: Math.round(price),
-                  line: spreadLine,
+                  slug: slug
+                };
+              } else if (isHomeTeam) {
+                polyPrices[gameKey].spread.home = {
+                  price: Math.round(price),
                   slug: slug
                 };
               }
             } else {
-              // Moneyline bet - determine which team based on outcome
-              const outcomeLower = outcome.toLowerCase();
-              const awayTeamName = getTeamFullName(match[2]).toLowerCase();
-              const homeTeamName = getTeamFullName(match[3]).toLowerCase();
-              
-              if (outcomeLower.includes(awayTeamName) || awayTeamName.includes(outcomeLower)) {
-                polyPrices[gameKey].moneyline.away = { price: Math.round(price), slug: slug };
-              } else if (outcomeLower.includes(homeTeamName) || homeTeamName.includes(outcomeLower)) {
-                polyPrices[gameKey].moneyline.home = { price: Math.round(price), slug: slug };
-              } else if (outcomeLower === 'yes' || outcomeLower === 'no') {
-                // Generic yes/no - might be away team (usually listed first)
-                if (!polyPrices[gameKey].moneyline.away) {
-                  polyPrices[gameKey].moneyline.away = { price: Math.round(price), slug: slug };
-                }
+              // Moneyline bet
+              if (isAwayTeam) {
+                polyPrices[gameKey].moneyline.away = { 
+                  price: Math.round(price), 
+                  slug: slug,
+                  team: outcome
+                };
+              } else if (isHomeTeam) {
+                polyPrices[gameKey].moneyline.home = { 
+                  price: Math.round(price), 
+                  slug: slug,
+                  team: outcome
+                };
               }
             }
           }
+          
+          // Debug: log what we found
+          console.log(`Found ${Object.keys(polyPrices).length} Polymarket games for ${sport}`);
           
           // 3. Match Vegas games to Polymarket prices
           const games = (oddsData || []).map(game => {
@@ -3133,6 +3165,8 @@ export default {
             timestamp: new Date().toISOString(),
             gamesCount: games.length,
             valueBetsCount: valueBets.length,
+            polymarketGamesFound: Object.keys(polyPrices).length,
+            polymarketGameKeys: Object.keys(polyPrices),
             valueBets: valueBets.map(g => ({
               game: `${g.awayTeam} @ ${g.homeTeam}`,
               team: g.edge.bestBet.team,
@@ -3827,7 +3861,7 @@ export default {
         return new Response(JSON.stringify({
           status: "ok",
           timestamp: new Date().toISOString(),
-          version: "17.1.1 - Add debug endpoint for Polymarket sports slugs",
+          version: "17.1.2 - Fix Polymarket team matching + add debug info",
           cache: cacheStats
         }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" }
