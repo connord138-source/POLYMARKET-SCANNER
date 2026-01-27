@@ -309,7 +309,7 @@ async function getWalletStats(env, walletAddress) {
 }
 
 // Record bet outcome for a wallet
-async function recordWalletOutcome(env, walletAddress, outcome, profitLoss, marketType, betAmount = 0) {
+async function recordWalletOutcome(env, walletAddress, outcome, profitLoss, marketType, betAmount = 0, signalId = null) {
   if (!env.SIGNALS_CACHE || !walletAddress) return null;
   
   const key = KV_KEYS.WALLETS_PREFIX + walletAddress.toLowerCase();
@@ -328,6 +328,17 @@ async function recordWalletOutcome(env, walletAddress, outcome, profitLoss, mark
         bigBetWins: 0,
         roi: 0
       };
+    }
+    
+    // Update the specific bet in recentBets if signalId provided
+    if (signalId && stats.recentBets && stats.recentBets.length > 0) {
+      for (let i = 0; i < stats.recentBets.length; i++) {
+        if (stats.recentBets[i].signalId === signalId && stats.recentBets[i].outcome === null) {
+          stats.recentBets[i].outcome = outcome;
+          stats.recentBets[i].settledAt = new Date().toISOString();
+          break; // Only update one bet per signal settlement
+        }
+      }
     }
     
     // Update stats
@@ -784,7 +795,7 @@ async function processSettledSignals(env) {
         // Update wallet stats for each wallet involved
         const marketType = detectMarketType(signalData.marketTitle);
         for (const wallet of (signalData.wallets || [])) {
-          await recordWalletOutcome(env, wallet, outcome, profitPct, marketType);
+          await recordWalletOutcome(env, wallet, outcome, profitPct, marketType, signalData.largestBet || 0, signalId);
         }
         
         results.processed += 1;
@@ -2194,20 +2205,34 @@ export default {
               avgWinRate
             },
             tiers: WALLET_TIERS,
-            leaderboard: walletStats.slice(0, 50).map(w => ({
-              address: w.address,
-              tier: w.tier || (w.pending > 0 ? 'PENDING' : null),
-              winRate: w.winRate,
-              record: `${w.wins}W-${w.losses}L`,
-              totalBets: w.totalBets,
-              pending: w.pending,
-              totalVolume: w.totalVolume,
-              avgBetSize: w.avgBetSize,
-              currentStreak: w.currentStreak,
-              bestStreak: w.bestStreak,
-              lastSeen: w.lastSeen,
-              markets: w.markets
-            }))
+            leaderboard: walletStats.slice(0, 50).map(w => {
+              // Determine display tier
+              let displayTier = w.tier;
+              if (!displayTier) {
+                if (w.totalBets > 0) {
+                  // Has settled bets but not enough for tier classification
+                  displayTier = 'NEW';
+                } else if (w.pending > 0) {
+                  // Only pending bets
+                  displayTier = 'PENDING';
+                }
+              }
+              
+              return {
+                address: w.address,
+                tier: displayTier,
+                winRate: w.winRate,
+                record: `${w.wins}W-${w.losses}L`,
+                totalBets: w.totalBets,
+                pending: w.pending,
+                totalVolume: w.totalVolume,
+                avgBetSize: w.avgBetSize,
+                currentStreak: w.currentStreak,
+                bestStreak: w.bestStreak,
+                lastSeen: w.lastSeen,
+                markets: w.markets
+              };
+            })
           }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" }
           });
@@ -2329,6 +2354,98 @@ export default {
         }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" }
         });
+      }
+      
+      // Admin: Reprocess all wallets to fix missing outcomes
+      // This will go through all signals and update wallet stats
+      if (path === "/admin/reprocess-wallets") {
+        const results = { processed: 0, walletsUpdated: 0, errors: 0 };
+        
+        try {
+          // Get all wallets from index
+          const walletIndex = await env.SIGNALS_CACHE.get("tracked_wallet_index", { type: "json" }) || [];
+          
+          for (const walletAddress of walletIndex) {
+            try {
+              const walletKey = KV_KEYS.WALLETS_PREFIX + walletAddress.toLowerCase();
+              let walletStats = await env.SIGNALS_CACHE.get(walletKey, { type: "json" });
+              
+              if (!walletStats || !walletStats.recentBets) continue;
+              
+              let updated = false;
+              let wins = 0;
+              let losses = 0;
+              let settled = 0;
+              let pending = 0;
+              
+              // Check each bet and try to determine outcome from signal
+              for (let i = 0; i < walletStats.recentBets.length; i++) {
+                const bet = walletStats.recentBets[i];
+                
+                if (bet.outcome === null) {
+                  // Try to get outcome from stored signal
+                  if (bet.signalId) {
+                    const signalKey = KV_KEYS.SIGNALS_PREFIX + bet.signalId;
+                    const signalData = await env.SIGNALS_CACHE.get(signalKey, { type: "json" });
+                    
+                    if (signalData && signalData.outcome) {
+                      walletStats.recentBets[i].outcome = signalData.outcome;
+                      walletStats.recentBets[i].settledAt = signalData.settledAt;
+                      updated = true;
+                      
+                      if (signalData.outcome === "WIN") wins++;
+                      else if (signalData.outcome === "LOSS") losses++;
+                      settled++;
+                    } else {
+                      pending++;
+                    }
+                  } else {
+                    pending++;
+                  }
+                } else {
+                  if (bet.outcome === "WIN") wins++;
+                  else if (bet.outcome === "LOSS") losses++;
+                  settled++;
+                }
+              }
+              
+              if (updated) {
+                // Recalculate wallet stats
+                walletStats.wins = wins;
+                walletStats.losses = losses;
+                walletStats.totalBets = settled;
+                walletStats.pending = pending;
+                walletStats.winRate = settled > 0 ? Math.round((wins / settled) * 100) : 0;
+                walletStats.tier = getWalletTier(walletStats)?.tier || null;
+                
+                await env.SIGNALS_CACHE.put(walletKey, JSON.stringify(walletStats), {
+                  expirationTtl: 90 * 24 * 60 * 60
+                });
+                
+                results.walletsUpdated++;
+              }
+              
+              results.processed++;
+            } catch (e) {
+              results.errors++;
+            }
+          }
+          
+          return new Response(JSON.stringify({
+            success: true,
+            results
+          }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+          
+        } catch (e) {
+          return new Response(JSON.stringify({
+            success: false,
+            error: e.message
+          }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
       }
       
       // Debug: List ALL pending signals with their market slugs
@@ -2848,7 +2965,7 @@ export default {
         return new Response(JSON.stringify({
           status: "ok",
           timestamp: new Date().toISOString(),
-          version: "16.4.3 - Clearer direction display",
+          version: "16.5.0 - Fix wallet outcome tracking + reprocess endpoint",
           cache: cacheStats
         }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" }
