@@ -1252,7 +1252,7 @@ async function recordSignalOutcome(env, signalKey, signalData, outcome, meta) {
 // ============================================================
 
 var ANTHROPIC_API = "https://api.anthropic.com/v1/messages";
-var DEFAULT_INVESTIGATION_MODEL = "claude-opus-5";
+var DEFAULT_INVESTIGATION_MODEL = "claude-opus-4-8";
 
 // Final-answer schema. Structured outputs can't express numeric bounds, so
 // probability is clamped in code after parsing.
@@ -1362,7 +1362,10 @@ async function callClaudeInvestigator(env, params) {
 
   var body = {
     model: model,
-    max_tokens: 4000,
+    max_tokens: 6000,
+    // Opus 4.8/4.7 run thinking-off unless adaptive is set explicitly (Opus 5
+    // thinks by default). Adaptive is valid on all of them, so set it always.
+    thinking: { type: "adaptive" },
     output_config: {
       effort: effort,
       format: { type: "json_schema", schema: INVESTIGATION_SCHEMA }
