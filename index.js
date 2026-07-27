@@ -1238,6 +1238,215 @@ async function recordSignalOutcome(env, signalKey, signalData, outcome, meta) {
 }
 
 // ============================================================
+// AGENT INVESTIGATION
+// Calls the Claude Messages API with the web_search server tool to
+// independently estimate the probability a market resolves YES for the
+// signal's direction. This is the "is the market actually mispriced?"
+// layer - it produces a probability the scanner can compare against the
+// crowd price, and whose calibration is tracked via Brier score once the
+// market settles (see recordSignalOutcome / brier_stats).
+// ============================================================
+
+var ANTHROPIC_API = "https://api.anthropic.com/v1/messages";
+var DEFAULT_INVESTIGATION_MODEL = "claude-opus-5";
+
+// Final-answer schema. Structured outputs can't express numeric bounds, so
+// probability is clamped in code after parsing.
+var INVESTIGATION_SCHEMA = {
+  type: "object",
+  properties: {
+    probability: {
+      type: "number",
+      description: "Independent probability from 0 to 1 that the market resolves YES for the stated direction, based on your research."
+    },
+    confidence: {
+      type: "string",
+      enum: ["LOW", "MEDIUM", "HIGH"],
+      description: "How confident you are in the estimate given the evidence you found."
+    },
+    reasoning: {
+      type: "string",
+      description: "2-4 sentence justification for the probability, grounded in what you found."
+    },
+    keyFindings: {
+      type: "array",
+      items: { type: "string" },
+      description: "Short bullet facts (with source names) that drove the estimate."
+    }
+  },
+  required: ["probability", "confidence", "reasoning", "keyFindings"],
+  additionalProperties: false
+};
+
+// The dynamic-filtering web_search variant requires Opus 4.6+/Sonnet 4.6+.
+// Haiku and older models must use the basic variant.
+function webSearchToolType(model) {
+  return /haiku/i.test(model || "") ? "web_search_20250305" : "web_search_20260209";
+}
+
+function clamp01(x) {
+  if (typeof x !== "number" || isNaN(x)) return null;
+  if (x < 0) return 0;
+  if (x > 1) return 1;
+  return x;
+}
+
+// Best-effort JSON extraction: with output_config.format the final text block
+// is pure JSON, but guard against a truncated/decorated response.
+function extractInvestigationJson(contentBlocks) {
+  if (!Array.isArray(contentBlocks)) return null;
+  var texts = contentBlocks
+    .filter(function (b) { return b && b.type === "text" && typeof b.text === "string"; })
+    .map(function (b) { return b.text; });
+  for (var i = texts.length - 1; i >= 0; i--) {
+    var t = texts[i].trim();
+    try {
+      return JSON.parse(t);
+    } catch (e) {
+      var start = t.indexOf("{");
+      var end = t.lastIndexOf("}");
+      if (start >= 0 && end > start) {
+        try { return JSON.parse(t.slice(start, end + 1)); } catch (e2) {}
+      }
+    }
+  }
+  return null;
+}
+
+// Call Claude to investigate one market. Pure API mechanics - no dependency on
+// how the signal was sourced. Returns:
+//   { ok:true, agentProb, confidence, reasoning, keyFindings, model, webSearches }
+//   { ok:false, error }
+async function callClaudeInvestigator(env, params) {
+  if (!env.ANTHROPIC_API_KEY) {
+    return { ok: false, error: "ANTHROPIC_API_KEY not configured" };
+  }
+
+  var model = env.INVESTIGATION_MODEL || DEFAULT_INVESTIGATION_MODEL;
+  var effort = env.INVESTIGATION_EFFORT || "medium";
+  var maxSearches = parseInt(env.INVESTIGATION_MAX_SEARCHES || "5", 10);
+
+  var criteria = params.resolutionCriteria
+    ? params.resolutionCriteria
+    : "(No official resolution text was available. Infer the resolution condition from the market question.)";
+
+  var marketPricePct = typeof params.marketPricePct === "number"
+    ? params.marketPricePct
+    : null;
+
+  var system =
+    "You are a forecasting analyst for prediction markets. You research a market's " +
+    "actual resolution criteria and current real-world facts, then output an INDEPENDENT " +
+    "probability that the market resolves YES for a specific direction/outcome.\n\n" +
+    "Rules:\n" +
+    "- Use web_search to find current, load-bearing facts (official sources, reputable news, primary data).\n" +
+    "- Anchor to the EXACT resolution criteria, including dates, thresholds, and edge cases. A market can feel " +
+    "'obviously true' while the criteria make it false (wrong date window, wrong measure, technicality).\n" +
+    "- Estimate the probability from evidence, NOT from the market's own price. Do not anchor to the crowd.\n" +
+    "- If you cannot find decisive evidence, say so and return a probability near your genuine uncertainty with LOW confidence.\n" +
+    "- Today's date is provided; treat anything after it as not yet known.";
+
+  var userText =
+    "Today's date: " + new Date().toISOString().slice(0, 10) + "\n\n" +
+    "MARKET: " + (params.marketTitle || "(untitled)") + "\n" +
+    "DIRECTION/OUTCOME TO PRICE: " + (params.direction || "YES") + "\n" +
+    (params.eventDate ? "STATED EVENT DATE: " + params.eventDate + "\n" : "") +
+    (marketPricePct !== null ? "CROWD PRICE (for reference only, do not anchor): " + marketPricePct + "%\n" : "") +
+    "\nRESOLUTION CRITERIA:\n" + criteria + "\n\n" +
+    "Research the current facts, then estimate the probability that this market resolves YES " +
+    "for the direction above. Return the structured result.";
+
+  var body = {
+    model: model,
+    max_tokens: 4000,
+    output_config: {
+      effort: effort,
+      format: { type: "json_schema", schema: INVESTIGATION_SCHEMA }
+    },
+    tools: [
+      { type: webSearchToolType(model), name: "web_search", max_uses: maxSearches }
+    ],
+    system: system,
+    messages: [{ role: "user", content: [{ type: "text", text: userText }] }]
+  };
+
+  var headers = {
+    "content-type": "application/json",
+    "x-api-key": env.ANTHROPIC_API_KEY,
+    "anthropic-version": "2023-06-01"
+  };
+
+  var webSearches = 0;
+  // Bound the server-tool resume loop so a Worker invocation can't run away
+  // against the subrequest cap.
+  var MAX_TURNS = 8;
+
+  try {
+    for (var turn = 0; turn < MAX_TURNS; turn++) {
+      var res = await fetch(ANTHROPIC_API, {
+        method: "POST",
+        headers: headers,
+        body: JSON.stringify(body)
+      });
+
+      if (!res.ok) {
+        var errText = await res.text();
+        return { ok: false, error: "Anthropic API " + res.status + ": " + errText.slice(0, 300) };
+      }
+
+      var data = await res.json();
+
+      // Count web searches for cost visibility
+      for (var b = 0; b < (data.content || []).length; b++) {
+        if (data.content[b] && data.content[b].type === "server_tool_use" &&
+            data.content[b].name === "web_search") {
+          webSearches++;
+        }
+      }
+
+      if (data.stop_reason === "refusal") {
+        return { ok: false, error: "refusal", stopDetails: data.stop_details || null };
+      }
+
+      // Server-tool loop hit its internal cap - resume by echoing the turn back.
+      if (data.stop_reason === "pause_turn") {
+        body.messages.push({ role: "assistant", content: data.content });
+        continue;
+      }
+
+      // Terminal (end_turn / max_tokens) - parse the final structured answer.
+      var parsed = extractInvestigationJson(data.content);
+      if (!parsed) {
+        return {
+          ok: false,
+          error: "Could not parse investigation JSON (stop_reason=" + data.stop_reason + ")"
+        };
+      }
+
+      var prob = clamp01(parsed.probability);
+      if (prob === null) {
+        return { ok: false, error: "Investigation returned no usable probability" };
+      }
+
+      return {
+        ok: true,
+        agentProb: prob,
+        confidence: (parsed.confidence || "LOW").toUpperCase(),
+        reasoning: parsed.reasoning || "",
+        keyFindings: Array.isArray(parsed.keyFindings) ? parsed.keyFindings.slice(0, 8) : [],
+        model: data.model || model,
+        webSearches: webSearches,
+        stopReason: data.stop_reason
+      };
+    }
+
+    return { ok: false, error: "Investigation exceeded " + MAX_TURNS + " turns without finishing" };
+  } catch (e) {
+    return { ok: false, error: "Investigation exception: " + (e && e.message) };
+  }
+}
+
+// ============================================================
 // SETTLEMENT CHECKER
 // ============================================================
 
