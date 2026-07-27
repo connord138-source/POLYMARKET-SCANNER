@@ -769,6 +769,7 @@ async function storeSignalForLearning(env, signal, factors, wallets) {
     marketSlug: signal.marketSlug,
     marketTitle: signal.marketTitle,
     direction: signal.direction,
+    directionRaw: signal.directionRaw,   // exact Polymarket outcome; stable key for investigation/Brier
     score: signal.score,
     factors: factors,           // Array of factor keys that contributed
     wallets: wallets,           // Array of wallet addresses involved
@@ -1235,6 +1236,9 @@ async function recordSignalOutcome(env, signalKey, signalData, outcome, meta) {
   }
 
   await recordPaperTrade(env, signalData, outcome);
+
+  // Score the agent's investigation against ground truth (Gamma-only).
+  await recordBrierOutcome(env, signalData, outcome, meta);
 }
 
 // ============================================================
@@ -1382,12 +1386,22 @@ async function callClaudeInvestigator(env, params) {
   var MAX_TURNS = 8;
 
   try {
+    var perFetchTimeoutMs = parseInt(env.INVESTIGATION_FETCH_TIMEOUT_MS || "100000", 10);
     for (var turn = 0; turn < MAX_TURNS; turn++) {
-      var res = await fetch(ANTHROPIC_API, {
-        method: "POST",
-        headers: headers,
-        body: JSON.stringify(body)
-      });
+      // Bound each call so a hung request can't eat the cron's 15-min wall budget.
+      var controller = new AbortController();
+      var timer = setTimeout(function () { controller.abort(); }, perFetchTimeoutMs);
+      var res;
+      try {
+        res = await fetch(ANTHROPIC_API, {
+          method: "POST",
+          headers: headers,
+          body: JSON.stringify(body),
+          signal: controller.signal
+        });
+      } finally {
+        clearTimeout(timer);
+      }
 
       if (!res.ok) {
         var errText = await res.text();
@@ -1444,6 +1458,301 @@ async function callClaudeInvestigator(env, params) {
   } catch (e) {
     return { ok: false, error: "Investigation exception: " + (e && e.message) };
   }
+}
+
+// Stable investigation identity. signal.id embeds the earliest trade time,
+// which churns as the scan window slides - keying on that would re-investigate
+// the same market every scan and pollute Brier with fake-independent samples.
+// marketSlug + directionRaw is stable across scans.
+function investigationKeyFor(marketSlug, directionRaw) {
+  return "investigation:" + (marketSlug || "") + "::" + (directionRaw || "");
+}
+
+// The market's current implied probability that THIS bet wins, from Gamma's
+// live outcome prices at investigation time. This is the honest baseline for
+// Brier - NOT the whale's impact-inflated entry fill (avgEntryPrice), which is
+// kept only for the ROI ledger.
+function gammaBaselineForDirection(found, directionRaw) {
+  if (!found || !found.market) return { marketProb: null, winIndex: -1 };
+  var names = parseGammaArray(found.market.outcomes);
+  var prices = parseGammaArray(found.market.outcomePrices);
+  if (!names || !prices || names.length !== prices.length) {
+    return { marketProb: null, winIndex: -1 };
+  }
+  // When the sub-market was matched by its option title (a team/candidate),
+  // betting that option = betting the sub-market resolves YES.
+  var winIndex = found.via === "event-group-item"
+    ? matchOutcomeIndex(names, "Yes")
+    : matchOutcomeIndex(names, directionRaw);
+  if (winIndex < 0) return { marketProb: null, winIndex: -1 };
+  var p = parseFloat(prices[winIndex]);
+  return { marketProb: (isNaN(p) ? null : p), winIndex: winIndex };
+}
+
+// Daily spend counter (append-safe-ish; settlement/investigation frequency is
+// low). Bounds cost: "N per run" caps count, not tokens/searches.
+async function bumpDailyInvestigationCost(env, webSearches) {
+  if (!env.SIGNALS_CACHE) return;
+  var day = new Date().toISOString().slice(0, 10);
+  var key = "invest_cost:" + day;
+  try {
+    var c = await env.SIGNALS_CACHE.get(key, { type: "json" }) || { investigations: 0, webSearches: 0 };
+    c.investigations += 1;
+    c.webSearches += (webSearches || 0);
+    await env.SIGNALS_CACHE.put(key, JSON.stringify(c), { expirationTtl: 7 * 24 * 60 * 60 });
+  } catch (e) {
+    console.log("Cost counter error:", e.message);
+  }
+}
+
+async function investigationCountToday(env) {
+  if (!env.SIGNALS_CACHE) return 0;
+  var day = new Date().toISOString().slice(0, 10);
+  try {
+    var c = await env.SIGNALS_CACHE.get("invest_cost:" + day, { type: "json" });
+    return c ? (c.investigations || 0) : 0;
+  } catch (e) {
+    return 0;
+  }
+}
+
+// Investigate one signal: fetch the market's real resolution criteria + live
+// price from Gamma, get an independent agent probability, store the verdict.
+// Idempotent by stable key; failure-typed so it isn't retried forever.
+// opts.force re-runs even a completed investigation.
+async function investigateSignal(env, sig, opts) {
+  opts = opts || {};
+  if (!env.SIGNALS_CACHE) return { ok: false, error: "No cache configured" };
+  if (!env.ANTHROPIC_API_KEY) return { ok: false, error: "ANTHROPIC_API_KEY not configured" };
+
+  var marketSlug = sig.marketSlug;
+  var directionRaw = sig.directionRaw || sig.direction;
+  if (!marketSlug || !directionRaw) return { ok: false, error: "Signal missing slug/direction" };
+
+  var invKey = investigationKeyFor(marketSlug, directionRaw);
+  var maxAttempts = parseInt(env.INVESTIGATION_MAX_ATTEMPTS || "3", 10);
+
+  var existing = await env.SIGNALS_CACHE.get(invKey, { type: "json" });
+  if (existing && !opts.force) {
+    if (existing.status === "done") return { ok: true, skipped: "already_done", investigation: existing };
+    if (existing.status === "error_permanent") return { ok: false, skipped: "permanent_error", investigation: existing };
+    if (existing.status === "error_transient" && (existing.attempts || 0) >= maxAttempts) {
+      return { ok: false, skipped: "attempts_exhausted", investigation: existing };
+    }
+  }
+
+  var attempts = (existing && existing.attempts) || 0;
+
+  var writeInv = async function (rec) {
+    rec.invKey = invKey;
+    rec.marketSlug = marketSlug;
+    rec.directionRaw = directionRaw;
+    rec.updatedAt = new Date().toISOString();
+    await env.SIGNALS_CACHE.put(invKey, JSON.stringify(rec), { expirationTtl: 45 * 24 * 60 * 60 });
+    // Maintain a lightweight index for the /learning/brier aggregation.
+    try {
+      var idx = await env.SIGNALS_CACHE.get("investigation_index", { type: "json" }) || [];
+      if (idx.indexOf(invKey) === -1) {
+        idx.push(invKey);
+        if (idx.length > 1000) idx = idx.slice(-1000);
+        await env.SIGNALS_CACHE.put("investigation_index", JSON.stringify(idx));
+      }
+    } catch (e) {}
+    return rec;
+  };
+
+  // Resolve the market on Gamma (criteria + live price).
+  var found = await findGammaMarket(marketSlug, directionRaw);
+  if (!found || !found.market) {
+    // Could be a transient Gamma miss or an unresolvable slug. Bounded retry.
+    attempts += 1;
+    var rec = await writeInv({
+      status: attempts >= maxAttempts ? "error_permanent" : "error_transient",
+      attempts: attempts,
+      lastError: "Gamma market not found",
+      marketTitle: sig.marketTitle || null,
+      detectedAt: sig.detectedAt || null
+    });
+    return { ok: false, error: "Gamma market not found", investigation: rec };
+  }
+
+  var description = (found.market.description || "").trim();
+  var baseline = gammaBaselineForDirection(found, directionRaw);
+
+  if (!description) {
+    // Nothing to reason over - don't burn tokens or retry forever.
+    var recNoDesc = await writeInv({
+      status: "error_permanent",
+      attempts: attempts,
+      lastError: "Market has no resolution description",
+      marketTitle: sig.marketTitle || found.market.question || null,
+      marketProbAtInvestigation: baseline.marketProb,
+      detectedAt: sig.detectedAt || null
+    });
+    return { ok: false, error: "No resolution description", investigation: recNoDesc };
+  }
+
+  var result = await callClaudeInvestigator(env, {
+    marketTitle: sig.marketTitle || found.market.question,
+    direction: directionRaw,
+    resolutionCriteria: description,
+    marketPricePct: baseline.marketProb !== null ? Math.round(baseline.marketProb * 100) : null,
+    eventDate: sig.eventDate || found.market.endDate || null
+  });
+
+  await bumpDailyInvestigationCost(env, result.webSearches || 0);
+
+  if (!result.ok) {
+    attempts += 1;
+    var permanent = result.error === "refusal" || attempts >= maxAttempts;
+    var recErr = await writeInv({
+      status: permanent ? "error_permanent" : "error_transient",
+      attempts: attempts,
+      lastError: result.error,
+      marketTitle: sig.marketTitle || found.market.question || null,
+      marketProbAtInvestigation: baseline.marketProb,
+      detectedAt: sig.detectedAt || null
+    });
+    return { ok: false, error: result.error, investigation: recErr };
+  }
+
+  var edge = (baseline.marketProb !== null)
+    ? Math.round((result.agentProb - baseline.marketProb) * 1000) / 10  // percentage points
+    : null;
+
+  var rec = await writeInv({
+    status: "done",
+    attempts: attempts,
+    marketTitle: sig.marketTitle || found.market.question || null,
+    agentProb: result.agentProb,
+    confidence: result.confidence,
+    reasoning: result.reasoning,
+    keyFindings: result.keyFindings,
+    model: result.model,
+    webSearches: result.webSearches,
+    marketProbAtInvestigation: baseline.marketProb,  // honest Brier baseline (live Gamma mid)
+    entryPricePct: sig.avgEntryPrice || null,         // whale fill, ROI reference only
+    edgePts: edge,                                    // agentProb - marketProb, in percentage points
+    eventDate: sig.eventDate || found.market.endDate || null,
+    detectedAt: sig.detectedAt || null,
+    investigatedAt: new Date().toISOString(),
+    // Brier fields, filled at settlement:
+    outcome: null,
+    y: null,
+    agentBrier: null,
+    marketBrier: null,
+    settledBy: null,
+    settledAt: null
+  });
+
+  return { ok: true, investigation: rec };
+}
+
+// Called from recordSignalOutcome. Only ground-truth (Gamma) WIN/LOSS
+// settlements count - the trades heuristic and Odds API can mislabel, which
+// would corrupt both the agent and the market baseline. UNKNOWN/void excluded.
+async function recordBrierOutcome(env, signalData, outcome, meta) {
+  if (!env.SIGNALS_CACHE) return;
+  if (!meta || meta.settledBy !== "gamma") return;   // ground truth only
+  if (outcome !== "WIN" && outcome !== "LOSS") return; // y must be 0 or 1
+
+  var invKey = investigationKeyFor(signalData.marketSlug, signalData.directionRaw || signalData.direction);
+  try {
+    var inv = await env.SIGNALS_CACHE.get(invKey, { type: "json" });
+    if (!inv || inv.status !== "done" || typeof inv.agentProb !== "number") return;
+    if (inv.agentBrier !== null && inv.agentBrier !== undefined) return; // already scored
+
+    var y = outcome === "WIN" ? 1 : 0;
+    inv.outcome = outcome;
+    inv.y = y;
+    inv.agentBrier = Math.round(Math.pow(inv.agentProb - y, 2) * 10000) / 10000;
+    inv.marketBrier = (typeof inv.marketProbAtInvestigation === "number")
+      ? Math.round(Math.pow(inv.marketProbAtInvestigation - y, 2) * 10000) / 10000
+      : null;
+    inv.settledBy = "gamma";
+    inv.settledAt = new Date().toISOString();
+    inv.updatedAt = inv.settledAt;
+
+    await env.SIGNALS_CACHE.put(invKey, JSON.stringify(inv), { expirationTtl: 45 * 24 * 60 * 60 });
+    console.log("Brier scored " + invKey + ": agent=" + inv.agentBrier + " market=" + inv.marketBrier);
+  } catch (e) {
+    console.error("Error recording Brier outcome:", e.message);
+  }
+}
+
+// Aggregate the calibration report from the immutable per-investigation records
+// (aggregation on read avoids the KV read-modify-write race under concurrent
+// cron invocations).
+async function buildBrierReport(env) {
+  if (!env.SIGNALS_CACHE) return null;
+  var idx = await env.SIGNALS_CACHE.get("investigation_index", { type: "json" }) || [];
+
+  var scored = [];
+  var counts = { total: idx.length, done: 0, pending: 0, error: 0, scored: 0 };
+
+  for (var i = 0; i < idx.length; i++) {
+    var inv = await env.SIGNALS_CACHE.get(idx[i], { type: "json" });
+    if (!inv) continue;
+    if (inv.status === "done") counts.done++;
+    else if (inv.status && inv.status.indexOf("error") === 0) counts.error++;
+    else counts.pending++;
+    if (typeof inv.agentBrier === "number" && typeof inv.marketBrier === "number") {
+      scored.push(inv);
+    }
+  }
+  counts.scored = scored.length;
+
+  if (scored.length === 0) {
+    return {
+      note: "No ground-truth-settled investigations yet. The agent must call markets that later resolve via Gamma before calibration can be measured.",
+      counts: counts,
+      overall: null,
+      byConfidence: null
+    };
+  }
+
+  var sumAgent = 0, sumMarket = 0, agentBeats = 0, edgeDirCorrect = 0, edgeDirTotal = 0;
+  var byConf = {};
+  for (var s = 0; s < scored.length; s++) {
+    var r = scored[s];
+    sumAgent += r.agentBrier;
+    sumMarket += r.marketBrier;
+    if (r.agentBrier < r.marketBrier) agentBeats++;
+    // Did the sign of the edge predict the outcome? (directional hit-rate)
+    if (typeof r.edgePts === "number" && r.edgePts !== 0) {
+      edgeDirTotal++;
+      if ((r.edgePts > 0 && r.y === 1) || (r.edgePts < 0 && r.y === 0)) edgeDirCorrect++;
+    }
+    var c = r.confidence || "UNKNOWN";
+    if (!byConf[c]) byConf[c] = { n: 0, agent: 0, market: 0 };
+    byConf[c].n++; byConf[c].agent += r.agentBrier; byConf[c].market += r.marketBrier;
+  }
+
+  var n = scored.length;
+  var round4 = function (x) { return Math.round(x * 10000) / 10000; };
+  var confView = {};
+  for (var key of Object.keys(byConf)) {
+    confView[key] = {
+      n: byConf[key].n,
+      meanAgentBrier: round4(byConf[key].agent / byConf[key].n),
+      meanMarketBrier: round4(byConf[key].market / byConf[key].n)
+    };
+  }
+
+  return {
+    note: "Brier score (lower is better). agentBeatsMarket / edgeDirection are honest but small-sample: this is a survivorship-biased set of markets that happened to resolve, self-reported confidence is uncalibrated (shown for description, not weighting), and N is small. Treat as directional until N is large.",
+    counts: counts,
+    overall: {
+      n: n,
+      meanAgentBrier: round4(sumAgent / n),
+      meanMarketBrier: round4(sumMarket / n),
+      meanPairedDiff: round4((sumMarket - sumAgent) / n),   // >0 means agent beats market on average
+      agentBeatsMarketRate: Math.round((agentBeats / n) * 100),
+      edgeDirectionHitRate: edgeDirTotal > 0 ? Math.round((edgeDirCorrect / edgeDirTotal) * 100) : null,
+      edgeDirectionN: edgeDirTotal
+    },
+    byConfidence: confView
+  };
 }
 
 // ============================================================
@@ -4337,7 +4646,70 @@ export default {
           headers: { ...corsHeaders, "Content-Type": "application/json" }
         });
       }
-      
+
+      // Agent calibration: how the agent's independent probabilities score
+      // against ground-truth (Gamma) settlements, vs the market baseline.
+      // ?records=1 includes the per-investigation records.
+      if (path === "/learning/brier") {
+        if (!env.SIGNALS_CACHE) {
+          return new Response(JSON.stringify({ error: "No cache configured" }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+        const report = await buildBrierReport(env);
+        let records = null;
+        if (url.searchParams.get("records")) {
+          const idx = await env.SIGNALS_CACHE.get("investigation_index", { type: "json" }) || [];
+          records = [];
+          for (const k of idx.slice(-100)) {
+            const inv = await env.SIGNALS_CACHE.get(k, { type: "json" });
+            if (inv) records.push(inv);
+          }
+        }
+        return new Response(JSON.stringify({ success: true, report: report, records: records }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+
+      // Manually trigger / inspect an investigation.
+      // /investigate?slug=<marketSlug>&direction=<outcome>[&title=..&force=1]
+      if (path === "/investigate") {
+        if (!env.ANTHROPIC_API_KEY) {
+          return new Response(JSON.stringify({ error: "ANTHROPIC_API_KEY not configured" }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+        const slug = url.searchParams.get("slug");
+        const direction = url.searchParams.get("direction") || "Yes";
+        if (!slug) {
+          return new Response(JSON.stringify({ error: "slug required: /investigate?slug=<marketSlug>&direction=<outcome>" }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+        const sig = {
+          marketSlug: slug,
+          directionRaw: direction,
+          marketTitle: url.searchParams.get("title") || null,
+          avgEntryPrice: url.searchParams.get("price") ? parseInt(url.searchParams.get("price"), 10) : null,
+          eventDate: url.searchParams.get("eventDate") || null,
+          detectedAt: new Date().toISOString()
+        };
+        try {
+          const r = await investigateSignal(env, sig, { force: !!url.searchParams.get("force") });
+          return new Response(JSON.stringify(r), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        } catch (e) {
+          return new Response(JSON.stringify({ ok: false, error: e.message }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+      }
+
       // Get wallet specialization
       if (path.startsWith("/learning/specialization/")) {
         const address = path.split("/")[3];
@@ -4432,7 +4804,7 @@ export default {
         return new Response(JSON.stringify({
           status: "ok",
           timestamp: new Date().toISOString(),
-          version: "18.0.0 - Gamma ground-truth settlement + paper-trading ROI ledger",
+          version: "19.0.0 - Agent investigation (web-search) + Brier calibration vs market",
           cache: cacheStats
         }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" }
@@ -4461,6 +4833,7 @@ export default {
       startedAt: new Date().toISOString(),
       scan: null,
       settlement: null,
+      investigations: null,
       lines: null,
       optimization: null,
       error: null
@@ -4476,15 +4849,47 @@ export default {
       };
       
       // Check for new high-value signals and send alerts
+      let alertableSignals = [];
       if (result.success && result.signals && result.signals.length > 0) {
         // Only check signals that meet alert thresholds (score >= 100, bet >= $20k)
-        const alertableSignals = result.signals.filter(s => s.score >= 100 && s.largestBet >= 20000);
+        alertableSignals = result.signals.filter(s => s.score >= 100 && s.largestBet >= 20000);
         if (alertableSignals.length > 0) {
+          // Alerts fire FIRST, unblocked - never coupled to LLM latency.
           await checkAndSendAlerts(alertableSignals, env);
           console.log(`Checked ${alertableSignals.length} signals for alerts`);
         }
       }
-      
+
+      // AGENT INVESTIGATION: independently price the top alert-tier signals.
+      // Runs after alerts (decoupled), bounded per run and per day for cost.
+      if (env.ANTHROPIC_API_KEY && alertableSignals.length > 0) {
+        try {
+          const perRun = parseInt(env.INVESTIGATION_PER_RUN || "2", 10);
+          const dailyCap = parseInt(env.INVESTIGATION_DAILY_CAP || "50", 10);
+          const spentToday = await investigationCountToday(env);
+          const budget = Math.max(0, Math.min(perRun, dailyCap - spentToday));
+          const candidates = alertableSignals
+            .slice()
+            .sort((a, b) => b.score - a.score)
+            .slice(0, budget);
+          let investigated = 0;
+          for (const sig of candidates) {
+            const r = await investigateSignal(env, sig);
+            if (r.ok && !r.skipped) investigated++;
+          }
+          cronStatus.investigations = {
+            attempted: candidates.length,
+            completed: investigated,
+            spentToday: spentToday + investigated,
+            dailyCap: dailyCap
+          };
+          console.log(`Investigations: ${investigated}/${candidates.length} (${spentToday + investigated}/${dailyCap} today)`);
+        } catch (e) {
+          console.error("Investigation phase error:", e.message);
+          cronStatus.investigations = { error: e.message };
+        }
+      }
+
       // Run settlement checker to learn from outcomes
       console.log("Running settlement checker...");
       const settlementResults = await processSettledSignals(env);
