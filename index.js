@@ -1626,6 +1626,7 @@ async function investigateSignal(env, sig, opts) {
   var rec = await writeInv({
     status: "done",
     attempts: attempts,
+    source: opts.source || "whale",   // "whale" (signal-driven) | "sweep" (category scan)
     marketTitle: sig.marketTitle || found.market.question || null,
     agentProb: result.agentProb,
     confidence: result.confidence,
@@ -1716,6 +1717,7 @@ async function buildBrierReport(env) {
 
   var sumAgent = 0, sumMarket = 0, agentBeats = 0, edgeDirCorrect = 0, edgeDirTotal = 0;
   var byConf = {};
+  var bySource = {};
   for (var s = 0; s < scored.length; s++) {
     var r = scored[s];
     sumAgent += r.agentBrier;
@@ -1729,6 +1731,9 @@ async function buildBrierReport(env) {
     var c = r.confidence || "UNKNOWN";
     if (!byConf[c]) byConf[c] = { n: 0, agent: 0, market: 0 };
     byConf[c].n++; byConf[c].agent += r.agentBrier; byConf[c].market += r.marketBrier;
+    var src = r.source || "whale";
+    if (!bySource[src]) bySource[src] = { n: 0, agent: 0, market: 0 };
+    bySource[src].n++; bySource[src].agent += r.agentBrier; bySource[src].market += r.marketBrier;
   }
 
   var n = scored.length;
@@ -1739,6 +1744,14 @@ async function buildBrierReport(env) {
       n: byConf[key].n,
       meanAgentBrier: round4(byConf[key].agent / byConf[key].n),
       meanMarketBrier: round4(byConf[key].market / byConf[key].n)
+    };
+  }
+  var sourceView = {};
+  for (var sk of Object.keys(bySource)) {
+    sourceView[sk] = {
+      n: bySource[sk].n,
+      meanAgentBrier: round4(bySource[sk].agent / bySource[sk].n),
+      meanMarketBrier: round4(bySource[sk].market / bySource[sk].n)
     };
   }
 
@@ -1754,8 +1767,173 @@ async function buildBrierReport(env) {
       edgeDirectionHitRate: edgeDirTotal > 0 ? Math.round((edgeDirCorrect / edgeDirTotal) * 100) : null,
       edgeDirectionN: edgeDirTotal
     },
-    byConfidence: confView
+    byConfidence: confView,
+    bySource: sourceView
   };
+}
+
+// ============================================================
+// MISPRICING SWEEPS (whale-independent edge)
+// Two detectors that find edge without needing whale flow:
+//   1) Deterministic multi-outcome overround - pure math, no LLM.
+//   2) Agent criteria/stale sweep - reuses the investigation engine on
+//      markets selected by category, not by smart-money flow.
+// Cross-venue divergence (Polymarket vs Kalshi) is a deliberate follow-up:
+// it needs a second venue's API + market-matching, out of scope here.
+// ============================================================
+
+// For a mutually-exclusive multi-outcome event (negRisk: exactly one sub-market
+// resolves YES), the YES prices should sum to ~1.00. A large deviation is a
+// structural mispricing: sum >> 1 = overround (shorting the field pays),
+// sum << 1 = underround (the field is cheap). Pure math; runs every cron.
+function computeOverround(event) {
+  if (!event || !Array.isArray(event.markets) || event.markets.length < 2) return null;
+  // Only mutually-exclusive fields. Gamma flags these as negRisk; be lenient
+  // if the flag is missing but every sub-market is a Yes/No option.
+  var legs = [];
+  for (var i = 0; i < event.markets.length; i++) {
+    var m = event.markets[i];
+    if (m.closed === true) continue;
+    var names = parseGammaArray(m.outcomes);
+    var prices = parseGammaArray(m.outcomePrices);
+    if (!names || !prices || names.length !== prices.length) continue;
+    var yesIdx = matchOutcomeIndex(names, "Yes");
+    if (yesIdx < 0) return null; // not a Yes/No field - can't sum cleanly
+    var p = parseFloat(prices[yesIdx]);
+    if (isNaN(p)) continue;
+    legs.push({ title: m.groupItemTitle || m.question || "", yesPrice: p });
+  }
+  if (legs.length < 2) return null;
+  var sum = legs.reduce(function (a, l) { return a + l.yesPrice; }, 0);
+  return {
+    slug: event.slug,
+    title: event.title || event.question || "",
+    legs: legs.length,
+    sum: Math.round(sum * 1000) / 1000,
+    overroundPts: Math.round((sum - 1) * 1000) / 10, // percentage points off 100%
+    negRisk: event.negRisk === true,
+    volume: parseFloat(event.volume) || null,
+    liquidity: parseFloat(event.liquidity) || null,
+    topLegs: legs.sort(function (a, b) { return b.yesPrice - a.yesPrice; }).slice(0, 5)
+  };
+}
+
+// Fetch active multi-outcome events and flag the meaningfully mispriced ones.
+async function scanOverround(env) {
+  var minPts = parseFloat(env.OVERROUND_MIN_PTS || "6");     // |sum-100%| threshold
+  var minVol = parseFloat(env.OVERROUND_MIN_VOLUME || "20000");
+  var events = await fetchGammaJson("/events?closed=false&limit=100&order=volume&ascending=false");
+  var out = { scanned: 0, flagged: [] };
+  if (!Array.isArray(events)) return out;
+  for (var i = 0; i < events.length; i++) {
+    var o = computeOverround(events[i]);
+    if (!o) continue;
+    out.scanned++;
+    if (Math.abs(o.overroundPts) >= minPts && (!o.volume || o.volume >= minVol)) {
+      o.direction = o.overroundPts > 0 ? "OVERROUND (field expensive)" : "UNDERROUND (field cheap)";
+      out.flagged.push(o);
+    }
+  }
+  out.flagged.sort(function (a, b) { return Math.abs(b.overroundPts) - Math.abs(a.overroundPts); });
+  if (env.SIGNALS_CACHE) {
+    try {
+      await env.SIGNALS_CACHE.put("overround_last", JSON.stringify({
+        at: new Date().toISOString(), scanned: out.scanned, flagged: out.flagged.slice(0, 30)
+      }), { expirationTtl: 24 * 60 * 60 });
+    } catch (e) {}
+  }
+  return out;
+}
+
+// Pick binary markets worth an independent agent read: active, liquid, has
+// resolution criteria, priced in a still-uncertain band, resolving within a
+// window (so they'll settle and feed Brier), not short-term gambling, and not
+// already investigated. Rotates via a stored offset to cover the field over time.
+async function pickSweepCandidates(env, limit) {
+  var markets = await fetchGammaJson("/markets?closed=false&limit=200&order=volume&ascending=false");
+  if (!Array.isArray(markets)) return [];
+  var now = Date.now();
+  var maxDays = parseFloat(env.SWEEP_MAX_DAYS || "45");
+  var horizon = now + maxDays * 24 * 60 * 60 * 1000;
+  var cands = [];
+  for (var i = 0; i < markets.length; i++) {
+    var m = markets[i];
+    if (!m.description || !m.slug) continue;
+    if (isShortTermGamblingMarket(m.question || "")) continue;
+    var names = parseGammaArray(m.outcomes);
+    var prices = parseGammaArray(m.outcomePrices);
+    if (!names || !prices || names.length !== 2) continue;
+    var yesIdx = matchOutcomeIndex(names, "Yes");
+    if (yesIdx < 0) continue;
+    var yes = parseFloat(prices[yesIdx]);
+    if (isNaN(yes) || yes < 0.08 || yes > 0.92) continue; // skip ~resolved / no room
+    var end = m.endDate ? new Date(m.endDate).getTime() : null;
+    if (end && (end < now || end > horizon)) continue;     // must resolve, but within window
+    cands.push({
+      marketSlug: m.slug,
+      directionRaw: "Yes",
+      marketTitle: m.question || "",
+      avgEntryPrice: Math.round(yes * 100),
+      eventDate: m.endDate || null,
+      detectedAt: new Date().toISOString()
+    });
+  }
+  if (cands.length === 0) return [];
+  // Rotate through the candidate pool across runs.
+  var offset = 0;
+  if (env.SIGNALS_CACHE) {
+    try {
+      var o = await env.SIGNALS_CACHE.get("sweep_offset", { type: "json" });
+      offset = (o && typeof o.n === "number") ? o.n : 0;
+      await env.SIGNALS_CACHE.put("sweep_offset", JSON.stringify({ n: (offset + limit) % Math.max(1, cands.length) }));
+    } catch (e) {}
+  }
+  var rotated = cands.slice(offset).concat(cands.slice(0, offset));
+  return rotated.slice(0, Math.max(0, limit * 4)); // over-provide; caller skips already-investigated
+}
+
+// Run the agent sweep: investigate up to `budget` fresh candidates, record big
+// disagreements with the market as opportunities.
+async function runMispricingSweep(env, budget) {
+  if (!env.ANTHROPIC_API_KEY || !env.SIGNALS_CACHE) return { attempted: 0, done: 0, opportunities: 0 };
+  var edgeThreshold = parseFloat(env.SWEEP_EDGE_PTS || "12");
+  var pool = await pickSweepCandidates(env, budget);
+  var res = { attempted: 0, done: 0, opportunities: 0 };
+  var opps = [];
+  for (var i = 0; i < pool.length && res.done < budget; i++) {
+    var sig = pool[i];
+    var invKey = investigationKeyFor(sig.marketSlug, sig.directionRaw);
+    var existing = await env.SIGNALS_CACHE.get(invKey, { type: "json" });
+    if (existing) continue; // never re-investigate
+    res.attempted++;
+    var r = await investigateSignal(env, sig, { source: "sweep" });
+    if (r.ok && r.investigation && r.investigation.status === "done") {
+      res.done++;
+      var inv = r.investigation;
+      if (typeof inv.edgePts === "number" && Math.abs(inv.edgePts) >= edgeThreshold && inv.confidence !== "LOW") {
+        opps.push({
+          marketSlug: inv.marketSlug,
+          marketTitle: inv.marketTitle,
+          agentProb: inv.agentProb,
+          marketProb: inv.marketProbAtInvestigation,
+          edgePts: inv.edgePts,
+          confidence: inv.confidence,
+          reasoning: inv.reasoning,
+          eventDate: inv.eventDate,
+          foundAt: new Date().toISOString()
+        });
+      }
+    }
+  }
+  if (opps.length > 0) {
+    try {
+      var prev = await env.SIGNALS_CACHE.get("sweep_opportunities", { type: "json" }) || [];
+      var merged = opps.concat(prev).slice(0, 100);
+      await env.SIGNALS_CACHE.put("sweep_opportunities", JSON.stringify(merged), { expirationTtl: 30 * 24 * 60 * 60 });
+      res.opportunities = opps.length;
+    } catch (e) {}
+  }
+  return res;
 }
 
 // ============================================================
@@ -4713,6 +4891,46 @@ export default {
         }
       }
 
+      // Deterministic multi-outcome overround scan. ?live=1 runs it now;
+      // otherwise returns the last cron result.
+      if (path === "/sweep/overround") {
+        try {
+          if (url.searchParams.get("live")) {
+            const over = await scanOverround(env);
+            return new Response(JSON.stringify({ success: true, ...over }), {
+              headers: { ...corsHeaders, "Content-Type": "application/json" }
+            });
+          }
+          const last = env.SIGNALS_CACHE ? await env.SIGNALS_CACHE.get("overround_last", { type: "json" }) : null;
+          return new Response(JSON.stringify({ success: true, note: "Add ?live=1 to run now.", last: last }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        } catch (e) {
+          return new Response(JSON.stringify({ success: false, error: e.message }), {
+            status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+      }
+
+      // Agent-flagged mispricing opportunities (from the criteria/stale sweep).
+      // ?run=1 triggers one sweep pass now (bounded by budget param, default 1).
+      if (path === "/sweep/opportunities") {
+        if (!env.SIGNALS_CACHE) {
+          return new Response(JSON.stringify({ error: "No cache configured" }), {
+            status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+        let ran = null;
+        if (url.searchParams.get("run") && env.ANTHROPIC_API_KEY) {
+          const budget = parseInt(url.searchParams.get("budget") || "1", 10);
+          ran = await runMispricingSweep(env, Math.max(1, Math.min(budget, 5)));
+        }
+        const opps = await env.SIGNALS_CACHE.get("sweep_opportunities", { type: "json" }) || [];
+        return new Response(JSON.stringify({ success: true, ran: ran, opportunities: opps }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+
       // Get wallet specialization
       if (path.startsWith("/learning/specialization/")) {
         const address = path.split("/")[3];
@@ -4807,7 +5025,7 @@ export default {
         return new Response(JSON.stringify({
           status: "ok",
           timestamp: new Date().toISOString(),
-          version: "19.0.0 - Agent investigation (web-search) + Brier calibration vs market",
+          version: "20.0.0 - Mispricing sweeps: multi-outcome overround + agent criteria/stale scan",
           cache: cacheStats
         }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" }
@@ -4837,6 +5055,8 @@ export default {
       scan: null,
       settlement: null,
       investigations: null,
+      overround: null,
+      sweep: null,
       lines: null,
       optimization: null,
       error: null
@@ -4890,6 +5110,35 @@ export default {
         } catch (e) {
           console.error("Investigation phase error:", e.message);
           cronStatus.investigations = { error: e.message };
+        }
+      }
+
+      // MISPRICING SWEEPS (#4): deterministic overround every run (cheap),
+      // plus a gentle agent sweep sharing the same daily agent-spend cap.
+      try {
+        const over = await scanOverround(env);
+        cronStatus.overround = { scanned: over.scanned, flagged: over.flagged.length };
+        console.log(`Overround: ${over.flagged.length} flagged of ${over.scanned} multi-outcome events`);
+      } catch (e) {
+        console.error("Overround scan error:", e.message);
+        cronStatus.overround = { error: e.message };
+      }
+      if (env.ANTHROPIC_API_KEY && (env.SWEEP_ENABLED || "true") !== "false") {
+        try {
+          const dailyCap = parseInt(env.INVESTIGATION_DAILY_CAP || "50", 10);
+          const sweepPerRun = parseInt(env.SWEEP_PER_RUN || "1", 10);
+          const spent = await investigationCountToday(env);
+          const sweepBudget = Math.max(0, Math.min(sweepPerRun, dailyCap - spent));
+          if (sweepBudget > 0) {
+            const sweep = await runMispricingSweep(env, sweepBudget);
+            cronStatus.sweep = sweep;
+            console.log(`Sweep: ${sweep.done} investigated, ${sweep.opportunities} opportunities`);
+          } else {
+            cronStatus.sweep = { skipped: "daily cap reached" };
+          }
+        } catch (e) {
+          console.error("Mispricing sweep error:", e.message);
+          cronStatus.sweep = { error: e.message };
         }
       }
 
