@@ -879,6 +879,365 @@ async function getFactorWeights(env) {
 }
 
 // ============================================================
+// GAMMA API - GROUND-TRUTH SETTLEMENT
+// Polymarket's Gamma API reports authoritative market resolution
+// (closed flag + final outcome prices). This replaces the old
+// "infer settlement from recent trade prices" heuristic as the
+// primary settlement source; Odds API and the trades heuristic
+// remain as fallbacks when Gamma can't locate the market.
+// ============================================================
+
+var GAMMA_API = "https://gamma-api.polymarket.com";
+
+// Gamma returns outcomes/outcomePrices as JSON-encoded strings on some
+// endpoints and real arrays on others - normalize both.
+function parseGammaArray(value) {
+  if (Array.isArray(value)) return value;
+  if (typeof value === "string") {
+    try {
+      var parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : null;
+    } catch (e) {
+      return null;
+    }
+  }
+  return null;
+}
+
+function normalizeOutcomeText(text) {
+  return (text || "").toString().toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+// Match a signal direction against a list of outcome names.
+// Tries exact normalized match first, then substring containment.
+// Returns -1 when no unambiguous match exists - a wrong label is
+// worse for the learning system than an honest UNKNOWN.
+function matchOutcomeIndex(outcomeNames, direction) {
+  if (!outcomeNames || !direction) return -1;
+  var dir = normalizeOutcomeText(direction);
+  if (!dir) return -1;
+
+  for (var i = 0; i < outcomeNames.length; i++) {
+    if (normalizeOutcomeText(outcomeNames[i]) === dir) return i;
+  }
+
+  var hits = [];
+  for (var j = 0; j < outcomeNames.length; j++) {
+    var name = normalizeOutcomeText(outcomeNames[j]);
+    if (!name) continue;
+    if (name.includes(dir) || dir.includes(name)) hits.push(j);
+  }
+  return hits.length === 1 ? hits[0] : -1;
+}
+
+async function fetchGammaJson(path) {
+  var res = await fetch(GAMMA_API + path, {
+    headers: { "Accept": "application/json" }
+  });
+  if (!res.ok) {
+    console.log("Gamma API error " + res.status + " for " + path);
+    return null;
+  }
+  return await res.json();
+}
+
+// Resolve a market object from Gamma by slug. Signals sometimes carry an
+// event slug instead of a market slug (trades expose both), so fall back
+// to the events endpoint and pick the sub-market matching the direction.
+async function findGammaMarket(marketSlug, direction) {
+  var markets = await fetchGammaJson("/markets?slug=" + encodeURIComponent(marketSlug));
+  if (markets && markets.length > 0) {
+    return { market: markets[0], via: "market-slug" };
+  }
+
+  var events = await fetchGammaJson("/events?slug=" + encodeURIComponent(marketSlug));
+  var event = events && events[0];
+  if (!event || !Array.isArray(event.markets) || event.markets.length === 0) {
+    return null;
+  }
+  if (event.markets.length === 1) {
+    return { market: event.markets[0], via: "event-slug" };
+  }
+
+  // Multi-market event: match direction against groupItemTitle (the option
+  // name, e.g. a team or candidate) first, then against outcome names.
+  var titles = event.markets.map(function (m) { return m.groupItemTitle || m.question || ""; });
+  var idx = matchOutcomeIndex(titles, direction);
+  if (idx >= 0) {
+    return { market: event.markets[idx], via: "event-group-item" };
+  }
+  var outcomeHits = [];
+  for (var i = 0; i < event.markets.length; i++) {
+    var names = parseGammaArray(event.markets[i].outcomes);
+    if (names && matchOutcomeIndex(names, direction) >= 0) outcomeHits.push(i);
+  }
+  if (outcomeHits.length === 1) {
+    return { market: event.markets[outcomeHits[0]], via: "event-outcome" };
+  }
+  return { market: null, via: "event-ambiguous", event: event };
+}
+
+// Ground-truth settlement check. Returns one of:
+//   { status: "not_found" }
+//   { status: "open", currentPrice }
+//   { status: "closed_unresolved" }  - trading closed, resolution not final
+//   { status: "settled", outcome: "WIN"|"LOSS"|"UNKNOWN", winningOutcome, note }
+async function settleWithGamma(marketSlug, direction) {
+  var found = await findGammaMarket(marketSlug, direction);
+  if (!found) return { status: "not_found" };
+
+  if (!found.market) {
+    // Event exists but we can't tell which sub-market the signal was on.
+    // If every sub-market is closed the event is over - grade UNKNOWN so
+    // it stops polling; otherwise keep waiting.
+    var allClosed = found.event.markets.every(function (m) { return m.closed === true; });
+    if (allClosed) {
+      return {
+        status: "settled",
+        outcome: "UNKNOWN",
+        winningOutcome: null,
+        note: "Event resolved but direction '" + direction + "' matched no sub-market"
+      };
+    }
+    return { status: "open", currentPrice: null };
+  }
+
+  var market = found.market;
+  var names = parseGammaArray(market.outcomes);
+  var prices = parseGammaArray(market.outcomePrices);
+
+  if (market.closed !== true) {
+    var openIdx = (names && prices) ? matchOutcomeIndex(names, direction) : -1;
+    return {
+      status: "open",
+      currentPrice: openIdx >= 0 ? parseFloat(prices[openIdx]) : null
+    };
+  }
+
+  if (!names || !prices || names.length === 0 || names.length !== prices.length) {
+    return {
+      status: "settled",
+      outcome: "UNKNOWN",
+      winningOutcome: null,
+      note: "Market closed but Gamma returned no usable outcome data"
+    };
+  }
+
+  // Winner = outcome whose final price is ~1. If no outcome is near 1 the
+  // market closed without final resolution (e.g. UMA dispute in progress).
+  var winnerIdx = 0;
+  var winnerPrice = -1;
+  for (var p = 0; p < prices.length; p++) {
+    var price = parseFloat(prices[p]);
+    if (price > winnerPrice) {
+      winnerPrice = price;
+      winnerIdx = p;
+    }
+  }
+  if (!(winnerPrice >= 0.95)) {
+    return { status: "closed_unresolved" };
+  }
+
+  var winningOutcome = names[winnerIdx];
+  var directionIdx = matchOutcomeIndex(names, direction);
+  if (directionIdx < 0) {
+    return {
+      status: "settled",
+      outcome: "UNKNOWN",
+      winningOutcome: winningOutcome,
+      note: "Resolved (winner: " + winningOutcome + ") but direction '" + direction + "' matched no outcome"
+    };
+  }
+
+  return {
+    status: "settled",
+    outcome: directionIdx === winnerIdx ? "WIN" : "LOSS",
+    winningOutcome: winningOutcome,
+    resolutionPrice: winnerPrice,
+    via: found.via
+  };
+}
+
+// ============================================================
+// PAPER-TRADING ROI LEDGER
+// Every settled signal is booked as a hypothetical $100 buy at the
+// signal's entry price. This measures actual ROI - not just win
+// rate, which is meaningless without entry price - broken down by
+// score band, market type, factor, entry band and settlement source.
+// ============================================================
+
+var PAPER_STAKE = 100;
+var LEDGER_KEY = "paper_ledger";
+var LEDGER_TRADES_KEY = "paper_ledger_trades";
+
+function emptyLedgerBucket() {
+  return { n: 0, wins: 0, losses: 0, unknown: 0, staked: 0, pnl: 0 };
+}
+
+function bumpLedgerBucket(bucket, outcome, pnl) {
+  bucket.n += 1;
+  if (outcome === "WIN") bucket.wins += 1;
+  else if (outcome === "LOSS") bucket.losses += 1;
+  else bucket.unknown += 1;
+  if (outcome === "WIN" || outcome === "LOSS") {
+    bucket.staked += PAPER_STAKE;
+    bucket.pnl = Math.round((bucket.pnl + pnl) * 100) / 100;
+  }
+}
+
+function ledgerScoreBand(score) {
+  if (score >= 150) return "150+";
+  if (score >= 100) return "100-149";
+  if (score >= 75) return "75-99";
+  return "50-74"; // signals only enter the learning store at score >= 50
+}
+
+function ledgerEntryBand(entryPct) {
+  if (entryPct < 25) return "1-24";
+  if (entryPct < 50) return "25-49";
+  if (entryPct < 75) return "50-74";
+  return "75-99";
+}
+
+async function recordPaperTrade(env, signalData, outcome) {
+  if (!env.SIGNALS_CACHE) return;
+
+  var entry = signalData.priceAtSignal;
+  var gradeable = (outcome === "WIN" || outcome === "LOSS") && entry >= 1 && entry <= 99;
+  var effectiveOutcome = gradeable ? outcome : "UNKNOWN";
+  var pnl = 0;
+  if (gradeable) {
+    // $100 buys (100/entry) shares paying $1 each on a win
+    pnl = outcome === "WIN"
+      ? Math.round(PAPER_STAKE * (100 - entry) / entry * 100) / 100
+      : -PAPER_STAKE;
+  }
+
+  try {
+    var ledger = await env.SIGNALS_CACHE.get(LEDGER_KEY, { type: "json" });
+    if (!ledger) {
+      ledger = {
+        version: 1,
+        stakePerTrade: PAPER_STAKE,
+        createdAt: new Date().toISOString(),
+        overall: emptyLedgerBucket(),
+        byScoreBand: {},
+        byMarketType: {},
+        byEntryBand: {},
+        bySource: {},
+        byFactor: {}
+      };
+    }
+
+    var bumpGroup = function (group, key) {
+      if (!key) return;
+      if (!group[key]) group[key] = emptyLedgerBucket();
+      bumpLedgerBucket(group[key], effectiveOutcome, pnl);
+    };
+
+    bumpLedgerBucket(ledger.overall, effectiveOutcome, pnl);
+    bumpGroup(ledger.byScoreBand, ledgerScoreBand(signalData.score || 0));
+    bumpGroup(ledger.byMarketType, detectMarketType(signalData.marketTitle));
+    bumpGroup(ledger.byEntryBand, (entry >= 1 && entry <= 99) ? ledgerEntryBand(entry) : "invalid-entry");
+    bumpGroup(ledger.bySource, signalData.settledBy || "unknown");
+    for (var f = 0; f < (signalData.factors || []).length; f++) {
+      bumpGroup(ledger.byFactor, signalData.factors[f]);
+    }
+
+    ledger.updatedAt = new Date().toISOString();
+    await env.SIGNALS_CACHE.put(LEDGER_KEY, JSON.stringify(ledger));
+
+    var trades = await env.SIGNALS_CACHE.get(LEDGER_TRADES_KEY, { type: "json" }) || [];
+    trades.unshift({
+      signalId: signalData.id,
+      market: signalData.marketTitle,
+      direction: signalData.directionRaw || signalData.direction,
+      entryPrice: entry,
+      score: signalData.score,
+      outcome: effectiveOutcome,
+      pnl: pnl,
+      settledBy: signalData.settledBy || null,
+      winningOutcome: signalData.winningOutcome || null,
+      detectedAt: signalData.detectedAt,
+      settledAt: signalData.settledAt
+    });
+    if (trades.length > 300) trades = trades.slice(0, 300);
+    await env.SIGNALS_CACHE.put(LEDGER_TRADES_KEY, JSON.stringify(trades));
+  } catch (e) {
+    console.error("Error recording paper trade:", e.message);
+  }
+}
+
+function ledgerBucketView(bucket) {
+  var graded = bucket.wins + bucket.losses;
+  return {
+    ...bucket,
+    winRate: graded > 0 ? Math.round((bucket.wins / graded) * 100) : null,
+    roiPct: bucket.staked > 0 ? Math.round((bucket.pnl / bucket.staked) * 1000) / 10 : null
+  };
+}
+
+function buildLedgerView(ledger) {
+  if (!ledger) return null;
+  var mapGroup = function (group) {
+    var out = {};
+    for (var key of Object.keys(group || {})) {
+      out[key] = ledgerBucketView(group[key]);
+    }
+    return out;
+  };
+  return {
+    stakePerTrade: ledger.stakePerTrade,
+    createdAt: ledger.createdAt,
+    updatedAt: ledger.updatedAt,
+    overall: ledgerBucketView(ledger.overall),
+    byScoreBand: mapGroup(ledger.byScoreBand),
+    byMarketType: mapGroup(ledger.byMarketType),
+    byEntryBand: mapGroup(ledger.byEntryBand),
+    bySource: mapGroup(ledger.bySource),
+    byFactor: mapGroup(ledger.byFactor)
+  };
+}
+
+// Shared settlement bookkeeping: updates the signal record, factor stats,
+// wallet outcomes and the paper ledger - identical regardless of which
+// source (gamma / odds-api / trades-heuristic) determined the outcome.
+async function recordSignalOutcome(env, signalKey, signalData, outcome, meta) {
+  meta = meta || {};
+  var entryPct = signalData.priceAtSignal || 0;
+  var profitPct = null;
+  if (outcome === "WIN" && entryPct >= 1) {
+    profitPct = Math.round(((1 - entryPct / 100) / (entryPct / 100)) * 100);
+  } else if (outcome === "LOSS") {
+    profitPct = -100;
+  }
+
+  signalData.outcome = outcome;
+  signalData.settledAt = new Date().toISOString();
+  signalData.profitLoss = profitPct;
+  signalData.settledBy = meta.settledBy || null;
+  if (meta.winningOutcome) signalData.winningOutcome = meta.winningOutcome;
+  if (meta.note) signalData.note = meta.note;
+  if (meta.gameScore) signalData.gameScore = meta.gameScore;
+
+  await env.SIGNALS_CACHE.put(signalKey, JSON.stringify(signalData), {
+    expirationTtl: (outcome === "UNKNOWN" ? 7 : 30) * 24 * 60 * 60
+  });
+
+  if (outcome === "WIN" || outcome === "LOSS") {
+    if (signalData.factors && signalData.factors.length > 0) {
+      await updateFactorStats(env, signalData.factors, outcome);
+    }
+    var marketType = detectMarketType(signalData.marketTitle);
+    for (var w = 0; w < (signalData.wallets || []).length; w++) {
+      await recordWalletOutcome(env, signalData.wallets[w], outcome, profitPct, marketType, signalData.largestBet || 0, signalData.id);
+    }
+  }
+
+  await recordPaperTrade(env, signalData, outcome);
+}
+
+// ============================================================
 // SETTLEMENT CHECKER
 // ============================================================
 
@@ -1048,98 +1407,99 @@ async function processSettledSignals(env) {
           continue;
         }
         
-        // Check if market settled
-        // For sports markets, try The Odds API first for accurate results
-        let settlement = null;
+        // The signal's directionRaw is the exact Polymarket outcome name;
+        // fall back to the display direction for older stored signals.
+        const settleDirection = signalData.directionRaw || signalData.direction;
+
+        // ---- PRIMARY: Gamma API ground truth --------------------------
+        // Gamma reports authoritative Polymarket resolution, which is what
+        // actually determines whether the bet paid. Try it first for every
+        // market type.
+        const gamma = await settleWithGamma(signalData.marketSlug, settleDirection);
+
+        if (gamma.status === "settled") {
+          await recordSignalOutcome(env, signalKey, signalData, gamma.outcome, {
+            settledBy: "gamma",
+            winningOutcome: gamma.winningOutcome,
+            note: gamma.note
+          });
+          results.processed += 1;
+          if (gamma.outcome === "WIN") results.wins += 1;
+          else if (gamma.outcome === "LOSS") results.losses += 1;
+          console.log(`Signal ${signalId} settled via Gamma: ${gamma.outcome}${gamma.winningOutcome ? " (winner: " + gamma.winningOutcome + ")" : ""}`);
+          continue;
+        }
+
+        if (gamma.status === "open") {
+          // Gamma confirms the market is still trading - authoritative, no
+          // need to consult fallbacks.
+          stillPending.push(signalId);
+          continue;
+        }
+        // gamma.status is "not_found" or "closed_unresolved" - fall through
+        // to the fallbacks below.
+
+        // ---- FALLBACK 1: The Odds API (sports only) -------------------
         const sport = detectSportFromSlug(signalData.marketSlug);
-        
+
         if (sport && SPORT_KEY_MAP[sport] && env.ODDS_API_KEY) {
-          // Try The Odds API for sports
-          const oddsApiResult = await settleWithOddsAPI(env, signalData.marketSlug, signalData.direction);
-          
+          const oddsApiResult = await settleWithOddsAPI(env, signalData.marketSlug, settleDirection);
+
           if (oddsApiResult && oddsApiResult.status === 'settled') {
-            // We have definitive result from Odds API
-            const outcome = oddsApiResult.outcome;
-            const profitPct = outcome === "WIN" 
-              ? Math.round(((1 - (signalData.priceAtSignal / 100)) / (signalData.priceAtSignal / 100)) * 100)
-              : -100;
-            
-            // Update signal data
-            signalData.outcome = outcome;
-            signalData.settledAt = new Date().toISOString();
-            signalData.profitLoss = profitPct;
-            signalData.winningOutcome = oddsApiResult.winner || oddsApiResult.spreadWinner;
-            signalData.gameScore = `${oddsApiResult.homeScore}-${oddsApiResult.awayScore}`;
-            signalData.settledBy = 'odds-api';
-            
-            await env.SIGNALS_CACHE.put(signalKey, JSON.stringify(signalData), {
-              expirationTtl: 30 * 24 * 60 * 60
+            await recordSignalOutcome(env, signalKey, signalData, oddsApiResult.outcome, {
+              settledBy: "odds-api",
+              winningOutcome: oddsApiResult.winner || oddsApiResult.spreadWinner,
+              gameScore: `${oddsApiResult.homeScore}-${oddsApiResult.awayScore}`
             });
-            
-            // Update factor stats
-            if (signalData.factors && signalData.factors.length > 0) {
-              await updateFactorStats(env, signalData.factors, outcome);
-            }
-            
-            // Update wallet stats
-            const marketType = detectMarketType(signalData.marketTitle);
-            for (const wallet of (signalData.wallets || [])) {
-              await recordWalletOutcome(env, wallet, outcome, profitPct, marketType, signalData.largestBet || 0, signalId);
-            }
-            
             results.processed += 1;
-            if (outcome === "WIN") results.wins += 1;
+            if (oddsApiResult.outcome === "WIN") results.wins += 1;
             else results.losses += 1;
-            
-            console.log(`Signal ${signalId} settled via Odds API: ${outcome} (${oddsApiResult.homeScore}-${oddsApiResult.awayScore})`);
+            console.log(`Signal ${signalId} settled via Odds API: ${oddsApiResult.outcome} (${oddsApiResult.homeScore}-${oddsApiResult.awayScore})`);
             continue;
           } else if (oddsApiResult && oddsApiResult.status === 'pending') {
-            // Game not completed yet
             stillPending.push(signalId);
             continue;
           }
-          // If Odds API failed or no match, fall back to Polymarket trades method
+          // If Odds API failed or no match, fall back to trades method
         }
-        
-        // Fall back to Polymarket trades method
-        settlement = await checkMarketSettlement(signalData.marketSlug, signalData.detectedAt);
-        
+
+        // ---- FALLBACK 2: Polymarket trades heuristic -----------------
+        const settlement = await checkMarketSettlement(signalData.marketSlug, signalData.detectedAt);
+
         if (!settlement || !settlement.settled) {
           stillPending.push(signalId);
           continue;
         }
-        
+
         // Handle UNKNOWN outcomes (API data unavailable but event passed)
         if (settlement.winningOutcome === "UNKNOWN") {
           console.log(`Signal ${signalId} has unknown outcome - removing from pending`);
-          signalData.outcome = "UNKNOWN";
-          signalData.settledAt = new Date().toISOString();
-          signalData.note = settlement.note;
-          await env.SIGNALS_CACHE.put(signalKey, JSON.stringify(signalData), {
-            expirationTtl: 7 * 24 * 60 * 60  // Keep for 7 days for review
+          await recordSignalOutcome(env, signalKey, signalData, "UNKNOWN", {
+            settledBy: "trades-heuristic",
+            note: settlement.note
           });
           results.processed += 1;
           continue;
         }
-        
+
         // Determine if our signal won or lost
-        const signalDirection = (signalData.direction || "").toLowerCase();
+        const signalDirection = (settleDirection || "").toLowerCase();
         const winningOutcome = (settlement.winningOutcome || "").toLowerCase();
-        
+
         // Normalize direction names for comparison
         // Handle cases like "Hornets" vs "yes", "Cortes-Acosta" vs "Yes"
         let outcome = "LOSS";
-        
+
         // Direct match
         if (signalDirection === winningOutcome) {
           outcome = "WIN";
         }
         // Yes/No normalization
-        else if ((signalDirection === "yes" || signalDirection === "true") && 
+        else if ((signalDirection === "yes" || signalDirection === "true") &&
                  (winningOutcome === "yes" || winningOutcome === "true")) {
           outcome = "WIN";
         }
-        else if ((signalDirection === "no" || signalDirection === "false") && 
+        else if ((signalDirection === "no" || signalDirection === "false") &&
                  (winningOutcome === "no" || winningOutcome === "false")) {
           outcome = "WIN";
         }
@@ -1147,8 +1507,7 @@ async function processSettledSignals(env) {
         // This is tricky - for now, if price went to 0.95+ and we bet on that side, we won
         else if (settlement.resolutionPrice >= 0.90) {
           // High price = YES won
-          // Check if signal direction indicates YES
-          if (signalDirection === "yes" || 
+          if (signalDirection === "yes" ||
               signalDirection.includes("over") ||
               signalDirection.includes("cover")) {
             outcome = "WIN";
@@ -1162,44 +1521,21 @@ async function processSettledSignals(env) {
             outcome = "WIN";
           }
         }
-        
-        // Calculate profit/loss
-        const entryPrice = signalData.priceAtSignal / 100;
-        const resolutionPrice = settlement.resolutionPrice;
-        const profitPct = outcome === "WIN" 
-          ? Math.round(((1 - entryPrice) / entryPrice) * 100)  // Payout is $1 for a win
-          : -100;
-        
-        // Update signal data
-        signalData.outcome = outcome;
-        signalData.settledAt = new Date().toISOString();
-        signalData.profitLoss = profitPct;
-        signalData.winningOutcome = settlement.winningOutcome;
-        
-        await env.SIGNALS_CACHE.put(signalKey, JSON.stringify(signalData), {
-          expirationTtl: 30 * 24 * 60 * 60
+
+        await recordSignalOutcome(env, signalKey, signalData, outcome, {
+          settledBy: "trades-heuristic",
+          winningOutcome: settlement.winningOutcome
         });
-        
-        // Update factor stats
-        if (signalData.factors && signalData.factors.length > 0) {
-          await updateFactorStats(env, signalData.factors, outcome);
-        }
-        
-        // Update wallet stats for each wallet involved
-        const marketType = detectMarketType(signalData.marketTitle);
-        for (const wallet of (signalData.wallets || [])) {
-          await recordWalletOutcome(env, wallet, outcome, profitPct, marketType, signalData.largestBet || 0, signalId);
-        }
-        
+
         results.processed += 1;
         if (outcome === "WIN") {
           results.wins += 1;
         } else {
           results.losses += 1;
         }
-        
-        console.log(`Signal ${signalId} settled: ${outcome}`);
-        
+
+        console.log(`Signal ${signalId} settled via trades heuristic: ${outcome}`);
+
       } catch (e) {
         console.error(`Error processing signal ${signalId}:`, e.message);
         results.errors += 1;
@@ -3766,6 +4102,32 @@ export default {
           headers: { ...corsHeaders, "Content-Type": "application/json" }
         });
       }
+
+      // Paper-trading ROI ledger: real profitability of signals, broken
+      // down by score band, market type, entry band, factor and source.
+      // Add ?trades=1 to include the recent per-signal trade log.
+      if (path === "/learning/ledger") {
+        if (!env.SIGNALS_CACHE) {
+          return new Response(JSON.stringify({ error: "No cache configured" }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+        const ledger = await env.SIGNALS_CACHE.get(LEDGER_KEY, { type: "json" });
+        const view = buildLedgerView(ledger);
+        let recentTrades = null;
+        if (url.searchParams.get("trades")) {
+          recentTrades = await env.SIGNALS_CACHE.get(LEDGER_TRADES_KEY, { type: "json" }) || [];
+        }
+        return new Response(JSON.stringify({
+          success: true,
+          note: view ? "Each entry = a hypothetical $" + PAPER_STAKE + " buy at signal entry price. roiPct is on graded (WIN/LOSS) trades only." : "No settled signals recorded yet.",
+          ledger: view,
+          recentTrades: recentTrades
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
       
       // Get wallet specialization
       if (path.startsWith("/learning/specialization/")) {
@@ -3861,7 +4223,7 @@ export default {
         return new Response(JSON.stringify({
           status: "ok",
           timestamp: new Date().toISOString(),
-          version: "17.1.2 - Fix Polymarket team matching + add debug info",
+          version: "18.0.0 - Gamma ground-truth settlement + paper-trading ROI ledger",
           cache: cacheStats
         }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" }
