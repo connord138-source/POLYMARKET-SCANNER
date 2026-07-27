@@ -807,6 +807,8 @@ async function storeSignalForLearning(env, signal, factors, wallets) {
       await env.SIGNALS_CACHE.put(KV_KEYS.PENDING_SIGNALS, JSON.stringify(pendingSignals));
     }
     
+    await d1InsertSignal(env, signal, detectMarketType(signal.marketTitle));  // guarded
+
     console.log(`Stored signal for learning: ${signal.id}`);
   } catch (e) {
     console.error("Error storing signal for learning:", e.message);
@@ -1242,6 +1244,82 @@ async function recordSignalOutcome(env, signalKey, signalData, outcome, meta) {
 }
 
 // ============================================================
+// D1 ANALYTICS (optional, additive)
+// A queryable mirror of the agent-analytics data. Active ONLY when a `DB`
+// binding is present; every write is guarded and best-effort so a missing or
+// failing D1 never affects the KV hot-path. KV stays the source of truth for
+// operational state - D1 just makes the analytics queryable (for the
+// dashboard and ad-hoc SQL). See migrations/0001_init.sql.
+// ============================================================
+
+async function d1UpsertInvestigation(env, inv) {
+  if (!env.DB || !inv || !inv.invKey) return;
+  try {
+    await env.DB.prepare(
+      "INSERT INTO investigations " +
+      "(inv_key, market_slug, direction_raw, market_title, source, status, agent_prob, confidence, reasoning, key_findings, model, web_searches, market_prob, entry_price_pct, edge_pts, event_date, investigated_at, updated_at) " +
+      "VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18) " +
+      "ON CONFLICT(inv_key) DO UPDATE SET status=excluded.status, source=excluded.source, agent_prob=excluded.agent_prob, confidence=excluded.confidence, reasoning=excluded.reasoning, key_findings=excluded.key_findings, model=excluded.model, web_searches=excluded.web_searches, market_prob=excluded.market_prob, entry_price_pct=excluded.entry_price_pct, edge_pts=excluded.edge_pts, event_date=excluded.event_date, investigated_at=excluded.investigated_at, updated_at=excluded.updated_at"
+    ).bind(
+      inv.invKey, inv.marketSlug || null, inv.directionRaw || null, inv.marketTitle || null,
+      inv.source || "whale", inv.status || null,
+      (typeof inv.agentProb === "number" ? inv.agentProb : null),
+      inv.confidence || null, inv.reasoning || null,
+      inv.keyFindings ? JSON.stringify(inv.keyFindings) : null,
+      inv.model || null, (typeof inv.webSearches === "number" ? inv.webSearches : null),
+      (typeof inv.marketProbAtInvestigation === "number" ? inv.marketProbAtInvestigation : null),
+      (typeof inv.entryPricePct === "number" ? inv.entryPricePct : null),
+      (typeof inv.edgePts === "number" ? inv.edgePts : null),
+      inv.eventDate || null, inv.investigatedAt || null, inv.updatedAt || new Date().toISOString()
+    ).run();
+  } catch (e) { console.log("D1 upsert investigation error:", e.message); }
+}
+
+async function d1SettleInvestigation(env, inv) {
+  if (!env.DB || !inv || !inv.invKey) return;
+  try {
+    await env.DB.prepare(
+      "UPDATE investigations SET outcome=?2, y=?3, agent_brier=?4, market_brier=?5, settled_by=?6, settled_at=?7, updated_at=?7 WHERE inv_key=?1"
+    ).bind(
+      inv.invKey, inv.outcome || null, (typeof inv.y === "number" ? inv.y : null),
+      (typeof inv.agentBrier === "number" ? inv.agentBrier : null),
+      (typeof inv.marketBrier === "number" ? inv.marketBrier : null),
+      inv.settledBy || null, inv.settledAt || new Date().toISOString()
+    ).run();
+  } catch (e) { console.log("D1 settle investigation error:", e.message); }
+}
+
+async function d1InsertOpportunity(env, opp) {
+  if (!env.DB || !opp) return;
+  try {
+    await env.DB.prepare(
+      "INSERT INTO opportunities (market_slug, market_title, agent_prob, market_prob, edge_pts, confidence, reasoning, event_date, found_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)"
+    ).bind(
+      opp.marketSlug || null, opp.marketTitle || null,
+      (typeof opp.agentProb === "number" ? opp.agentProb : null),
+      (typeof opp.marketProb === "number" ? opp.marketProb : null),
+      (typeof opp.edgePts === "number" ? opp.edgePts : null),
+      opp.confidence || null, opp.reasoning || null, opp.eventDate || null,
+      opp.foundAt || new Date().toISOString()
+    ).run();
+  } catch (e) { console.log("D1 insert opportunity error:", e.message); }
+}
+
+async function d1InsertSignal(env, sig, marketType) {
+  if (!env.DB || !sig || !sig.id) return;
+  try {
+    await env.DB.prepare(
+      "INSERT OR IGNORE INTO signals_log (id, market_slug, direction_raw, market_title, market_type, score, largest_bet, volume, num_wallets, fresh_wallets, avg_entry_price, event_date, detected_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)"
+    ).bind(
+      sig.id, sig.marketSlug || null, sig.directionRaw || null, sig.marketTitle || null,
+      marketType || null, sig.score || null, sig.largestBet || null,
+      sig.suspiciousVolume || null, sig.numWallets || null, sig.freshWallets || null,
+      sig.avgEntryPrice || null, sig.eventDate || null, sig.detectedAt || null
+    ).run();
+  } catch (e) { console.log("D1 insert signal error:", e.message); }
+}
+
+// ============================================================
 // AGENT INVESTIGATION
 // Calls the Claude Messages API with the web_search server tool to
 // independently estimate the probability a market resolves YES for the
@@ -1552,6 +1630,7 @@ async function investigateSignal(env, sig, opts) {
     rec.directionRaw = directionRaw;
     rec.updatedAt = new Date().toISOString();
     await env.SIGNALS_CACHE.put(invKey, JSON.stringify(rec), { expirationTtl: 45 * 24 * 60 * 60 });
+    await d1UpsertInvestigation(env, rec);  // guarded no-op without a DB binding
     // Maintain a lightweight index for the /learning/brier aggregation.
     try {
       var idx = await env.SIGNALS_CACHE.get("investigation_index", { type: "json" }) || [];
@@ -1678,6 +1757,7 @@ async function recordBrierOutcome(env, signalData, outcome, meta) {
     inv.updatedAt = inv.settledAt;
 
     await env.SIGNALS_CACHE.put(invKey, JSON.stringify(inv), { expirationTtl: 45 * 24 * 60 * 60 });
+    await d1SettleInvestigation(env, inv);  // guarded
     console.log("Brier scored " + invKey + ": agent=" + inv.agentBrier + " market=" + inv.marketBrier);
   } catch (e) {
     console.error("Error recording Brier outcome:", e.message);
@@ -1911,7 +1991,7 @@ async function runMispricingSweep(env, budget) {
       res.done++;
       var inv = r.investigation;
       if (typeof inv.edgePts === "number" && Math.abs(inv.edgePts) >= edgeThreshold && inv.confidence !== "LOW") {
-        opps.push({
+        var opp = {
           marketSlug: inv.marketSlug,
           marketTitle: inv.marketTitle,
           agentProb: inv.agentProb,
@@ -1921,7 +2001,9 @@ async function runMispricingSweep(env, budget) {
           reasoning: inv.reasoning,
           eventDate: inv.eventDate,
           foundAt: new Date().toISOString()
-        });
+        };
+        opps.push(opp);
+        await d1InsertOpportunity(env, opp);  // guarded
       }
     }
   }
@@ -4931,6 +5013,73 @@ export default {
         });
       }
 
+      // D1 analytics (queryable). No-op note when the DB binding is absent.
+      if (path === "/db/status") {
+        if (!env.DB) {
+          return new Response(JSON.stringify({ enabled: false, note: "No D1 binding. Provision with `wrangler d1 create polymarket-scanner`, bind as DB in wrangler.toml, then apply migrations/0001_init.sql." }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+        try {
+          const inv = await env.DB.prepare("SELECT COUNT(*) n, SUM(status='done') done, SUM(settled_by='gamma') settled FROM investigations").first();
+          const opp = await env.DB.prepare("SELECT COUNT(*) n FROM opportunities").first();
+          const sig = await env.DB.prepare("SELECT COUNT(*) n FROM signals_log").first();
+          const brier = await env.DB.prepare("SELECT COUNT(*) n, AVG(agent_brier) agentBrier, AVG(market_brier) marketBrier FROM investigations WHERE agent_brier IS NOT NULL").first();
+          return new Response(JSON.stringify({ enabled: true, investigations: inv, opportunities: opp, signals: sig, brier: brier }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        } catch (e) {
+          return new Response(JSON.stringify({ enabled: true, error: e.message, hint: "Did you apply migrations/0001_init.sql?" }), {
+            status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+      }
+
+      if (path === "/db/investigations") {
+        if (!env.DB) {
+          return new Response(JSON.stringify({ enabled: false, note: "No D1 binding configured." }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+        const limit = Math.min(parseInt(url.searchParams.get("limit") || "50", 10), 200);
+        const src = url.searchParams.get("source");
+        try {
+          let stmt;
+          if (src) {
+            stmt = env.DB.prepare("SELECT * FROM investigations WHERE source=?1 ORDER BY updated_at DESC LIMIT ?2").bind(src, limit);
+          } else {
+            stmt = env.DB.prepare("SELECT * FROM investigations ORDER BY updated_at DESC LIMIT ?1").bind(limit);
+          }
+          const rows = await stmt.all();
+          return new Response(JSON.stringify({ enabled: true, results: rows.results || [] }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        } catch (e) {
+          return new Response(JSON.stringify({ enabled: true, error: e.message }), {
+            status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+      }
+
+      if (path === "/db/opportunities") {
+        if (!env.DB) {
+          return new Response(JSON.stringify({ enabled: false, note: "No D1 binding configured." }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+        const limit = Math.min(parseInt(url.searchParams.get("limit") || "50", 10), 200);
+        try {
+          const rows = await env.DB.prepare("SELECT * FROM opportunities ORDER BY found_at DESC LIMIT ?1").bind(limit).all();
+          return new Response(JSON.stringify({ enabled: true, results: rows.results || [] }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        } catch (e) {
+          return new Response(JSON.stringify({ enabled: true, error: e.message }), {
+            status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+      }
+
       // Get wallet specialization
       if (path.startsWith("/learning/specialization/")) {
         const address = path.split("/")[3];
@@ -5025,7 +5174,7 @@ export default {
         return new Response(JSON.stringify({
           status: "ok",
           timestamp: new Date().toISOString(),
-          version: "20.0.0 - Mispricing sweeps: multi-outcome overround + agent criteria/stale scan",
+          version: "21.0.0 - Optional D1 analytics layer (queryable investigations/opportunities/signals)",
           cache: cacheStats
         }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" }
