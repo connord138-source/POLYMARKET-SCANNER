@@ -2651,7 +2651,7 @@ var SPORTS_KEYWORDS = ["nba", "nfl", "mlb", "nhl", "super bowl", "championship",
 var corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type"
+  "Access-Control-Allow-Headers": "Content-Type, Authorization"
 };
 
 // Filter out short-term gambling/speculation markets
@@ -2888,16 +2888,68 @@ function hasEventStarted(title, slug, avgPrice) {
   return false;
 }
 
+// ============================================================
+// ADMIN AUTH
+// Mutating or costly endpoints require `Authorization: Bearer <ADMIN_TOKEN>`.
+// ADMIN_TOKEN is a Wrangler secret (never committed, never shipped to the
+// browser bundle):  npx wrangler secret put ADMIN_TOKEN
+// When the secret is unset these endpoints are DISABLED (fail closed),
+// not left open.
+// ============================================================
+function isAdminAuthorized(request, env) {
+  if (!env.ADMIN_TOKEN) return false;
+  const h = request.headers.get("Authorization") || "";
+  return h === "Bearer " + env.ADMIN_TOKEN;
+}
+
+const ADMIN_EXACT_PATHS = new Set([
+  "/clear-cache",          // wipes KV scan state
+  "/test-sms",             // sends SMS (Twilio cost)
+  "/send-alert",           // sends SMS (Twilio cost)
+  "/alerts/subscribe",     // adds/edits SMS subscribers (GET and POST both mutate)
+  "/alerts/subscribers",   // lists subscriber phone numbers (PII)
+  "/learning/settle",      // manual settlement trigger
+  "/learning/optimize",    // manual optimization trigger
+  "/learning/lines/update",// manual line-movement trigger
+  "/investigate"           // spends Anthropic API tokens
+]);
+
+function requiresAdmin(path, url) {
+  if (path.startsWith("/admin")) return true;                       // /admin/ping, /admin/reprocess-wallets, ...
+  if (path.startsWith("/debug")) return true;                       // internal diagnostics
+  if (path.startsWith("/learning/debug")) return true;              // internal diagnostics
+  if (ADMIN_EXACT_PATHS.has(path)) return true;
+  if (path === "/sweep/overround" && url.searchParams.get("live")) return true; // live sweep spends API calls
+  return false;
+}
+
 export default {
   // HTTP request handler
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const path = url.pathname;
-    
+
     if (request.method === "OPTIONS") {
       return new Response(null, { headers: corsHeaders });
     }
-    
+
+    if (requiresAdmin(path, url)) {
+      if (!isAdminAuthorized(request, env)) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: env.ADMIN_TOKEN
+            ? "Unauthorized: admin token required"
+            : "Admin endpoints are disabled: the ADMIN_TOKEN secret is not set (npx wrangler secret put ADMIN_TOKEN)"
+        }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      // Token check for the dashboard's sign-in flow.
+      if (path === "/admin/ping") {
+        return new Response(JSON.stringify({ success: true, ok: true }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+    }
+
     try {
       if (path === "/scan" || path === "/api/scan") {
         const hours = parseInt(url.searchParams.get("hours") || "48");
