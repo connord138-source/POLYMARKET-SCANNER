@@ -731,6 +731,10 @@ async function recordSignalOutcome(env, signalKey, signalData, outcome, meta) {
 
   // Score the agent's investigation against ground truth (Gamma-only).
   await recordBrierOutcome(env, signalData, outcome, meta);
+
+  // Mirror the settlement into D1 so /signals/history can show how the
+  // signal played out (guarded no-op when DB is unbound).
+  await d1SettleSignal(env, signalData);
 }
 
 // ============================================================
@@ -777,6 +781,57 @@ async function d1SettleInvestigation(env, inv) {
       inv.settledBy || null, inv.settledAt || new Date().toISOString()
     ).run();
   } catch (e) { console.log("D1 settle investigation error:", e.message); }
+}
+
+// Mirror a settled signal's outcome onto its signals_log row. `signalData`
+// is the KV learning record (see storeSignalForLearning / recordSignalOutcome).
+async function d1SettleSignal(env, signalData) {
+  if (!env.DB || !signalData || !signalData.id) return;
+  try {
+    await env.DB.prepare(
+      "UPDATE signals_log SET outcome=?2, winning_outcome=?3, profit_pct=?4, settled_by=?5, settled_at=?6 WHERE id=?1"
+    ).bind(
+      signalData.id,
+      signalData.outcome || null,
+      signalData.winningOutcome || null,
+      (typeof signalData.profitLoss === "number" ? signalData.profitLoss : null),
+      signalData.settledBy || null,
+      signalData.settledAt || new Date().toISOString()
+    ).run();
+  } catch (e) { console.log("D1 settle signal error:", e.message); }
+}
+
+// Copy KV-settled outcomes onto D1 rows the hot-path missed (rows written
+// before the DB binding existed, or settled while D1 was unavailable).
+// Bounded per run; rows whose KV record expired unsettled are closed out as
+// UNKNOWN after the 30-day KV TTL has safely passed.
+async function d1BackfillSignalOutcomes(env, limit) {
+  if (!env.DB || !env.SIGNALS_CACHE) return { checked: 0, updated: 0, expired: 0 };
+  var out = { checked: 0, updated: 0, expired: 0 };
+  try {
+    var rows = await env.DB.prepare(
+      "SELECT id, detected_at FROM signals_log WHERE outcome IS NULL ORDER BY detected_at ASC LIMIT ?1"
+    ).bind(limit || 25).all();
+    var results = (rows && rows.results) || [];
+    for (var i = 0; i < results.length; i++) {
+      var row = results[i];
+      out.checked++;
+      var rec = await env.SIGNALS_CACHE.get(KV_KEYS.SIGNALS_PREFIX + row.id, { type: "json" });
+      if (rec && rec.outcome) {
+        await d1SettleSignal(env, rec);
+        out.updated++;
+      } else if (!rec && row.detected_at) {
+        var ageDays = (Date.now() - new Date(row.detected_at).getTime()) / 86400000;
+        if (ageDays > 31) {
+          await env.DB.prepare(
+            "UPDATE signals_log SET outcome='UNKNOWN', settled_by='kv_expired', settled_at=?2 WHERE id=?1"
+          ).bind(row.id, new Date().toISOString()).run();
+          out.expired++;
+        }
+      }
+    }
+  } catch (e) { console.log("D1 backfill signals error:", e.message); }
+  return out;
 }
 
 async function d1InsertOpportunity(env, opp) {
@@ -2993,9 +3048,64 @@ export default {
       }
       
       // ============================================
+      // SIGNAL HISTORY (settlement tracking)
+      // ============================================
+      // How past signals played out. D1-backed; outcome NULL = still pending.
+      // ?status=all|pending|settled|won|lost  ?limit=1..200
+      if (path === "/signals/history") {
+        if (!env.DB) {
+          return new Response(JSON.stringify({ success: false, error: "D1 not configured" }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+        try {
+          const histLimit = Math.min(Math.max(parseInt(url.searchParams.get("limit") || "100", 10) || 100, 1), 200);
+          const histStatus = (url.searchParams.get("status") || "all").toLowerCase();
+          let where = "";
+          if (histStatus === "pending") where = "WHERE outcome IS NULL";
+          else if (histStatus === "settled") where = "WHERE outcome IS NOT NULL";
+          else if (histStatus === "won") where = "WHERE outcome = 'WIN'";
+          else if (histStatus === "lost") where = "WHERE outcome = 'LOSS'";
+          const rows = await env.DB.prepare(
+            "SELECT id, market_slug, direction_raw, market_title, market_type, score, largest_bet, volume, num_wallets, avg_entry_price, event_date, detected_at, outcome, winning_outcome, profit_pct, settled_by, settled_at " +
+            "FROM signals_log " + where + " ORDER BY detected_at DESC LIMIT ?1"
+          ).bind(histLimit).all();
+          const agg = await env.DB.prepare(
+            "SELECT COUNT(*) AS total, " +
+            "SUM(CASE WHEN outcome='WIN' THEN 1 ELSE 0 END) AS wins, " +
+            "SUM(CASE WHEN outcome='LOSS' THEN 1 ELSE 0 END) AS losses, " +
+            "SUM(CASE WHEN outcome='UNKNOWN' THEN 1 ELSE 0 END) AS unknown, " +
+            "SUM(CASE WHEN outcome IS NULL THEN 1 ELSE 0 END) AS pending, " +
+            "AVG(CASE WHEN outcome IN ('WIN','LOSS') THEN profit_pct END) AS avg_profit_pct " +
+            "FROM signals_log"
+          ).first();
+          const settledCount = (agg.wins || 0) + (agg.losses || 0);
+          return new Response(JSON.stringify({
+            success: true,
+            stats: {
+              total: agg.total || 0,
+              wins: agg.wins || 0,
+              losses: agg.losses || 0,
+              unknown: agg.unknown || 0,
+              pending: agg.pending || 0,
+              winRate: settledCount > 0 ? Math.round(((agg.wins || 0) / settledCount) * 100) : null,
+              avgProfitPct: (agg.avg_profit_pct === null || agg.avg_profit_pct === undefined) ? null : Math.round(agg.avg_profit_pct)
+            },
+            signals: rows.results || []
+          }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        } catch (e) {
+          return new Response(JSON.stringify({ success: false, error: e.message }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+      }
+
+      // ============================================
       // LEARNING SYSTEM ENDPOINTS
       // ============================================
-      
+
       // Get learning stats overview
       if (path === "/learning/stats") {
         if (!env.SIGNALS_CACHE) {
@@ -4786,6 +4896,14 @@ export default {
       const settlementResults = await processSettledSignals(env);
       console.log(`Settlement: ${settlementResults.processed} processed, ${settlementResults.wins}W-${settlementResults.losses}L`);
       cronStatus.settlement = settlementResults;
+
+      // Mirror any KV-settled outcomes into D1 that the hot-path missed
+      // (e.g. signals_log rows written before the DB binding existed).
+      try {
+        cronStatus.signalBackfill = await d1BackfillSignalOutcomes(env, 25);
+      } catch (e) {
+        cronStatus.signalBackfill = { error: e.message };
+      }
       
       // PHASE 2: Update line movements for active signals
       console.log("Checking line movements...");

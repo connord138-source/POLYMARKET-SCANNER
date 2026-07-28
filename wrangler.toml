@@ -16,14 +16,13 @@ id = "591fb82d52b14b408378eeee28bd3a25"
 # Model/cost knobs are plain vars, safe to commit; override as needed, e.g.:
 #   INVESTIGATION_MODEL = "claude-opus-4-8"   (default; flip to sonnet/haiku to cut cost)
 
-# Optional D1 analytics DB (queryable mirror of agent analytics). To enable:
-#   wrangler d1 create polymarket-scanner        # copy the returned database_id below
-#   wrangler d1 execute polymarket-scanner --remote --file=migrations/0001_init.sql
-# then uncomment this block. The Worker no-ops D1 writes until DB is bound.
-# [[d1_databases]]
-# binding = "DB"
-# database_name = "polymarket-scanner"
-# database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+# D1 analytics DB (queryable mirror of agent analytics + signal settlement
+# history). Schema: migrations/0001_init.sql + 0002_signal_outcomes.sql
+# (both applied to the remote database).
+[[d1_databases]]
+binding = "DB"
+database_name = "polymarket-scanner"
+database_id = "524fc0f8-e5dd-46d1-a93b-156857668363"
 
 [triggers]
 crons = ["*/5 * * * *"]
