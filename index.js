@@ -3131,6 +3131,86 @@ export default {
         }
       }
 
+      // ============================================
+      // SIGNAL ANALYTICS (settled-performance breakdowns)
+      // ============================================
+      // Win rate / avg return sliced by score band, market type, whale entry
+      // price and post-signal line movement. Read-only over signals_log.
+      if (path === "/signals/analytics") {
+        if (!env.DB) {
+          return new Response(JSON.stringify({ success: false, error: "D1 not configured" }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+        try {
+          const AGG =
+            "COUNT(*) AS total, " +
+            "SUM(outcome='WIN') AS wins, " +
+            "SUM(outcome='LOSS') AS losses, " +
+            "SUM(outcome='UNKNOWN') AS unknown, " +
+            "SUM(outcome IS NULL) AS pending, " +
+            "AVG(CASE WHEN outcome IN ('WIN','LOSS') THEN profit_pct END) AS avg_profit_pct";
+
+          const byScore = await env.DB.prepare(
+            "SELECT CASE WHEN score >= 100 THEN '100+' WHEN score >= 70 THEN '70-99' WHEN score >= 50 THEN '50-69' ELSE 'under 50' END AS band, " +
+            AGG + " FROM signals_log GROUP BY band"
+          ).all();
+
+          const byType = await env.DB.prepare(
+            "SELECT COALESCE(market_type, 'other') AS band, " + AGG +
+            " FROM signals_log GROUP BY band"
+          ).all();
+
+          const byEntry = await env.DB.prepare(
+            "SELECT CASE WHEN avg_entry_price IS NULL THEN 'unknown' " +
+            "WHEN avg_entry_price <= 20 THEN '1-20 (longshot)' " +
+            "WHEN avg_entry_price <= 40 THEN '21-40' " +
+            "WHEN avg_entry_price <= 60 THEN '41-60 (tossup)' " +
+            "WHEN avg_entry_price <= 80 THEN '61-80' " +
+            "ELSE '81-99 (favorite)' END AS band, " +
+            AGG + " FROM signals_log GROUP BY band"
+          ).all();
+
+          const byMovement = await env.DB.prepare(
+            "SELECT CASE WHEN price_move_pct IS NULL THEN 'not tracked' " +
+            "WHEN price_move_pct > 2 THEN 'moved with whales (>+2)' " +
+            "WHEN price_move_pct < -2 THEN 'moved against whales (<-2)' " +
+            "ELSE 'flat (-2 to +2)' END AS band, " +
+            AGG + " FROM signals_log GROUP BY band"
+          ).all();
+
+          const shape = (rows) => (rows.results || []).map((r) => {
+            const settled = (r.wins || 0) + (r.losses || 0);
+            return {
+              band: r.band,
+              total: r.total || 0,
+              wins: r.wins || 0,
+              losses: r.losses || 0,
+              unknown: r.unknown || 0,
+              pending: r.pending || 0,
+              settled,
+              winRate: settled > 0 ? Math.round(((r.wins || 0) / settled) * 100) : null,
+              avgProfitPct: (r.avg_profit_pct === null || r.avg_profit_pct === undefined) ? null : Math.round(r.avg_profit_pct)
+            };
+          });
+
+          return new Response(JSON.stringify({
+            success: true,
+            byScore: shape(byScore),
+            byType: shape(byType),
+            byEntry: shape(byEntry),
+            byMovement: shape(byMovement),
+            generatedAt: new Date().toISOString()
+          }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        } catch (e) {
+          return new Response(JSON.stringify({ success: false, error: e.message }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+      }
+
       if (path === "/alerts/subscribe" && request.method === "POST") {
         const body = await request.json();
         const result = await subscribeToAlerts(body, env);
