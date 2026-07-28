@@ -8,6 +8,17 @@ import {
 import {
   parseGammaArray, matchOutcomeIndex, fetchGammaJson, findGammaMarket, settleWithGamma
 } from "./src/gamma.js";
+import {
+  getAutotraderConfig, updateAutotraderConfig, getOpenPositions,
+  getTradeHistory, getTradeLog, getBotPerformance, getDailyStats,
+  getPnLSummary, getCategoryPerformance, getExecQueue, addToExecQueue,
+  handleExecConfirm, manualClosePosition, emergencyStopAll,
+  processSignals, getBotLearning, recalcPerformance, recordClosedTrade
+} from "./src/autotrader.js";
+import {
+  getFactorStats as atGetFactorStats, getAIRecommendation,
+  getFactorCombos, getDiscoveredPatterns
+} from "./src/at-learning.js";
 
 var POLYMARKET_API = "https://data-api.polymarket.com";
 // SCORING SYSTEM v8 - Adaptive Learning System
@@ -2935,7 +2946,15 @@ const ADMIN_EXACT_PATHS = new Set([
   "/investigate"           // spends Anthropic API tokens
 ]);
 
-function requiresAdmin(path, url) {
+function atJson(data, status) {
+  return new Response(JSON.stringify(data), {
+    status: status || 200,
+    headers: { ...corsHeaders, "Content-Type": "application/json" }
+  });
+}
+
+function requiresAdmin(path, url, method) {
+  if (path.startsWith("/autotrader") && method === "POST") return true;
   if (path.startsWith("/admin")) return true;                       // /admin/ping, /admin/reprocess-wallets, ...
   if (path.startsWith("/debug")) return true;                       // internal diagnostics
   if (path.startsWith("/learning/debug")) return true;              // internal diagnostics
@@ -2954,7 +2973,7 @@ export default {
       return new Response(null, { headers: corsHeaders });
     }
 
-    if (requiresAdmin(path, url)) {
+    if (requiresAdmin(path, url, request.method)) {
       if (!isAdminAuthorized(request, env)) {
         return new Response(JSON.stringify({
           success: false,
@@ -3060,6 +3079,58 @@ export default {
       }
       
       // Subscribe to alerts endpoint (POST)
+      // Alert-tier signals for the dashboard. Mirrors the SMS thresholds
+      // (CRITICAL = what would trigger an SMS) and adds lower tiers so the
+      // page is useful between critical hits.
+      if (path === "/alerts/check") {
+        if (!env.SIGNALS_CACHE) {
+          return new Response(JSON.stringify({ success: false, alerts: [], error: "No cache configured" }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+        try {
+          const cachedSignals = await env.SIGNALS_CACHE.get("signals", { type: "json" }) || [];
+          const alerts = [];
+          for (const s of cachedSignals) {
+            const score = s.score || 0;
+            const bet = s.largestBet || 0;
+            let priority = null;
+            if (score >= 100 && bet >= 20000) priority = "CRITICAL";       // SMS tier
+            else if (score >= 100 || bet >= 20000) priority = "HIGH";
+            else if (score >= 70) priority = "MEDIUM";
+            if (!priority) continue;
+            alerts.push({
+              id: s.id,
+              market: s.marketTitle || s.marketSlug || "Unknown market",
+              direction: s.direction || s.directionRaw,
+              amount: bet,
+              price: s.avgEntryPrice,
+              aiScore: score,
+              reasons: s.reasons || s.factors || [],
+              timestamp: s.detectedAt,
+              priority
+            });
+          }
+          alerts.sort((a, b) => (b.aiScore || 0) - (a.aiScore || 0));
+          return new Response(JSON.stringify({
+            success: true,
+            alerts,
+            thresholds: {
+              CRITICAL: "score >= 100 and largest bet >= $20k (also sent by SMS)",
+              HIGH: "score >= 100 or largest bet >= $20k",
+              MEDIUM: "score >= 70"
+            },
+            checkedAt: new Date().toISOString()
+          }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        } catch (e) {
+          return new Response(JSON.stringify({ success: false, alerts: [], error: e.message }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+      }
+
       if (path === "/alerts/subscribe" && request.method === "POST") {
         const body = await request.json();
         const result = await subscribeToAlerts(body, env);
@@ -3174,6 +3245,339 @@ export default {
           });
         }
       }
+
+      // ============================================
+      // AUTO-TRADER (engine grafted from the v18 modular branch)
+      // GET endpoints are public dashboards; every POST is admin-gated by
+      // the global ADMIN_TOKEN guard (see requiresAdmin).
+      // ============================================
+      // Get autotrader config
+      if (path === "/autotrader/config" && request.method === "GET") {
+        const config = await getAutotraderConfig(env);
+        return atJson(config);
+      }
+      
+      // Update autotrader config
+      if (path === "/autotrader/config" && request.method === "POST") {
+        const updates = await request.json();
+        const result = await updateAutotraderConfig(env, updates);
+        return atJson(result);
+      }
+      
+      // Get open positions
+      if (path === "/autotrader/positions") {
+        const positions = await getOpenPositions(env);
+        return atJson(positions);
+      }
+      
+      // Get trade history
+      if (path === "/autotrader/history") {
+        const limit = parseInt(url.searchParams.get("limit") || "50");
+        const history = await getTradeHistory(env, limit);
+        return atJson(history);
+      }
+      
+      // Get decision log
+      if (path === "/autotrader/log") {
+        const limit = parseInt(url.searchParams.get("limit") || "50");
+        const log = await getTradeLog(env, limit);
+        return atJson(log);
+      }
+      
+      // Get bot performance (lifetime)
+      if (path === "/autotrader/performance") {
+        const perf = await getBotPerformance(env);
+        return atJson(perf || {});
+      }
+
+      if (path === "/autotrader/odds-performance" && request.method === "GET") {
+        const raw = await env.SIGNALS_CACHE.get('autotrader_odds_performance');
+        const oddsPerf = raw ? JSON.parse(raw) : {};
+        return atJson(oddsPerf);
+      }
+      
+      // Get daily stats
+      if (path === "/autotrader/daily") {
+        const daily = await getDailyStats(env);
+        return atJson(daily);
+      }
+
+      if (path === "/autotrader/daily-range") {
+        const days = parseInt(url.searchParams.get('days') || '10');
+        const results = [];
+        for (let i = 0; i < days; i++) {
+          const date = new Date(Date.now() - i * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+          const stats = await env.SIGNALS_CACHE.get(`autotrader_daily_stats_${date}`, { type: 'json' });
+          if (stats) results.push(stats);
+          else results.push({ date, tradesOpened: 0, tradesClosed: 0, totalSpent: 0, totalReturned: 0, realizedPnL: 0, wins: 0, losses: 0 });
+        }
+        return atJson({ success: true, days: results });
+      }
+      
+      // Get P&L summary (week/month/90-day)
+      if (path === "/autotrader/pnl-summary") {
+        const summary = await getPnLSummary(env);
+        return atJson(summary);
+      }
+      
+      // Get category performance (analytics by market category)
+      if (path === "/autotrader/categories" && request.method === "GET") {
+        const categories = await getCategoryPerformance(env);
+        return atJson(categories);
+      }
+      
+      // Get execution queue (executor polls this)
+      if (path === "/autotrader/exec-queue" && request.method === "GET") {
+        const queue = await getExecQueue(env);
+        return atJson(queue);
+      }
+      
+      // Executor reports back: trade filled or failed
+      if (path === "/autotrader/exec-confirm" && request.method === "POST") {
+        const body = await request.json();
+        const result = await handleExecConfirm(env, body);
+        return atJson(result);
+      }
+      
+      // Reset positions and exec queue (emergency cleanup)
+      if (path === "/autotrader/reset-positions" && request.method === "POST") {
+        await env.SIGNALS_CACHE.put('autotrader_positions', JSON.stringify([]));
+        await env.SIGNALS_CACHE.put('autotrader_exec_queue', JSON.stringify([]));
+        return atJson({ success: true, message: "Positions and exec queue cleared" });
+      }
+
+      // Position prices (for executor monitoring)
+      if (path === "/autotrader/position-prices" && request.method === "GET") {
+        const positions = await getOpenPositions(env);
+        const config = await getAutotraderConfig(env);
+        const positionData = positions
+          .filter(p => !p.paperTrade && p.onChainOrderId && p.onChainOrderId !== 'unknown')
+          .map(p => ({
+            id: p.id,
+            tokenId: p.tokenId,
+            conditionId: p.conditionId,
+            marketSlug: p.marketSlug,
+            marketTitle: p.marketTitle,
+            entryPrice: p.entryPrice,
+            shares: p.shares,
+            negRisk: p.negRisk,
+            tickSize: p.tickSize,
+            peakPctGain: p.peakPctGain || 0,
+            trailingStopActive: p.trailingStopActive || false,
+            trailingStopLevel: p.trailingStopLevel ?? null,
+            openedAt: p.openedAt,
+            whaleWallet: p.whaleWallet ?? null,
+          }));
+        return atJson({
+          positions: positionData,
+          exitConfig: {
+            stopLossPercent: config.stopLossPercent,
+            takeProfitPercent: config.takeProfitPercent,
+            trailingStopActivation: config.trailingStopActivation ?? 30,
+            trailingStopPercent: config.trailingStopPercent ?? 20,
+          }
+        });
+      }
+
+      // Trigger exit (executor calls this)
+      if (path === "/autotrader/trigger-exit" && request.method === "POST") {
+        const body = await request.json();
+        const { positionId, exitType, exitReason, currentPrice } = body;
+        const positions = await getOpenPositions(env);
+        const position = positions.find(p => p.id === positionId);
+        if (!position) return atJson({ error: "Position not found" }, 404);
+        if (position.pendingExit) return atJson({ error: "Exit already pending" }, 409);
+        const execQueue = await getExecQueue(env);
+        const alreadyQueued = execQueue.some(q =>
+          q.status === 'PENDING' && q.action === 'SELL' &&
+          (q.positionId === position.id || q.tokenId === position.tokenId)
+        );
+        if (alreadyQueued) return atJson({ error: "Sell already queued" }, 409);
+        const config = await getAutotraderConfig(env);
+        await addToExecQueue(env, {
+          id: `exit_${exitType}_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+          action: 'SELL',
+          marketSlug: position.marketSlug,
+          marketTitle: position.marketTitle,
+          conditionId: position.conditionId ?? null,
+          tokenId: position.tokenId ?? null,
+          negRisk: position.negRisk ?? false,
+          tickSize: position.tickSize ?? '0.01',
+          exitPrice: currentPrice != null ? currentPrice / 100 : position.entryPrice / 100,
+          entryPrice: position.entryPrice / 100,  // needed for floor calculation
+          stopLossPercent: config.stopLossPercent ?? 40,  // needed for floor calculation
+          size: position.size,
+          shares: position.shares,
+          exitType: exitType,
+          exitReason: exitReason ?? '',
+          originalTradeId: position.tradeId ?? null,
+          positionId: position.id,
+        });
+        position.pendingExit = true;
+        position.pendingExitSince = new Date().toISOString();
+        await env.SIGNALS_CACHE.put('autotrader_positions', JSON.stringify(positions));
+        console.log(`Exit triggered by executor: ${position.marketTitle} | ${exitType} | ${exitReason}`);
+        return atJson({ success: true, message: `Exit queued: ${exitType}` });
+      }
+
+      // Report that a market's orderbook has been removed (likely resolved)
+      if (path === '/autotrader/report-resolved' && request.method === 'POST') {
+        const body = await request.json();
+        const { positionId, tokenId, reason } = body;
+
+        const positions = await getOpenPositions(env);
+        const position = positions.find(p =>
+          (positionId && p.id === positionId) || (tokenId && p.tokenId === tokenId)
+        );
+
+        if (!position) {
+          return atJson({ error: 'Position not found' }, 404);
+        }
+
+        console.log(`Market resolved (orderbook removed): ${position.marketTitle} | reason: ${reason}`);
+
+        // Placeholder exit price (percent) — real P&L can be adjusted after Polymarket claims
+        const exitPrice = position.entryPrice;
+        await recordClosedTrade(env, position, exitPrice, 'market_resolved', `Orderbook removed: ${reason || 'unknown'}`);
+
+        const remaining = positions.filter(p => p.id !== position.id);
+        await env.SIGNALS_CACHE.put('autotrader_positions', JSON.stringify(remaining), {
+          expirationTtl: 30 * 24 * 60 * 60,
+        });
+
+        return atJson({ success: true, message: `Position closed as resolved: ${position.marketTitle}` });
+      }
+
+      // Check whale balance (executor monitors if whale still holds)
+      if (path === "/autotrader/check-whale-balance" && request.method === "POST") {
+        const body = await request.json();
+        const { walletAddress, tokenId, conditionId } = body;
+        if (!walletAddress || !tokenId) {
+          return atJson({ error: "walletAddress and tokenId required" }, 400);
+        }
+        let whaleBalance = null;
+        let whaleExited = false;
+        try {
+          try {
+            const gammaResp = await fetch('https://gamma-api.polymarket.com/query', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                query: `{ positions(where: { user: "${walletAddress.toLowerCase()}", asset: { tokenId: "${tokenId}" } }) { size avgPrice } }`
+              })
+            });
+            if (gammaResp.ok) {
+              const gammaData = await gammaResp.json();
+              const positions = gammaData?.data?.positions || [];
+              whaleBalance = positions.length > 0 ? parseFloat(positions[0].size || '0') : 0;
+              whaleExited = whaleBalance <= 0;
+            }
+          } catch (gammaErr) {
+            // Gamma failed, try fallback
+          }
+          if (whaleBalance === null) {
+            try {
+              const dataResp = await fetch(`https://data-api.polymarket.com/positions?user=${encodeURIComponent(walletAddress.toLowerCase())}&sizeThreshold=0&limit=100`);
+              if (dataResp.ok) {
+                const positions = await dataResp.json();
+                const match = positions.find(p => p.asset === tokenId || p.tokenId === tokenId);
+                whaleBalance = match ? parseFloat(match.size || '0') : 0;
+                whaleExited = !match || whaleBalance <= 0;
+              }
+            } catch (dataErr) {
+              // Both failed
+            }
+          }
+          return atJson({
+            walletAddress,
+            tokenId,
+            whaleBalance,
+            whaleExited,
+            checkedAt: new Date().toISOString(),
+          });
+        } catch (err) {
+          return atJson({ error: err.message }, 500);
+        }
+      }
+
+      // Update position (executor sends peak gain updates)
+      if (path === "/autotrader/update-position" && request.method === "POST") {
+        const body = await request.json();
+        const { positionId, peakPctGain, trailingStopActive, trailingStopLevel } = body;
+        const positions = await getOpenPositions(env);
+        const position = positions.find(p => p.id === positionId);
+        if (!position) return atJson({ error: "Position not found" }, 404);
+        if (peakPctGain !== undefined && peakPctGain > (position.peakPctGain || 0)) {
+          position.peakPctGain = peakPctGain;
+        }
+        if (trailingStopActive !== undefined) position.trailingStopActive = trailingStopActive;
+        if (trailingStopLevel !== undefined) position.trailingStopLevel = trailingStopLevel;
+        await env.SIGNALS_CACHE.put('autotrader_positions', JSON.stringify(positions));
+        return atJson({ success: true });
+      }
+      
+      // Get bot self-learning data
+      if (path === "/autotrader/learning") {
+        const learning = await getBotLearning(env);
+        return atJson(learning);
+      }
+
+      if (path === "/autotrader/ai-intelligence" && request.method === "GET") {
+        try {
+          const factorStats = await atGetFactorStats(env);
+          const recommendation = await getAIRecommendation(env);
+          const combos = await getFactorCombos(env);
+          const botLearning = await getBotLearning(env);
+          const patterns = await getDiscoveredPatterns(env);
+
+          const factorArray = Object.entries(factorStats)
+            .map(([name, stats]) => ({ name, ...stats, total: (stats.wins || 0) + (stats.losses || 0) }))
+            .filter(f => f.total >= 5)
+            .sort((a, b) => b.winRate - a.winRate);
+
+          return atJson({
+            topFactors: factorArray.slice(0, 10),
+            bottomFactors: factorArray.slice(-10).reverse(),
+            recommendation,
+            bestCombos: combos.bestCombos?.slice(0, 5) || [],
+            worstCombos: combos.worstCombos?.slice(0, 5) || [],
+            botLearning,
+            discoveredPatterns: patterns.promotedPatterns || [],
+            nearPromotion: patterns.nearPromotion?.slice(0, 5) || [],
+            totalFactors: factorArray.length,
+          });
+        } catch (e) {
+          return atJson({ error: e.message }, 500);
+        }
+      }
+      
+      // Manually close a position
+      if (path.startsWith("/autotrader/close/") && request.method === "POST") {
+        const positionId = path.split("/")[3];
+        const result = await manualClosePosition(env, positionId);
+        return atJson(result);
+      }
+      
+      // Emergency stop - disable bot and close all positions
+      if (path === "/autotrader/emergency-stop" && request.method === "POST") {
+        const result = await emergencyStopAll(env);
+        return atJson(result);
+      }
+      
+      // Manually trigger signal processing (for testing)
+      if (path === "/autotrader/process" && request.method === "POST") {
+        const scanResult = await runScan(48, 15, env);
+        const signals = scanResult.signals || [];
+        const result = await processSignals(env, signals);
+        return atJson(result);
+      }
+      
+      // Recalculate performance stats from trade history (fixes corrupted data)
+      if (path === "/autotrader/recalc" && request.method === "POST") {
+        const perf = await recalcPerformance(env);
+        return atJson({ success: true, performance: perf });
+      }
+
 
       // ============================================
       // LEARNING SYSTEM ENDPOINTS
@@ -4976,6 +5380,26 @@ export default {
         cronStatus.signalBackfill = await d1BackfillSignalOutcomes(env, 25);
       } catch (e) {
         cronStatus.signalBackfill = { error: e.message };
+      }
+
+      // AUTO-TRADER: process fresh signals when the bot is enabled
+      // (throttled to one pass per 5 minutes, mirrors the v18 cron).
+      try {
+        const atConfig = await getAutotraderConfig(env);
+        if (atConfig.enabled) {
+          const lastAutoRun = await env.SIGNALS_CACHE?.get('last_autotrader_run');
+          const minSinceAuto = lastAutoRun ? (Date.now() - new Date(lastAutoRun).getTime()) / 60000 : 999;
+          if (minSinceAuto > 5) {
+            const atScan = await runScan(48, 15, env);
+            if (atScan.signals && atScan.signals.length > 0) {
+              const atResult = await processSignals(env, atScan.signals);
+              cronStatus.autotrader = atResult;
+            }
+            await env.SIGNALS_CACHE?.put('last_autotrader_run', new Date().toISOString());
+          }
+        }
+      } catch (e) {
+        cronStatus.autotrader = { error: e.message };
       }
       
       // PHASE 2: Update line movements for active signals
