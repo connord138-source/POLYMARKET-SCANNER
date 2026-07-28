@@ -7,10 +7,22 @@ account_id = "b4b3d8d5e1d7a7c2d0d35d9863bfd988"
 binding = "SIGNALS_CACHE"
 id = "591fb82d52b14b408378eeee28bd3a25"
 
-[vars]
-TWILIO_ACCOUNT_SID = "AC0cadc63a02792cf2a6a53ae838b5085d"
-TWILIO_AUTH_TOKEN = "711a32093c9d92024823f3c0b5a17ed7"
-TWILIO_PHONE_NUMBER = "+18053286332"
+# Twilio credentials are stored as Wrangler secrets, not committed vars.
+# The code reads: TWILIO_SID, TWILIO_AUTH, TWILIO_PHONE (see sendSMS in index.js).
+# Set them with: wrangler secret put TWILIO_SID (etc.)
+#
+# Agent investigation (optional): the web-search agent needs an Anthropic key.
+#   wrangler secret put ANTHROPIC_API_KEY
+# Model/cost knobs are plain vars, safe to commit; override as needed, e.g.:
+#   INVESTIGATION_MODEL = "claude-opus-4-8"   (default; flip to sonnet/haiku to cut cost)
+
+# D1 analytics DB (queryable mirror of agent analytics + signal settlement
+# history). Schema: migrations/0001_init.sql + 0002_signal_outcomes.sql
+# (both applied to the remote database).
+[[d1_databases]]
+binding = "DB"
+database_name = "polymarket-scanner"
+database_id = "524fc0f8-e5dd-46d1-a93b-156857668363"
 
 [triggers]
 crons = ["*/5 * * * *"]

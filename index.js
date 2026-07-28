@@ -1,343 +1,13 @@
 // src/index.js
 
-// ============================================================
-// THE ODDS API INTEGRATION
-// For accurate sports settlement and Vegas odds comparison
-// ============================================================
-
-var ODDS_API_BASE = "https://api.the-odds-api.com/v4";
-
-// Sport key mapping: Polymarket slug patterns -> The Odds API sport keys
-var SPORT_KEY_MAP = {
-  'nfl': 'americanfootball_nfl',
-  'nba': 'basketball_nba',
-  'mlb': 'baseball_mlb',
-  'nhl': 'icehockey_nhl',
-  'ncaaf': 'americanfootball_ncaaf',
-  'ncaab': 'basketball_ncaab',
-  'mma': 'mma_mixed_martial_arts',
-  'ufc': 'mma_mixed_martial_arts',
-  'epl': 'soccer_epl',
-  'ucl': 'soccer_uefa_champions_league',
-  'mls': 'soccer_usa_mls',
-  'wta': 'tennis_wta_australian_open',
-  'atp': 'tennis_atp_australian_open',
-  'lol': null, // LoL esports not supported
-  'csgo': null, // CS:GO not supported
-};
-
-// Team name normalization for matching
-var TEAM_ALIASES = {
-  // NFL
-  'patriots': 'New England Patriots', 'ne': 'New England Patriots',
-  'broncos': 'Denver Broncos', 'den': 'Denver Broncos',
-  'chiefs': 'Kansas City Chiefs', 'kc': 'Kansas City Chiefs',
-  'bills': 'Buffalo Bills', 'buf': 'Buffalo Bills',
-  'dolphins': 'Miami Dolphins', 'mia': 'Miami Dolphins',
-  'jets': 'New York Jets', 'nyj': 'New York Jets',
-  'ravens': 'Baltimore Ravens', 'bal': 'Baltimore Ravens',
-  'steelers': 'Pittsburgh Steelers', 'pit': 'Pittsburgh Steelers',
-  'bengals': 'Cincinnati Bengals', 'cin': 'Cincinnati Bengals',
-  'browns': 'Cleveland Browns', 'cle': 'Cleveland Browns',
-  'texans': 'Houston Texans', 'hou': 'Houston Texans',
-  'colts': 'Indianapolis Colts', 'ind': 'Indianapolis Colts',
-  'jaguars': 'Jacksonville Jaguars', 'jax': 'Jacksonville Jaguars',
-  'titans': 'Tennessee Titans', 'ten': 'Tennessee Titans',
-  'cowboys': 'Dallas Cowboys', 'dal': 'Dallas Cowboys',
-  'eagles': 'Philadelphia Eagles', 'phi': 'Philadelphia Eagles',
-  'giants': 'New York Giants', 'nyg': 'New York Giants',
-  'commanders': 'Washington Commanders', 'was': 'Washington Commanders',
-  'bears': 'Chicago Bears', 'chi': 'Chicago Bears',
-  'lions': 'Detroit Lions', 'det': 'Detroit Lions',
-  'packers': 'Green Bay Packers', 'gb': 'Green Bay Packers',
-  'vikings': 'Minnesota Vikings', 'min': 'Minnesota Vikings',
-  'falcons': 'Atlanta Falcons', 'atl': 'Atlanta Falcons',
-  'panthers': 'Carolina Panthers', 'car': 'Carolina Panthers',
-  'saints': 'New Orleans Saints', 'no': 'New Orleans Saints',
-  'buccaneers': 'Tampa Bay Buccaneers', 'tb': 'Tampa Bay Buccaneers',
-  'cardinals': 'Arizona Cardinals', 'ari': 'Arizona Cardinals',
-  '49ers': 'San Francisco 49ers', 'sf': 'San Francisco 49ers',
-  'seahawks': 'Seattle Seahawks', 'sea': 'Seattle Seahawks',
-  'rams': 'Los Angeles Rams', 'lar': 'Los Angeles Rams', 'la': 'Los Angeles Rams',
-  'chargers': 'Los Angeles Chargers', 'lac': 'Los Angeles Chargers',
-  'raiders': 'Las Vegas Raiders', 'lv': 'Las Vegas Raiders',
-  // NBA
-  'lakers': 'Los Angeles Lakers', 'lal': 'Los Angeles Lakers',
-  'celtics': 'Boston Celtics', 'bos': 'Boston Celtics',
-  'warriors': 'Golden State Warriors', 'gsw': 'Golden State Warriors',
-  'bucks': 'Milwaukee Bucks', 'mil': 'Milwaukee Bucks',
-  'heat': 'Miami Heat',
-  'nuggets': 'Denver Nuggets',
-  'suns': 'Phoenix Suns', 'phx': 'Phoenix Suns',
-  'mavericks': 'Dallas Mavericks',
-  'clippers': 'Los Angeles Clippers', 'lac': 'Los Angeles Clippers',
-  'sixers': 'Philadelphia 76ers',
-  '76ers': 'Philadelphia 76ers',
-  'nets': 'Brooklyn Nets', 'bkn': 'Brooklyn Nets',
-  'knicks': 'New York Knicks', 'nyk': 'New York Knicks',
-  'raptors': 'Toronto Raptors', 'tor': 'Toronto Raptors',
-  'bulls': 'Chicago Bulls',
-  'cavaliers': 'Cleveland Cavaliers', 'cavs': 'Cleveland Cavaliers',
-  'pistons': 'Detroit Pistons',
-  'pacers': 'Indiana Pacers',
-  'hawks': 'Atlanta Hawks',
-  'hornets': 'Charlotte Hornets', 'cha': 'Charlotte Hornets',
-  'magic': 'Orlando Magic', 'orl': 'Orlando Magic',
-  'wizards': 'Washington Wizards',
-  'timberwolves': 'Minnesota Timberwolves', 'wolves': 'Minnesota Timberwolves',
-  'thunder': 'Oklahoma City Thunder', 'okc': 'Oklahoma City Thunder',
-  'blazers': 'Portland Trail Blazers', 'por': 'Portland Trail Blazers',
-  'jazz': 'Utah Jazz', 'uta': 'Utah Jazz',
-  'grizzlies': 'Memphis Grizzlies', 'mem': 'Memphis Grizzlies',
-  'pelicans': 'New Orleans Pelicans', 'nop': 'New Orleans Pelicans',
-  'spurs': 'San Antonio Spurs', 'sas': 'San Antonio Spurs',
-  'rockets': 'Houston Rockets',
-  'kings': 'Sacramento Kings', 'sac': 'Sacramento Kings',
-};
-
-// Detect sport from Polymarket slug
-function detectSportFromSlug(slug) {
-  if (!slug) return null;
-  var slugLower = slug.toLowerCase();
-  
-  if (slugLower.startsWith('nfl-') || slugLower.includes('-nfl-')) return 'nfl';
-  if (slugLower.startsWith('nba-') || slugLower.includes('-nba-')) return 'nba';
-  if (slugLower.startsWith('mlb-') || slugLower.includes('-mlb-')) return 'mlb';
-  if (slugLower.startsWith('nhl-') || slugLower.includes('-nhl-')) return 'nhl';
-  if (slugLower.startsWith('ncaaf-') || slugLower.includes('college-football')) return 'ncaaf';
-  if (slugLower.startsWith('ncaab-') || slugLower.includes('college-basketball')) return 'ncaab';
-  if (slugLower.startsWith('ufc-') || slugLower.startsWith('mma-')) return 'mma';
-  if (slugLower.startsWith('epl-') || slugLower.includes('premier-league')) return 'epl';
-  if (slugLower.startsWith('wta-')) return 'wta';
-  if (slugLower.startsWith('atp-')) return 'atp';
-  if (slugLower.startsWith('lol-')) return 'lol';
-  
-  return null;
-}
-
-// Extract team codes from Polymarket slug
-function extractTeamsFromSlug(slug) {
-  if (!slug) return null;
-  
-  // Pattern: nfl-ne-den-2026-01-25, nba-lal-bos-2026-01-25
-  var match = slug.match(/^(?:nfl|nba|mlb|nhl|ncaaf|ncaab)-([a-z0-9]+)-([a-z0-9]+)-\d{4}-\d{2}-\d{2}/i);
-  if (match) {
-    return { away: match[1].toLowerCase(), home: match[2].toLowerCase() };
-  }
-  return null;
-}
-
-// Get full team name from code
-function getTeamFullName(code) {
-  if (!code) return code;
-  return TEAM_ALIASES[code.toLowerCase()] || code;
-}
-
-// Get scores/results from The Odds API
-async function getGameScores(env, sportKey, daysFrom) {
-  if (!env.ODDS_API_KEY) {
-    console.log("No ODDS_API_KEY configured");
-    return null;
-  }
-  
-  try {
-    var url = ODDS_API_BASE + "/sports/" + sportKey + "/scores/?apiKey=" + env.ODDS_API_KEY + "&daysFrom=" + (daysFrom || 3);
-    var response = await fetch(url);
-    
-    if (!response.ok) {
-      console.error("Odds API scores error: " + response.status);
-      return null;
-    }
-    
-    return await response.json();
-  } catch (e) {
-    console.error("Error fetching scores:", e.message);
-    return null;
-  }
-}
-
-// Get current odds from The Odds API
-async function getGameOdds(env, sportKey, markets) {
-  if (!env.ODDS_API_KEY) {
-    console.log("No ODDS_API_KEY configured");
-    return null;
-  }
-  
-  try {
-    var url = ODDS_API_BASE + "/sports/" + sportKey + "/odds/?apiKey=" + env.ODDS_API_KEY + "&regions=us&markets=" + (markets || 'h2h,spreads') + "&oddsFormat=american";
-    var response = await fetch(url);
-    
-    if (!response.ok) {
-      console.error("Odds API odds error: " + response.status);
-      return null;
-    }
-    
-    return await response.json();
-  } catch (e) {
-    console.error("Error fetching odds:", e.message);
-    return null;
-  }
-}
-
-// Find matching game in Odds API results
-function findMatchingGame(games, homeTeamCode, awayTeamCode) {
-  if (!games || !Array.isArray(games)) return null;
-  
-  var homeFullName = getTeamFullName(homeTeamCode);
-  var awayFullName = getTeamFullName(awayTeamCode);
-  
-  for (var i = 0; i < games.length; i++) {
-    var game = games[i];
-    var gameHome = (game.home_team || '').toLowerCase();
-    var gameAway = (game.away_team || '').toLowerCase();
-    var homeMatch = homeFullName.toLowerCase();
-    var awayMatch = awayFullName.toLowerCase();
-    
-    // Check for match
-    if ((gameHome.includes(homeMatch) || homeMatch.includes(gameHome)) &&
-        (gameAway.includes(awayMatch) || awayMatch.includes(gameAway))) {
-      return game;
-    }
-    // Try reversed (home/away might be swapped)
-    if ((gameHome.includes(awayMatch) || awayMatch.includes(gameHome)) &&
-        (gameAway.includes(homeMatch) || homeMatch.includes(gameAway))) {
-      return game;
-    }
-  }
-  
-  return null;
-}
-
-// Convert American odds to implied probability
-function americanToProb(odds) {
-  if (odds > 0) {
-    return 100 / (odds + 100);
-  } else {
-    return Math.abs(odds) / (Math.abs(odds) + 100);
-  }
-}
-
-// Convert probability to American odds
-function probToAmerican(prob) {
-  if (prob >= 0.5) {
-    return Math.round(-100 * prob / (1 - prob));
-  } else {
-    return Math.round(100 * (1 - prob) / prob);
-  }
-}
-
-// Calculate edge: Polymarket price vs Vegas odds
-function calculateEdge(polymarketPrice, vegasOdds) {
-  var polyProb = polymarketPrice / 100;
-  var vegasProb = americanToProb(vegasOdds);
-  var edge = vegasProb - polyProb;
-  
-  return {
-    polymarketProb: Math.round(polyProb * 100),
-    vegasProb: Math.round(vegasProb * 100),
-    edge: Math.round(edge * 100),
-    vegasOdds: vegasOdds,
-    isValue: edge > 0.03
-  };
-}
-
-// Settle sports bet using actual game results from The Odds API
-async function settleWithOddsAPI(env, marketSlug, direction) {
-  var sport = detectSportFromSlug(marketSlug);
-  if (!sport) return null;
-  
-  var sportKey = SPORT_KEY_MAP[sport];
-  if (!sportKey) return null;
-  
-  var teams = extractTeamsFromSlug(marketSlug);
-  if (!teams) return null;
-  
-  var scores = await getGameScores(env, sportKey, 3);
-  if (!scores) return null;
-  
-  var game = findMatchingGame(scores, teams.home, teams.away);
-  if (!game) {
-    console.log("No matching game found for " + marketSlug);
-    return null;
-  }
-  
-  if (!game.completed) {
-    return { status: 'pending', game: game };
-  }
-  
-  if (!game.scores || game.scores.length < 2) {
-    return { status: 'no_scores', game: game };
-  }
-  
-  var homeScore = parseInt(game.scores.find(function(s) { return s.name === game.home_team; })?.score || 0);
-  var awayScore = parseInt(game.scores.find(function(s) { return s.name === game.away_team; })?.score || 0);
-  
-  // Determine winner
-  var winner;
-  if (homeScore > awayScore) {
-    winner = game.home_team;
-  } else if (awayScore > homeScore) {
-    winner = game.away_team;
-  } else {
-    winner = 'tie';
-  }
-  
-  // Check if this is a spread bet
-  var isSpread = marketSlug.includes('spread');
-  if (isSpread) {
-    var spreadMatch = marketSlug.match(/spread-(home|away)-(\d+)pt?(\d)?/i);
-    if (spreadMatch) {
-      var spreadSide = spreadMatch[1].toLowerCase();
-      var spreadPoints = parseFloat(spreadMatch[2] + '.' + (spreadMatch[3] || '5'));
-      
-      var margin = homeScore - awayScore;
-      var spreadWinner;
-      
-      if (spreadSide === 'away') {
-        // Away team getting points (e.g., Broncos +3.5)
-        spreadWinner = (awayScore + spreadPoints) > homeScore ? game.away_team : game.home_team;
-      } else {
-        // Home team giving points
-        spreadWinner = margin > spreadPoints ? game.home_team : game.away_team;
-      }
-      
-      // Check if direction won
-      var dirTeam = getTeamFullName(direction);
-      var didWin = spreadWinner.toLowerCase().includes(dirTeam.toLowerCase()) ||
-                   dirTeam.toLowerCase().includes(spreadWinner.toLowerCase());
-      
-      return {
-        status: 'settled',
-        outcome: didWin ? 'WIN' : 'LOSS',
-        game: game,
-        homeScore: homeScore,
-        awayScore: awayScore,
-        spread: spreadPoints,
-        spreadWinner: spreadWinner,
-        source: 'odds-api'
-      };
-    }
-  }
-  
-  // Regular moneyline bet
-  var dirTeam = getTeamFullName(direction);
-  var didWin = winner.toLowerCase().includes(dirTeam.toLowerCase()) ||
-               dirTeam.toLowerCase().includes(winner.toLowerCase());
-  
-  return {
-    status: 'settled',
-    outcome: didWin ? 'WIN' : 'LOSS',
-    game: game,
-    homeScore: homeScore,
-    awayScore: awayScore,
-    winner: winner,
-    source: 'odds-api'
-  };
-}
-
-// ============================================================
-// END ODDS API INTEGRATION
-// ============================================================
+import {
+  detectSportFromSlug, extractTeamsFromSlug, getTeamFullName,
+  getGameScores, getGameOdds, findMatchingGame,
+  americanToProb, probToAmerican, calculateEdge, settleWithOddsAPI, SPORT_KEY_MAP
+} from "./src/odds.js";
+import {
+  parseGammaArray, matchOutcomeIndex, fetchGammaJson, findGammaMarket, settleWithGamma
+} from "./src/gamma.js";
 
 var POLYMARKET_API = "https://data-api.polymarket.com";
 // SCORING SYSTEM v8 - Adaptive Learning System
@@ -769,6 +439,7 @@ async function storeSignalForLearning(env, signal, factors, wallets) {
     marketSlug: signal.marketSlug,
     marketTitle: signal.marketTitle,
     direction: signal.direction,
+    directionRaw: signal.directionRaw,   // exact Polymarket outcome; stable key for investigation/Brier
     score: signal.score,
     factors: factors,           // Array of factor keys that contributed
     wallets: wallets,           // Array of wallet addresses involved
@@ -806,6 +477,8 @@ async function storeSignalForLearning(env, signal, factors, wallets) {
       await env.SIGNALS_CACHE.put(KV_KEYS.PENDING_SIGNALS, JSON.stringify(pendingSignals));
     }
     
+    await d1InsertSignal(env, signal, detectMarketType(signal.marketTitle));  // guarded
+
     console.log(`Stored signal for learning: ${signal.id}`);
   } catch (e) {
     console.error("Error storing signal for learning:", e.message);
@@ -876,6 +549,1018 @@ async function getFactorWeights(env) {
     console.error("Error getting factor weights:", e.message);
     return {};
   }
+}
+
+// ============================================================
+// PAPER-TRADING ROI LEDGER
+// Every settled signal is booked as a hypothetical $100 buy at the
+// signal's entry price. This measures actual ROI - not just win
+// rate, which is meaningless without entry price - broken down by
+// score band, market type, factor, entry band and settlement source.
+// ============================================================
+
+var PAPER_STAKE = 100;
+var LEDGER_KEY = "paper_ledger";
+var LEDGER_TRADES_KEY = "paper_ledger_trades";
+
+function emptyLedgerBucket() {
+  return { n: 0, wins: 0, losses: 0, unknown: 0, staked: 0, pnl: 0 };
+}
+
+function bumpLedgerBucket(bucket, outcome, pnl) {
+  bucket.n += 1;
+  if (outcome === "WIN") bucket.wins += 1;
+  else if (outcome === "LOSS") bucket.losses += 1;
+  else bucket.unknown += 1;
+  if (outcome === "WIN" || outcome === "LOSS") {
+    bucket.staked += PAPER_STAKE;
+    bucket.pnl = Math.round((bucket.pnl + pnl) * 100) / 100;
+  }
+}
+
+function ledgerScoreBand(score) {
+  if (score >= 150) return "150+";
+  if (score >= 100) return "100-149";
+  if (score >= 75) return "75-99";
+  return "50-74"; // signals only enter the learning store at score >= 50
+}
+
+function ledgerEntryBand(entryPct) {
+  if (entryPct < 25) return "1-24";
+  if (entryPct < 50) return "25-49";
+  if (entryPct < 75) return "50-74";
+  return "75-99";
+}
+
+async function recordPaperTrade(env, signalData, outcome) {
+  if (!env.SIGNALS_CACHE) return;
+
+  var entry = signalData.priceAtSignal;
+  var gradeable = (outcome === "WIN" || outcome === "LOSS") && entry >= 1 && entry <= 99;
+  var effectiveOutcome = gradeable ? outcome : "UNKNOWN";
+  var pnl = 0;
+  if (gradeable) {
+    // $100 buys (100/entry) shares paying $1 each on a win
+    pnl = outcome === "WIN"
+      ? Math.round(PAPER_STAKE * (100 - entry) / entry * 100) / 100
+      : -PAPER_STAKE;
+  }
+
+  try {
+    var ledger = await env.SIGNALS_CACHE.get(LEDGER_KEY, { type: "json" });
+    if (!ledger) {
+      ledger = {
+        version: 1,
+        stakePerTrade: PAPER_STAKE,
+        createdAt: new Date().toISOString(),
+        overall: emptyLedgerBucket(),
+        byScoreBand: {},
+        byMarketType: {},
+        byEntryBand: {},
+        bySource: {},
+        byFactor: {}
+      };
+    }
+
+    var bumpGroup = function (group, key) {
+      if (!key) return;
+      if (!group[key]) group[key] = emptyLedgerBucket();
+      bumpLedgerBucket(group[key], effectiveOutcome, pnl);
+    };
+
+    bumpLedgerBucket(ledger.overall, effectiveOutcome, pnl);
+    bumpGroup(ledger.byScoreBand, ledgerScoreBand(signalData.score || 0));
+    bumpGroup(ledger.byMarketType, detectMarketType(signalData.marketTitle));
+    bumpGroup(ledger.byEntryBand, (entry >= 1 && entry <= 99) ? ledgerEntryBand(entry) : "invalid-entry");
+    bumpGroup(ledger.bySource, signalData.settledBy || "unknown");
+    for (var f = 0; f < (signalData.factors || []).length; f++) {
+      bumpGroup(ledger.byFactor, signalData.factors[f]);
+    }
+
+    ledger.updatedAt = new Date().toISOString();
+    await env.SIGNALS_CACHE.put(LEDGER_KEY, JSON.stringify(ledger));
+
+    var trades = await env.SIGNALS_CACHE.get(LEDGER_TRADES_KEY, { type: "json" }) || [];
+    trades.unshift({
+      signalId: signalData.id,
+      market: signalData.marketTitle,
+      direction: signalData.directionRaw || signalData.direction,
+      entryPrice: entry,
+      score: signalData.score,
+      outcome: effectiveOutcome,
+      pnl: pnl,
+      settledBy: signalData.settledBy || null,
+      winningOutcome: signalData.winningOutcome || null,
+      detectedAt: signalData.detectedAt,
+      settledAt: signalData.settledAt
+    });
+    if (trades.length > 300) trades = trades.slice(0, 300);
+    await env.SIGNALS_CACHE.put(LEDGER_TRADES_KEY, JSON.stringify(trades));
+  } catch (e) {
+    console.error("Error recording paper trade:", e.message);
+  }
+}
+
+function ledgerBucketView(bucket) {
+  var graded = bucket.wins + bucket.losses;
+  return {
+    ...bucket,
+    winRate: graded > 0 ? Math.round((bucket.wins / graded) * 100) : null,
+    roiPct: bucket.staked > 0 ? Math.round((bucket.pnl / bucket.staked) * 1000) / 10 : null
+  };
+}
+
+function buildLedgerView(ledger) {
+  if (!ledger) return null;
+  var mapGroup = function (group) {
+    var out = {};
+    for (var key of Object.keys(group || {})) {
+      out[key] = ledgerBucketView(group[key]);
+    }
+    return out;
+  };
+  return {
+    stakePerTrade: ledger.stakePerTrade,
+    createdAt: ledger.createdAt,
+    updatedAt: ledger.updatedAt,
+    overall: ledgerBucketView(ledger.overall),
+    byScoreBand: mapGroup(ledger.byScoreBand),
+    byMarketType: mapGroup(ledger.byMarketType),
+    byEntryBand: mapGroup(ledger.byEntryBand),
+    bySource: mapGroup(ledger.bySource),
+    byFactor: mapGroup(ledger.byFactor)
+  };
+}
+
+// Shared settlement bookkeeping: updates the signal record, factor stats,
+// wallet outcomes and the paper ledger - identical regardless of which
+// source (gamma / odds-api / trades-heuristic) determined the outcome.
+async function recordSignalOutcome(env, signalKey, signalData, outcome, meta) {
+  meta = meta || {};
+  var entryPct = signalData.priceAtSignal || 0;
+  var profitPct = null;
+  if (outcome === "WIN" && entryPct >= 1) {
+    profitPct = Math.round(((1 - entryPct / 100) / (entryPct / 100)) * 100);
+  } else if (outcome === "LOSS") {
+    profitPct = -100;
+  }
+
+  signalData.outcome = outcome;
+  signalData.settledAt = new Date().toISOString();
+  signalData.profitLoss = profitPct;
+  signalData.settledBy = meta.settledBy || null;
+  if (meta.winningOutcome) signalData.winningOutcome = meta.winningOutcome;
+  if (meta.note) signalData.note = meta.note;
+  if (meta.gameScore) signalData.gameScore = meta.gameScore;
+
+  await env.SIGNALS_CACHE.put(signalKey, JSON.stringify(signalData), {
+    expirationTtl: (outcome === "UNKNOWN" ? 7 : 30) * 24 * 60 * 60
+  });
+
+  if (outcome === "WIN" || outcome === "LOSS") {
+    if (signalData.factors && signalData.factors.length > 0) {
+      await updateFactorStats(env, signalData.factors, outcome);
+    }
+    var marketType = detectMarketType(signalData.marketTitle);
+    for (var w = 0; w < (signalData.wallets || []).length; w++) {
+      await recordWalletOutcome(env, signalData.wallets[w], outcome, profitPct, marketType, signalData.largestBet || 0, signalData.id);
+    }
+  }
+
+  await recordPaperTrade(env, signalData, outcome);
+
+  // Score the agent's investigation against ground truth (Gamma-only).
+  await recordBrierOutcome(env, signalData, outcome, meta);
+
+  // Mirror the settlement into D1 so /signals/history can show how the
+  // signal played out (guarded no-op when DB is unbound).
+  await d1SettleSignal(env, signalData);
+}
+
+// ============================================================
+// D1 ANALYTICS (optional, additive)
+// A queryable mirror of the agent-analytics data. Active ONLY when a `DB`
+// binding is present; every write is guarded and best-effort so a missing or
+// failing D1 never affects the KV hot-path. KV stays the source of truth for
+// operational state - D1 just makes the analytics queryable (for the
+// dashboard and ad-hoc SQL). See migrations/0001_init.sql.
+// ============================================================
+
+async function d1UpsertInvestigation(env, inv) {
+  if (!env.DB || !inv || !inv.invKey) return;
+  try {
+    await env.DB.prepare(
+      "INSERT INTO investigations " +
+      "(inv_key, market_slug, direction_raw, market_title, source, status, agent_prob, confidence, reasoning, key_findings, model, web_searches, market_prob, entry_price_pct, edge_pts, event_date, investigated_at, updated_at) " +
+      "VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18) " +
+      "ON CONFLICT(inv_key) DO UPDATE SET status=excluded.status, source=excluded.source, agent_prob=excluded.agent_prob, confidence=excluded.confidence, reasoning=excluded.reasoning, key_findings=excluded.key_findings, model=excluded.model, web_searches=excluded.web_searches, market_prob=excluded.market_prob, entry_price_pct=excluded.entry_price_pct, edge_pts=excluded.edge_pts, event_date=excluded.event_date, investigated_at=excluded.investigated_at, updated_at=excluded.updated_at"
+    ).bind(
+      inv.invKey, inv.marketSlug || null, inv.directionRaw || null, inv.marketTitle || null,
+      inv.source || "whale", inv.status || null,
+      (typeof inv.agentProb === "number" ? inv.agentProb : null),
+      inv.confidence || null, inv.reasoning || null,
+      inv.keyFindings ? JSON.stringify(inv.keyFindings) : null,
+      inv.model || null, (typeof inv.webSearches === "number" ? inv.webSearches : null),
+      (typeof inv.marketProbAtInvestigation === "number" ? inv.marketProbAtInvestigation : null),
+      (typeof inv.entryPricePct === "number" ? inv.entryPricePct : null),
+      (typeof inv.edgePts === "number" ? inv.edgePts : null),
+      inv.eventDate || null, inv.investigatedAt || null, inv.updatedAt || new Date().toISOString()
+    ).run();
+  } catch (e) { console.log("D1 upsert investigation error:", e.message); }
+}
+
+async function d1SettleInvestigation(env, inv) {
+  if (!env.DB || !inv || !inv.invKey) return;
+  try {
+    await env.DB.prepare(
+      "UPDATE investigations SET outcome=?2, y=?3, agent_brier=?4, market_brier=?5, settled_by=?6, settled_at=?7, updated_at=?7 WHERE inv_key=?1"
+    ).bind(
+      inv.invKey, inv.outcome || null, (typeof inv.y === "number" ? inv.y : null),
+      (typeof inv.agentBrier === "number" ? inv.agentBrier : null),
+      (typeof inv.marketBrier === "number" ? inv.marketBrier : null),
+      inv.settledBy || null, inv.settledAt || new Date().toISOString()
+    ).run();
+  } catch (e) { console.log("D1 settle investigation error:", e.message); }
+}
+
+// Mirror a settled signal's outcome onto its signals_log row. `signalData`
+// is the KV learning record (see storeSignalForLearning / recordSignalOutcome).
+async function d1SettleSignal(env, signalData) {
+  if (!env.DB || !signalData || !signalData.id) return;
+  try {
+    await env.DB.prepare(
+      "UPDATE signals_log SET outcome=?2, winning_outcome=?3, profit_pct=?4, settled_by=?5, settled_at=?6 WHERE id=?1"
+    ).bind(
+      signalData.id,
+      signalData.outcome || null,
+      signalData.winningOutcome || null,
+      (typeof signalData.profitLoss === "number" ? signalData.profitLoss : null),
+      signalData.settledBy || null,
+      signalData.settledAt || new Date().toISOString()
+    ).run();
+  } catch (e) { console.log("D1 settle signal error:", e.message); }
+}
+
+// Copy KV-settled outcomes onto D1 rows the hot-path missed (rows written
+// before the DB binding existed, or settled while D1 was unavailable).
+// Bounded per run; rows whose KV record expired unsettled are closed out as
+// UNKNOWN after the 30-day KV TTL has safely passed.
+async function d1BackfillSignalOutcomes(env, limit) {
+  if (!env.DB || !env.SIGNALS_CACHE) return { checked: 0, updated: 0, expired: 0 };
+  var out = { checked: 0, updated: 0, expired: 0 };
+  try {
+    var rows = await env.DB.prepare(
+      "SELECT id, detected_at FROM signals_log WHERE outcome IS NULL ORDER BY detected_at ASC LIMIT ?1"
+    ).bind(limit || 25).all();
+    var results = (rows && rows.results) || [];
+    for (var i = 0; i < results.length; i++) {
+      var row = results[i];
+      out.checked++;
+      var rec = await env.SIGNALS_CACHE.get(KV_KEYS.SIGNALS_PREFIX + row.id, { type: "json" });
+      if (rec && rec.outcome) {
+        await d1SettleSignal(env, rec);
+        out.updated++;
+      } else if (!rec && row.detected_at) {
+        var ageDays = (Date.now() - new Date(row.detected_at).getTime()) / 86400000;
+        if (ageDays > 31) {
+          await env.DB.prepare(
+            "UPDATE signals_log SET outcome='UNKNOWN', settled_by='kv_expired', settled_at=?2 WHERE id=?1"
+          ).bind(row.id, new Date().toISOString()).run();
+          out.expired++;
+        }
+      }
+    }
+  } catch (e) { console.log("D1 backfill signals error:", e.message); }
+  return out;
+}
+
+async function d1InsertOpportunity(env, opp) {
+  if (!env.DB || !opp) return;
+  try {
+    await env.DB.prepare(
+      "INSERT INTO opportunities (market_slug, market_title, agent_prob, market_prob, edge_pts, confidence, reasoning, event_date, found_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)"
+    ).bind(
+      opp.marketSlug || null, opp.marketTitle || null,
+      (typeof opp.agentProb === "number" ? opp.agentProb : null),
+      (typeof opp.marketProb === "number" ? opp.marketProb : null),
+      (typeof opp.edgePts === "number" ? opp.edgePts : null),
+      opp.confidence || null, opp.reasoning || null, opp.eventDate || null,
+      opp.foundAt || new Date().toISOString()
+    ).run();
+  } catch (e) { console.log("D1 insert opportunity error:", e.message); }
+}
+
+async function d1InsertSignal(env, sig, marketType) {
+  if (!env.DB || !sig || !sig.id) return;
+  try {
+    await env.DB.prepare(
+      "INSERT OR IGNORE INTO signals_log (id, market_slug, direction_raw, market_title, market_type, score, largest_bet, volume, num_wallets, fresh_wallets, avg_entry_price, event_date, detected_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)"
+    ).bind(
+      sig.id, sig.marketSlug || null, sig.directionRaw || null, sig.marketTitle || null,
+      marketType || null, sig.score || null, sig.largestBet || null,
+      sig.suspiciousVolume || null, sig.numWallets || null, sig.freshWallets || null,
+      sig.avgEntryPrice || null, sig.eventDate || null, sig.detectedAt || null
+    ).run();
+  } catch (e) { console.log("D1 insert signal error:", e.message); }
+}
+
+// ============================================================
+// AGENT INVESTIGATION
+// Calls the Claude Messages API with the web_search server tool to
+// independently estimate the probability a market resolves YES for the
+// signal's direction. This is the "is the market actually mispriced?"
+// layer - it produces a probability the scanner can compare against the
+// crowd price, and whose calibration is tracked via Brier score once the
+// market settles (see recordSignalOutcome / brier_stats).
+// ============================================================
+
+var ANTHROPIC_API = "https://api.anthropic.com/v1/messages";
+var DEFAULT_INVESTIGATION_MODEL = "claude-opus-4-8";
+
+// Final-answer schema. Structured outputs can't express numeric bounds, so
+// probability is clamped in code after parsing.
+var INVESTIGATION_SCHEMA = {
+  type: "object",
+  properties: {
+    probability: {
+      type: "number",
+      description: "Independent probability from 0 to 1 that the market resolves YES for the stated direction, based on your research."
+    },
+    confidence: {
+      type: "string",
+      enum: ["LOW", "MEDIUM", "HIGH"],
+      description: "How confident you are in the estimate given the evidence you found."
+    },
+    reasoning: {
+      type: "string",
+      description: "2-4 sentence justification for the probability, grounded in what you found."
+    },
+    keyFindings: {
+      type: "array",
+      items: { type: "string" },
+      description: "Short bullet facts (with source names) that drove the estimate."
+    }
+  },
+  required: ["probability", "confidence", "reasoning", "keyFindings"],
+  additionalProperties: false
+};
+
+// The dynamic-filtering web_search variant requires Opus 4.6+/Sonnet 4.6+.
+// Haiku and older models must use the basic variant.
+function webSearchToolType(model) {
+  return /haiku/i.test(model || "") ? "web_search_20250305" : "web_search_20260209";
+}
+
+function clamp01(x) {
+  if (typeof x !== "number" || isNaN(x)) return null;
+  if (x < 0) return 0;
+  if (x > 1) return 1;
+  return x;
+}
+
+// Best-effort JSON extraction: with output_config.format the final text block
+// is pure JSON, but guard against a truncated/decorated response.
+function extractInvestigationJson(contentBlocks) {
+  if (!Array.isArray(contentBlocks)) return null;
+  var texts = contentBlocks
+    .filter(function (b) { return b && b.type === "text" && typeof b.text === "string"; })
+    .map(function (b) { return b.text; });
+  for (var i = texts.length - 1; i >= 0; i--) {
+    var t = texts[i].trim();
+    try {
+      return JSON.parse(t);
+    } catch (e) {
+      var start = t.indexOf("{");
+      var end = t.lastIndexOf("}");
+      if (start >= 0 && end > start) {
+        try { return JSON.parse(t.slice(start, end + 1)); } catch (e2) {}
+      }
+    }
+  }
+  return null;
+}
+
+// Call Claude to investigate one market. Pure API mechanics - no dependency on
+// how the signal was sourced. Returns:
+//   { ok:true, agentProb, confidence, reasoning, keyFindings, model, webSearches }
+//   { ok:false, error }
+async function callClaudeInvestigator(env, params) {
+  if (!env.ANTHROPIC_API_KEY) {
+    return { ok: false, error: "ANTHROPIC_API_KEY not configured" };
+  }
+
+  var model = env.INVESTIGATION_MODEL || DEFAULT_INVESTIGATION_MODEL;
+  var effort = env.INVESTIGATION_EFFORT || "medium";
+  var maxSearches = parseInt(env.INVESTIGATION_MAX_SEARCHES || "5", 10);
+
+  var criteria = params.resolutionCriteria
+    ? params.resolutionCriteria
+    : "(No official resolution text was available. Infer the resolution condition from the market question.)";
+
+  var marketPricePct = typeof params.marketPricePct === "number"
+    ? params.marketPricePct
+    : null;
+
+  var system =
+    "You are a forecasting analyst for prediction markets. You research a market's " +
+    "actual resolution criteria and current real-world facts, then output an INDEPENDENT " +
+    "probability that the market resolves YES for a specific direction/outcome.\n\n" +
+    "Rules:\n" +
+    "- Use web_search to find current, load-bearing facts (official sources, reputable news, primary data).\n" +
+    "- Anchor to the EXACT resolution criteria, including dates, thresholds, and edge cases. A market can feel " +
+    "'obviously true' while the criteria make it false (wrong date window, wrong measure, technicality).\n" +
+    "- Estimate the probability from evidence, NOT from the market's own price. Do not anchor to the crowd.\n" +
+    "- If you cannot find decisive evidence, say so and return a probability near your genuine uncertainty with LOW confidence.\n" +
+    "- Today's date is provided; treat anything after it as not yet known.";
+
+  var userText =
+    "Today's date: " + new Date().toISOString().slice(0, 10) + "\n\n" +
+    "MARKET: " + (params.marketTitle || "(untitled)") + "\n" +
+    "DIRECTION/OUTCOME TO PRICE: " + (params.direction || "YES") + "\n" +
+    (params.eventDate ? "STATED EVENT DATE: " + params.eventDate + "\n" : "") +
+    (marketPricePct !== null ? "CROWD PRICE (for reference only, do not anchor): " + marketPricePct + "%\n" : "") +
+    "\nRESOLUTION CRITERIA:\n" + criteria + "\n\n" +
+    "Research the current facts, then estimate the probability that this market resolves YES " +
+    "for the direction above. Return the structured result.";
+
+  var body = {
+    model: model,
+    max_tokens: 6000,
+    // Opus 4.8/4.7 run thinking-off unless adaptive is set explicitly (Opus 5
+    // thinks by default). Adaptive is valid on all of them, so set it always.
+    thinking: { type: "adaptive" },
+    output_config: {
+      effort: effort,
+      format: { type: "json_schema", schema: INVESTIGATION_SCHEMA }
+    },
+    tools: [
+      { type: webSearchToolType(model), name: "web_search", max_uses: maxSearches }
+    ],
+    system: system,
+    messages: [{ role: "user", content: [{ type: "text", text: userText }] }]
+  };
+
+  var headers = {
+    "content-type": "application/json",
+    "x-api-key": env.ANTHROPIC_API_KEY,
+    "anthropic-version": "2023-06-01"
+  };
+
+  var webSearches = 0;
+  // Bound the server-tool resume loop so a Worker invocation can't run away
+  // against the subrequest cap.
+  var MAX_TURNS = 8;
+
+  try {
+    var perFetchTimeoutMs = parseInt(env.INVESTIGATION_FETCH_TIMEOUT_MS || "100000", 10);
+    for (var turn = 0; turn < MAX_TURNS; turn++) {
+      // Bound each call so a hung request can't eat the cron's 15-min wall budget.
+      var controller = new AbortController();
+      var timer = setTimeout(function () { controller.abort(); }, perFetchTimeoutMs);
+      var res;
+      try {
+        res = await fetch(ANTHROPIC_API, {
+          method: "POST",
+          headers: headers,
+          body: JSON.stringify(body),
+          signal: controller.signal
+        });
+      } finally {
+        clearTimeout(timer);
+      }
+
+      if (!res.ok) {
+        var errText = await res.text();
+        return { ok: false, error: "Anthropic API " + res.status + ": " + errText.slice(0, 300) };
+      }
+
+      var data = await res.json();
+
+      // Count web searches for cost visibility
+      for (var b = 0; b < (data.content || []).length; b++) {
+        if (data.content[b] && data.content[b].type === "server_tool_use" &&
+            data.content[b].name === "web_search") {
+          webSearches++;
+        }
+      }
+
+      if (data.stop_reason === "refusal") {
+        return { ok: false, error: "refusal", stopDetails: data.stop_details || null };
+      }
+
+      // Server-tool loop hit its internal cap - resume by echoing the turn back.
+      if (data.stop_reason === "pause_turn") {
+        body.messages.push({ role: "assistant", content: data.content });
+        continue;
+      }
+
+      // Terminal (end_turn / max_tokens) - parse the final structured answer.
+      var parsed = extractInvestigationJson(data.content);
+      if (!parsed) {
+        return {
+          ok: false,
+          error: "Could not parse investigation JSON (stop_reason=" + data.stop_reason + ")"
+        };
+      }
+
+      var prob = clamp01(parsed.probability);
+      if (prob === null) {
+        return { ok: false, error: "Investigation returned no usable probability" };
+      }
+
+      return {
+        ok: true,
+        agentProb: prob,
+        confidence: (parsed.confidence || "LOW").toUpperCase(),
+        reasoning: parsed.reasoning || "",
+        keyFindings: Array.isArray(parsed.keyFindings) ? parsed.keyFindings.slice(0, 8) : [],
+        model: data.model || model,
+        webSearches: webSearches,
+        stopReason: data.stop_reason
+      };
+    }
+
+    return { ok: false, error: "Investigation exceeded " + MAX_TURNS + " turns without finishing" };
+  } catch (e) {
+    return { ok: false, error: "Investigation exception: " + (e && e.message) };
+  }
+}
+
+// Stable investigation identity. signal.id embeds the earliest trade time,
+// which churns as the scan window slides - keying on that would re-investigate
+// the same market every scan and pollute Brier with fake-independent samples.
+// marketSlug + directionRaw is stable across scans.
+function investigationKeyFor(marketSlug, directionRaw) {
+  return "investigation:" + (marketSlug || "") + "::" + (directionRaw || "");
+}
+
+// The market's current implied probability that THIS bet wins, from Gamma's
+// live outcome prices at investigation time. This is the honest baseline for
+// Brier - NOT the whale's impact-inflated entry fill (avgEntryPrice), which is
+// kept only for the ROI ledger.
+function gammaBaselineForDirection(found, directionRaw) {
+  if (!found || !found.market) return { marketProb: null, winIndex: -1 };
+  var names = parseGammaArray(found.market.outcomes);
+  var prices = parseGammaArray(found.market.outcomePrices);
+  if (!names || !prices || names.length !== prices.length) {
+    return { marketProb: null, winIndex: -1 };
+  }
+  // When the sub-market was matched by its option title (a team/candidate),
+  // betting that option = betting the sub-market resolves YES.
+  var winIndex = found.via === "event-group-item"
+    ? matchOutcomeIndex(names, "Yes")
+    : matchOutcomeIndex(names, directionRaw);
+  if (winIndex < 0) return { marketProb: null, winIndex: -1 };
+  var p = parseFloat(prices[winIndex]);
+  return { marketProb: (isNaN(p) ? null : p), winIndex: winIndex };
+}
+
+// Daily spend counter (append-safe-ish; settlement/investigation frequency is
+// low). Bounds cost: "N per run" caps count, not tokens/searches.
+async function bumpDailyInvestigationCost(env, webSearches) {
+  if (!env.SIGNALS_CACHE) return;
+  var day = new Date().toISOString().slice(0, 10);
+  var key = "invest_cost:" + day;
+  try {
+    var c = await env.SIGNALS_CACHE.get(key, { type: "json" }) || { investigations: 0, webSearches: 0 };
+    c.investigations += 1;
+    c.webSearches += (webSearches || 0);
+    await env.SIGNALS_CACHE.put(key, JSON.stringify(c), { expirationTtl: 7 * 24 * 60 * 60 });
+  } catch (e) {
+    console.log("Cost counter error:", e.message);
+  }
+}
+
+async function investigationCountToday(env) {
+  if (!env.SIGNALS_CACHE) return 0;
+  var day = new Date().toISOString().slice(0, 10);
+  try {
+    var c = await env.SIGNALS_CACHE.get("invest_cost:" + day, { type: "json" });
+    return c ? (c.investigations || 0) : 0;
+  } catch (e) {
+    return 0;
+  }
+}
+
+// Investigate one signal: fetch the market's real resolution criteria + live
+// price from Gamma, get an independent agent probability, store the verdict.
+// Idempotent by stable key; failure-typed so it isn't retried forever.
+// opts.force re-runs even a completed investigation.
+async function investigateSignal(env, sig, opts) {
+  opts = opts || {};
+  if (!env.SIGNALS_CACHE) return { ok: false, error: "No cache configured" };
+  if (!env.ANTHROPIC_API_KEY) return { ok: false, error: "ANTHROPIC_API_KEY not configured" };
+
+  var marketSlug = sig.marketSlug;
+  var directionRaw = sig.directionRaw || sig.direction;
+  if (!marketSlug || !directionRaw) return { ok: false, error: "Signal missing slug/direction" };
+
+  var invKey = investigationKeyFor(marketSlug, directionRaw);
+  var maxAttempts = parseInt(env.INVESTIGATION_MAX_ATTEMPTS || "3", 10);
+
+  var existing = await env.SIGNALS_CACHE.get(invKey, { type: "json" });
+  if (existing && !opts.force) {
+    if (existing.status === "done") return { ok: true, skipped: "already_done", investigation: existing };
+    if (existing.status === "error_permanent") return { ok: false, skipped: "permanent_error", investigation: existing };
+    if (existing.status === "error_transient" && (existing.attempts || 0) >= maxAttempts) {
+      return { ok: false, skipped: "attempts_exhausted", investigation: existing };
+    }
+  }
+
+  var attempts = (existing && existing.attempts) || 0;
+
+  var writeInv = async function (rec) {
+    rec.invKey = invKey;
+    rec.marketSlug = marketSlug;
+    rec.directionRaw = directionRaw;
+    rec.updatedAt = new Date().toISOString();
+    await env.SIGNALS_CACHE.put(invKey, JSON.stringify(rec), { expirationTtl: 45 * 24 * 60 * 60 });
+    await d1UpsertInvestigation(env, rec);  // guarded no-op without a DB binding
+    // Maintain a lightweight index for the /learning/brier aggregation.
+    try {
+      var idx = await env.SIGNALS_CACHE.get("investigation_index", { type: "json" }) || [];
+      if (idx.indexOf(invKey) === -1) {
+        idx.push(invKey);
+        if (idx.length > 1000) idx = idx.slice(-1000);
+        await env.SIGNALS_CACHE.put("investigation_index", JSON.stringify(idx));
+      }
+    } catch (e) {}
+    return rec;
+  };
+
+  // Resolve the market on Gamma (criteria + live price).
+  var found = await findGammaMarket(marketSlug, directionRaw);
+  if (!found || !found.market) {
+    // Could be a transient Gamma miss or an unresolvable slug. Bounded retry.
+    attempts += 1;
+    var rec = await writeInv({
+      status: attempts >= maxAttempts ? "error_permanent" : "error_transient",
+      attempts: attempts,
+      lastError: "Gamma market not found",
+      marketTitle: sig.marketTitle || null,
+      detectedAt: sig.detectedAt || null
+    });
+    return { ok: false, error: "Gamma market not found", investigation: rec };
+  }
+
+  var description = (found.market.description || "").trim();
+  var baseline = gammaBaselineForDirection(found, directionRaw);
+
+  if (!description) {
+    // Nothing to reason over - don't burn tokens or retry forever.
+    var recNoDesc = await writeInv({
+      status: "error_permanent",
+      attempts: attempts,
+      lastError: "Market has no resolution description",
+      marketTitle: sig.marketTitle || found.market.question || null,
+      marketProbAtInvestigation: baseline.marketProb,
+      detectedAt: sig.detectedAt || null
+    });
+    return { ok: false, error: "No resolution description", investigation: recNoDesc };
+  }
+
+  var result = await callClaudeInvestigator(env, {
+    marketTitle: sig.marketTitle || found.market.question,
+    direction: directionRaw,
+    resolutionCriteria: description,
+    marketPricePct: baseline.marketProb !== null ? Math.round(baseline.marketProb * 100) : null,
+    eventDate: sig.eventDate || found.market.endDate || null
+  });
+
+  await bumpDailyInvestigationCost(env, result.webSearches || 0);
+
+  if (!result.ok) {
+    attempts += 1;
+    var permanent = result.error === "refusal" || attempts >= maxAttempts;
+    var recErr = await writeInv({
+      status: permanent ? "error_permanent" : "error_transient",
+      attempts: attempts,
+      lastError: result.error,
+      marketTitle: sig.marketTitle || found.market.question || null,
+      marketProbAtInvestigation: baseline.marketProb,
+      detectedAt: sig.detectedAt || null
+    });
+    return { ok: false, error: result.error, investigation: recErr };
+  }
+
+  var edge = (baseline.marketProb !== null)
+    ? Math.round((result.agentProb - baseline.marketProb) * 1000) / 10  // percentage points
+    : null;
+
+  var rec = await writeInv({
+    status: "done",
+    attempts: attempts,
+    source: opts.source || "whale",   // "whale" (signal-driven) | "sweep" (category scan)
+    marketTitle: sig.marketTitle || found.market.question || null,
+    agentProb: result.agentProb,
+    confidence: result.confidence,
+    reasoning: result.reasoning,
+    keyFindings: result.keyFindings,
+    model: result.model,
+    webSearches: result.webSearches,
+    marketProbAtInvestigation: baseline.marketProb,  // honest Brier baseline (live Gamma mid)
+    entryPricePct: sig.avgEntryPrice || null,         // whale fill, ROI reference only
+    edgePts: edge,                                    // agentProb - marketProb, in percentage points
+    eventDate: sig.eventDate || found.market.endDate || null,
+    detectedAt: sig.detectedAt || null,
+    investigatedAt: new Date().toISOString(),
+    // Brier fields, filled at settlement:
+    outcome: null,
+    y: null,
+    agentBrier: null,
+    marketBrier: null,
+    settledBy: null,
+    settledAt: null
+  });
+
+  return { ok: true, investigation: rec };
+}
+
+// Called from recordSignalOutcome. Only ground-truth (Gamma) WIN/LOSS
+// settlements count - the trades heuristic and Odds API can mislabel, which
+// would corrupt both the agent and the market baseline. UNKNOWN/void excluded.
+async function recordBrierOutcome(env, signalData, outcome, meta) {
+  if (!env.SIGNALS_CACHE) return;
+  if (!meta || meta.settledBy !== "gamma") return;   // ground truth only
+  if (outcome !== "WIN" && outcome !== "LOSS") return; // y must be 0 or 1
+
+  var invKey = investigationKeyFor(signalData.marketSlug, signalData.directionRaw || signalData.direction);
+  try {
+    var inv = await env.SIGNALS_CACHE.get(invKey, { type: "json" });
+    if (!inv || inv.status !== "done" || typeof inv.agentProb !== "number") return;
+    if (inv.agentBrier !== null && inv.agentBrier !== undefined) return; // already scored
+
+    var y = outcome === "WIN" ? 1 : 0;
+    inv.outcome = outcome;
+    inv.y = y;
+    inv.agentBrier = Math.round(Math.pow(inv.agentProb - y, 2) * 10000) / 10000;
+    inv.marketBrier = (typeof inv.marketProbAtInvestigation === "number")
+      ? Math.round(Math.pow(inv.marketProbAtInvestigation - y, 2) * 10000) / 10000
+      : null;
+    inv.settledBy = "gamma";
+    inv.settledAt = new Date().toISOString();
+    inv.updatedAt = inv.settledAt;
+
+    await env.SIGNALS_CACHE.put(invKey, JSON.stringify(inv), { expirationTtl: 45 * 24 * 60 * 60 });
+    await d1SettleInvestigation(env, inv);  // guarded
+    console.log("Brier scored " + invKey + ": agent=" + inv.agentBrier + " market=" + inv.marketBrier);
+  } catch (e) {
+    console.error("Error recording Brier outcome:", e.message);
+  }
+}
+
+// Aggregate the calibration report from the immutable per-investigation records
+// (aggregation on read avoids the KV read-modify-write race under concurrent
+// cron invocations).
+async function buildBrierReport(env) {
+  if (!env.SIGNALS_CACHE) return null;
+  var idx = await env.SIGNALS_CACHE.get("investigation_index", { type: "json" }) || [];
+
+  var scored = [];
+  var counts = { total: idx.length, done: 0, pending: 0, error: 0, scored: 0 };
+
+  for (var i = 0; i < idx.length; i++) {
+    var inv = await env.SIGNALS_CACHE.get(idx[i], { type: "json" });
+    if (!inv) continue;
+    if (inv.status === "done") counts.done++;
+    else if (inv.status && inv.status.indexOf("error") === 0) counts.error++;
+    else counts.pending++;
+    if (typeof inv.agentBrier === "number" && typeof inv.marketBrier === "number") {
+      scored.push(inv);
+    }
+  }
+  counts.scored = scored.length;
+
+  if (scored.length === 0) {
+    return {
+      note: "No ground-truth-settled investigations yet. The agent must call markets that later resolve via Gamma before calibration can be measured.",
+      counts: counts,
+      overall: null,
+      byConfidence: null
+    };
+  }
+
+  var sumAgent = 0, sumMarket = 0, agentBeats = 0, edgeDirCorrect = 0, edgeDirTotal = 0;
+  var byConf = {};
+  var bySource = {};
+  for (var s = 0; s < scored.length; s++) {
+    var r = scored[s];
+    sumAgent += r.agentBrier;
+    sumMarket += r.marketBrier;
+    if (r.agentBrier < r.marketBrier) agentBeats++;
+    // Did the sign of the edge predict the outcome? (directional hit-rate)
+    if (typeof r.edgePts === "number" && r.edgePts !== 0) {
+      edgeDirTotal++;
+      if ((r.edgePts > 0 && r.y === 1) || (r.edgePts < 0 && r.y === 0)) edgeDirCorrect++;
+    }
+    var c = r.confidence || "UNKNOWN";
+    if (!byConf[c]) byConf[c] = { n: 0, agent: 0, market: 0 };
+    byConf[c].n++; byConf[c].agent += r.agentBrier; byConf[c].market += r.marketBrier;
+    var src = r.source || "whale";
+    if (!bySource[src]) bySource[src] = { n: 0, agent: 0, market: 0 };
+    bySource[src].n++; bySource[src].agent += r.agentBrier; bySource[src].market += r.marketBrier;
+  }
+
+  var n = scored.length;
+  var round4 = function (x) { return Math.round(x * 10000) / 10000; };
+  var confView = {};
+  for (var key of Object.keys(byConf)) {
+    confView[key] = {
+      n: byConf[key].n,
+      meanAgentBrier: round4(byConf[key].agent / byConf[key].n),
+      meanMarketBrier: round4(byConf[key].market / byConf[key].n)
+    };
+  }
+  var sourceView = {};
+  for (var sk of Object.keys(bySource)) {
+    sourceView[sk] = {
+      n: bySource[sk].n,
+      meanAgentBrier: round4(bySource[sk].agent / bySource[sk].n),
+      meanMarketBrier: round4(bySource[sk].market / bySource[sk].n)
+    };
+  }
+
+  return {
+    note: "Brier score (lower is better). agentBeatsMarket / edgeDirection are honest but small-sample: this is a survivorship-biased set of markets that happened to resolve, self-reported confidence is uncalibrated (shown for description, not weighting), and N is small. Treat as directional until N is large.",
+    counts: counts,
+    overall: {
+      n: n,
+      meanAgentBrier: round4(sumAgent / n),
+      meanMarketBrier: round4(sumMarket / n),
+      meanPairedDiff: round4((sumMarket - sumAgent) / n),   // >0 means agent beats market on average
+      agentBeatsMarketRate: Math.round((agentBeats / n) * 100),
+      edgeDirectionHitRate: edgeDirTotal > 0 ? Math.round((edgeDirCorrect / edgeDirTotal) * 100) : null,
+      edgeDirectionN: edgeDirTotal
+    },
+    byConfidence: confView,
+    bySource: sourceView
+  };
+}
+
+// ============================================================
+// MISPRICING SWEEPS (whale-independent edge)
+// Two detectors that find edge without needing whale flow:
+//   1) Deterministic multi-outcome overround - pure math, no LLM.
+//   2) Agent criteria/stale sweep - reuses the investigation engine on
+//      markets selected by category, not by smart-money flow.
+// Cross-venue divergence (Polymarket vs Kalshi) is a deliberate follow-up:
+// it needs a second venue's API + market-matching, out of scope here.
+// ============================================================
+
+// For a mutually-exclusive multi-outcome event (negRisk: exactly one sub-market
+// resolves YES), the YES prices should sum to ~1.00. A large deviation is a
+// structural mispricing: sum >> 1 = overround (shorting the field pays),
+// sum << 1 = underround (the field is cheap). Pure math; runs every cron.
+function computeOverround(event) {
+  if (!event || !Array.isArray(event.markets) || event.markets.length < 2) return null;
+  // Only mutually-exclusive fields. Gamma flags these as negRisk; be lenient
+  // if the flag is missing but every sub-market is a Yes/No option.
+  var legs = [];
+  for (var i = 0; i < event.markets.length; i++) {
+    var m = event.markets[i];
+    if (m.closed === true) continue;
+    var names = parseGammaArray(m.outcomes);
+    var prices = parseGammaArray(m.outcomePrices);
+    if (!names || !prices || names.length !== prices.length) continue;
+    var yesIdx = matchOutcomeIndex(names, "Yes");
+    if (yesIdx < 0) return null; // not a Yes/No field - can't sum cleanly
+    var p = parseFloat(prices[yesIdx]);
+    if (isNaN(p)) continue;
+    legs.push({ title: m.groupItemTitle || m.question || "", yesPrice: p });
+  }
+  if (legs.length < 2) return null;
+  var sum = legs.reduce(function (a, l) { return a + l.yesPrice; }, 0);
+  return {
+    slug: event.slug,
+    title: event.title || event.question || "",
+    legs: legs.length,
+    sum: Math.round(sum * 1000) / 1000,
+    overroundPts: Math.round((sum - 1) * 1000) / 10, // percentage points off 100%
+    negRisk: event.negRisk === true,
+    volume: parseFloat(event.volume) || null,
+    liquidity: parseFloat(event.liquidity) || null,
+    topLegs: legs.sort(function (a, b) { return b.yesPrice - a.yesPrice; }).slice(0, 5)
+  };
+}
+
+// Fetch active multi-outcome events and flag the meaningfully mispriced ones.
+async function scanOverround(env) {
+  var minPts = parseFloat(env.OVERROUND_MIN_PTS || "6");     // |sum-100%| threshold
+  var minVol = parseFloat(env.OVERROUND_MIN_VOLUME || "20000");
+  var events = await fetchGammaJson("/events?closed=false&limit=100&order=volume&ascending=false");
+  var out = { scanned: 0, flagged: [] };
+  if (!Array.isArray(events)) return out;
+  for (var i = 0; i < events.length; i++) {
+    var o = computeOverround(events[i]);
+    if (!o) continue;
+    out.scanned++;
+    if (Math.abs(o.overroundPts) >= minPts && (!o.volume || o.volume >= minVol)) {
+      o.direction = o.overroundPts > 0 ? "OVERROUND (field expensive)" : "UNDERROUND (field cheap)";
+      out.flagged.push(o);
+    }
+  }
+  out.flagged.sort(function (a, b) { return Math.abs(b.overroundPts) - Math.abs(a.overroundPts); });
+  if (env.SIGNALS_CACHE) {
+    try {
+      await env.SIGNALS_CACHE.put("overround_last", JSON.stringify({
+        at: new Date().toISOString(), scanned: out.scanned, flagged: out.flagged.slice(0, 30)
+      }), { expirationTtl: 24 * 60 * 60 });
+    } catch (e) {}
+  }
+  return out;
+}
+
+// Pick binary markets worth an independent agent read: active, liquid, has
+// resolution criteria, priced in a still-uncertain band, resolving within a
+// window (so they'll settle and feed Brier), not short-term gambling, and not
+// already investigated. Rotates via a stored offset to cover the field over time.
+async function pickSweepCandidates(env, limit) {
+  var markets = await fetchGammaJson("/markets?closed=false&limit=200&order=volume&ascending=false");
+  if (!Array.isArray(markets)) return [];
+  var now = Date.now();
+  var maxDays = parseFloat(env.SWEEP_MAX_DAYS || "45");
+  var horizon = now + maxDays * 24 * 60 * 60 * 1000;
+  var cands = [];
+  for (var i = 0; i < markets.length; i++) {
+    var m = markets[i];
+    if (!m.description || !m.slug) continue;
+    if (isShortTermGamblingMarket(m.question || "")) continue;
+    var names = parseGammaArray(m.outcomes);
+    var prices = parseGammaArray(m.outcomePrices);
+    if (!names || !prices || names.length !== 2) continue;
+    var yesIdx = matchOutcomeIndex(names, "Yes");
+    if (yesIdx < 0) continue;
+    var yes = parseFloat(prices[yesIdx]);
+    if (isNaN(yes) || yes < 0.08 || yes > 0.92) continue; // skip ~resolved / no room
+    var end = m.endDate ? new Date(m.endDate).getTime() : null;
+    if (end && (end < now || end > horizon)) continue;     // must resolve, but within window
+    cands.push({
+      marketSlug: m.slug,
+      directionRaw: "Yes",
+      marketTitle: m.question || "",
+      avgEntryPrice: Math.round(yes * 100),
+      eventDate: m.endDate || null,
+      detectedAt: new Date().toISOString()
+    });
+  }
+  if (cands.length === 0) return [];
+  // Rotate through the candidate pool across runs.
+  var offset = 0;
+  if (env.SIGNALS_CACHE) {
+    try {
+      var o = await env.SIGNALS_CACHE.get("sweep_offset", { type: "json" });
+      offset = (o && typeof o.n === "number") ? o.n : 0;
+      await env.SIGNALS_CACHE.put("sweep_offset", JSON.stringify({ n: (offset + limit) % Math.max(1, cands.length) }));
+    } catch (e) {}
+  }
+  var rotated = cands.slice(offset).concat(cands.slice(0, offset));
+  return rotated.slice(0, Math.max(0, limit * 4)); // over-provide; caller skips already-investigated
+}
+
+// Run the agent sweep: investigate up to `budget` fresh candidates, record big
+// disagreements with the market as opportunities.
+async function runMispricingSweep(env, budget) {
+  if (!env.ANTHROPIC_API_KEY || !env.SIGNALS_CACHE) return { attempted: 0, done: 0, opportunities: 0 };
+  var edgeThreshold = parseFloat(env.SWEEP_EDGE_PTS || "12");
+  var pool = await pickSweepCandidates(env, budget);
+  var res = { attempted: 0, done: 0, opportunities: 0 };
+  var opps = [];
+  for (var i = 0; i < pool.length && res.done < budget; i++) {
+    var sig = pool[i];
+    var invKey = investigationKeyFor(sig.marketSlug, sig.directionRaw);
+    var existing = await env.SIGNALS_CACHE.get(invKey, { type: "json" });
+    if (existing) continue; // never re-investigate
+    res.attempted++;
+    var r = await investigateSignal(env, sig, { source: "sweep" });
+    if (r.ok && r.investigation && r.investigation.status === "done") {
+      res.done++;
+      var inv = r.investigation;
+      if (typeof inv.edgePts === "number" && Math.abs(inv.edgePts) >= edgeThreshold && inv.confidence !== "LOW") {
+        var opp = {
+          marketSlug: inv.marketSlug,
+          marketTitle: inv.marketTitle,
+          agentProb: inv.agentProb,
+          marketProb: inv.marketProbAtInvestigation,
+          edgePts: inv.edgePts,
+          confidence: inv.confidence,
+          reasoning: inv.reasoning,
+          eventDate: inv.eventDate,
+          foundAt: new Date().toISOString()
+        };
+        opps.push(opp);
+        await d1InsertOpportunity(env, opp);  // guarded
+      }
+    }
+  }
+  if (opps.length > 0) {
+    try {
+      var prev = await env.SIGNALS_CACHE.get("sweep_opportunities", { type: "json" }) || [];
+      var merged = opps.concat(prev).slice(0, 100);
+      await env.SIGNALS_CACHE.put("sweep_opportunities", JSON.stringify(merged), { expirationTtl: 30 * 24 * 60 * 60 });
+      res.opportunities = opps.length;
+    } catch (e) {}
+  }
+  return res;
 }
 
 // ============================================================
@@ -1048,98 +1733,99 @@ async function processSettledSignals(env) {
           continue;
         }
         
-        // Check if market settled
-        // For sports markets, try The Odds API first for accurate results
-        let settlement = null;
+        // The signal's directionRaw is the exact Polymarket outcome name;
+        // fall back to the display direction for older stored signals.
+        const settleDirection = signalData.directionRaw || signalData.direction;
+
+        // ---- PRIMARY: Gamma API ground truth --------------------------
+        // Gamma reports authoritative Polymarket resolution, which is what
+        // actually determines whether the bet paid. Try it first for every
+        // market type.
+        const gamma = await settleWithGamma(signalData.marketSlug, settleDirection);
+
+        if (gamma.status === "settled") {
+          await recordSignalOutcome(env, signalKey, signalData, gamma.outcome, {
+            settledBy: "gamma",
+            winningOutcome: gamma.winningOutcome,
+            note: gamma.note
+          });
+          results.processed += 1;
+          if (gamma.outcome === "WIN") results.wins += 1;
+          else if (gamma.outcome === "LOSS") results.losses += 1;
+          console.log(`Signal ${signalId} settled via Gamma: ${gamma.outcome}${gamma.winningOutcome ? " (winner: " + gamma.winningOutcome + ")" : ""}`);
+          continue;
+        }
+
+        if (gamma.status === "open") {
+          // Gamma confirms the market is still trading - authoritative, no
+          // need to consult fallbacks.
+          stillPending.push(signalId);
+          continue;
+        }
+        // gamma.status is "not_found" or "closed_unresolved" - fall through
+        // to the fallbacks below.
+
+        // ---- FALLBACK 1: The Odds API (sports only) -------------------
         const sport = detectSportFromSlug(signalData.marketSlug);
-        
+
         if (sport && SPORT_KEY_MAP[sport] && env.ODDS_API_KEY) {
-          // Try The Odds API for sports
-          const oddsApiResult = await settleWithOddsAPI(env, signalData.marketSlug, signalData.direction);
-          
+          const oddsApiResult = await settleWithOddsAPI(env, signalData.marketSlug, settleDirection);
+
           if (oddsApiResult && oddsApiResult.status === 'settled') {
-            // We have definitive result from Odds API
-            const outcome = oddsApiResult.outcome;
-            const profitPct = outcome === "WIN" 
-              ? Math.round(((1 - (signalData.priceAtSignal / 100)) / (signalData.priceAtSignal / 100)) * 100)
-              : -100;
-            
-            // Update signal data
-            signalData.outcome = outcome;
-            signalData.settledAt = new Date().toISOString();
-            signalData.profitLoss = profitPct;
-            signalData.winningOutcome = oddsApiResult.winner || oddsApiResult.spreadWinner;
-            signalData.gameScore = `${oddsApiResult.homeScore}-${oddsApiResult.awayScore}`;
-            signalData.settledBy = 'odds-api';
-            
-            await env.SIGNALS_CACHE.put(signalKey, JSON.stringify(signalData), {
-              expirationTtl: 30 * 24 * 60 * 60
+            await recordSignalOutcome(env, signalKey, signalData, oddsApiResult.outcome, {
+              settledBy: "odds-api",
+              winningOutcome: oddsApiResult.winner || oddsApiResult.spreadWinner,
+              gameScore: `${oddsApiResult.homeScore}-${oddsApiResult.awayScore}`
             });
-            
-            // Update factor stats
-            if (signalData.factors && signalData.factors.length > 0) {
-              await updateFactorStats(env, signalData.factors, outcome);
-            }
-            
-            // Update wallet stats
-            const marketType = detectMarketType(signalData.marketTitle);
-            for (const wallet of (signalData.wallets || [])) {
-              await recordWalletOutcome(env, wallet, outcome, profitPct, marketType, signalData.largestBet || 0, signalId);
-            }
-            
             results.processed += 1;
-            if (outcome === "WIN") results.wins += 1;
+            if (oddsApiResult.outcome === "WIN") results.wins += 1;
             else results.losses += 1;
-            
-            console.log(`Signal ${signalId} settled via Odds API: ${outcome} (${oddsApiResult.homeScore}-${oddsApiResult.awayScore})`);
+            console.log(`Signal ${signalId} settled via Odds API: ${oddsApiResult.outcome} (${oddsApiResult.homeScore}-${oddsApiResult.awayScore})`);
             continue;
           } else if (oddsApiResult && oddsApiResult.status === 'pending') {
-            // Game not completed yet
             stillPending.push(signalId);
             continue;
           }
-          // If Odds API failed or no match, fall back to Polymarket trades method
+          // If Odds API failed or no match, fall back to trades method
         }
-        
-        // Fall back to Polymarket trades method
-        settlement = await checkMarketSettlement(signalData.marketSlug, signalData.detectedAt);
-        
+
+        // ---- FALLBACK 2: Polymarket trades heuristic -----------------
+        const settlement = await checkMarketSettlement(signalData.marketSlug, signalData.detectedAt);
+
         if (!settlement || !settlement.settled) {
           stillPending.push(signalId);
           continue;
         }
-        
+
         // Handle UNKNOWN outcomes (API data unavailable but event passed)
         if (settlement.winningOutcome === "UNKNOWN") {
           console.log(`Signal ${signalId} has unknown outcome - removing from pending`);
-          signalData.outcome = "UNKNOWN";
-          signalData.settledAt = new Date().toISOString();
-          signalData.note = settlement.note;
-          await env.SIGNALS_CACHE.put(signalKey, JSON.stringify(signalData), {
-            expirationTtl: 7 * 24 * 60 * 60  // Keep for 7 days for review
+          await recordSignalOutcome(env, signalKey, signalData, "UNKNOWN", {
+            settledBy: "trades-heuristic",
+            note: settlement.note
           });
           results.processed += 1;
           continue;
         }
-        
+
         // Determine if our signal won or lost
-        const signalDirection = (signalData.direction || "").toLowerCase();
+        const signalDirection = (settleDirection || "").toLowerCase();
         const winningOutcome = (settlement.winningOutcome || "").toLowerCase();
-        
+
         // Normalize direction names for comparison
         // Handle cases like "Hornets" vs "yes", "Cortes-Acosta" vs "Yes"
         let outcome = "LOSS";
-        
+
         // Direct match
         if (signalDirection === winningOutcome) {
           outcome = "WIN";
         }
         // Yes/No normalization
-        else if ((signalDirection === "yes" || signalDirection === "true") && 
+        else if ((signalDirection === "yes" || signalDirection === "true") &&
                  (winningOutcome === "yes" || winningOutcome === "true")) {
           outcome = "WIN";
         }
-        else if ((signalDirection === "no" || signalDirection === "false") && 
+        else if ((signalDirection === "no" || signalDirection === "false") &&
                  (winningOutcome === "no" || winningOutcome === "false")) {
           outcome = "WIN";
         }
@@ -1147,8 +1833,7 @@ async function processSettledSignals(env) {
         // This is tricky - for now, if price went to 0.95+ and we bet on that side, we won
         else if (settlement.resolutionPrice >= 0.90) {
           // High price = YES won
-          // Check if signal direction indicates YES
-          if (signalDirection === "yes" || 
+          if (signalDirection === "yes" ||
               signalDirection.includes("over") ||
               signalDirection.includes("cover")) {
             outcome = "WIN";
@@ -1162,44 +1847,21 @@ async function processSettledSignals(env) {
             outcome = "WIN";
           }
         }
-        
-        // Calculate profit/loss
-        const entryPrice = signalData.priceAtSignal / 100;
-        const resolutionPrice = settlement.resolutionPrice;
-        const profitPct = outcome === "WIN" 
-          ? Math.round(((1 - entryPrice) / entryPrice) * 100)  // Payout is $1 for a win
-          : -100;
-        
-        // Update signal data
-        signalData.outcome = outcome;
-        signalData.settledAt = new Date().toISOString();
-        signalData.profitLoss = profitPct;
-        signalData.winningOutcome = settlement.winningOutcome;
-        
-        await env.SIGNALS_CACHE.put(signalKey, JSON.stringify(signalData), {
-          expirationTtl: 30 * 24 * 60 * 60
+
+        await recordSignalOutcome(env, signalKey, signalData, outcome, {
+          settledBy: "trades-heuristic",
+          winningOutcome: settlement.winningOutcome
         });
-        
-        // Update factor stats
-        if (signalData.factors && signalData.factors.length > 0) {
-          await updateFactorStats(env, signalData.factors, outcome);
-        }
-        
-        // Update wallet stats for each wallet involved
-        const marketType = detectMarketType(signalData.marketTitle);
-        for (const wallet of (signalData.wallets || [])) {
-          await recordWalletOutcome(env, wallet, outcome, profitPct, marketType, signalData.largestBet || 0, signalId);
-        }
-        
+
         results.processed += 1;
         if (outcome === "WIN") {
           results.wins += 1;
         } else {
           results.losses += 1;
         }
-        
-        console.log(`Signal ${signalId} settled: ${outcome}`);
-        
+
+        console.log(`Signal ${signalId} settled via trades heuristic: ${outcome}`);
+
       } catch (e) {
         console.error(`Error processing signal ${signalId}:`, e.message);
         results.errors += 1;
@@ -2386,9 +3048,64 @@ export default {
       }
       
       // ============================================
+      // SIGNAL HISTORY (settlement tracking)
+      // ============================================
+      // How past signals played out. D1-backed; outcome NULL = still pending.
+      // ?status=all|pending|settled|won|lost  ?limit=1..200
+      if (path === "/signals/history") {
+        if (!env.DB) {
+          return new Response(JSON.stringify({ success: false, error: "D1 not configured" }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+        try {
+          const histLimit = Math.min(Math.max(parseInt(url.searchParams.get("limit") || "100", 10) || 100, 1), 200);
+          const histStatus = (url.searchParams.get("status") || "all").toLowerCase();
+          let where = "";
+          if (histStatus === "pending") where = "WHERE outcome IS NULL";
+          else if (histStatus === "settled") where = "WHERE outcome IS NOT NULL";
+          else if (histStatus === "won") where = "WHERE outcome = 'WIN'";
+          else if (histStatus === "lost") where = "WHERE outcome = 'LOSS'";
+          const rows = await env.DB.prepare(
+            "SELECT id, market_slug, direction_raw, market_title, market_type, score, largest_bet, volume, num_wallets, avg_entry_price, event_date, detected_at, outcome, winning_outcome, profit_pct, settled_by, settled_at " +
+            "FROM signals_log " + where + " ORDER BY detected_at DESC LIMIT ?1"
+          ).bind(histLimit).all();
+          const agg = await env.DB.prepare(
+            "SELECT COUNT(*) AS total, " +
+            "SUM(CASE WHEN outcome='WIN' THEN 1 ELSE 0 END) AS wins, " +
+            "SUM(CASE WHEN outcome='LOSS' THEN 1 ELSE 0 END) AS losses, " +
+            "SUM(CASE WHEN outcome='UNKNOWN' THEN 1 ELSE 0 END) AS unknown, " +
+            "SUM(CASE WHEN outcome IS NULL THEN 1 ELSE 0 END) AS pending, " +
+            "AVG(CASE WHEN outcome IN ('WIN','LOSS') THEN profit_pct END) AS avg_profit_pct " +
+            "FROM signals_log"
+          ).first();
+          const settledCount = (agg.wins || 0) + (agg.losses || 0);
+          return new Response(JSON.stringify({
+            success: true,
+            stats: {
+              total: agg.total || 0,
+              wins: agg.wins || 0,
+              losses: agg.losses || 0,
+              unknown: agg.unknown || 0,
+              pending: agg.pending || 0,
+              winRate: settledCount > 0 ? Math.round(((agg.wins || 0) / settledCount) * 100) : null,
+              avgProfitPct: (agg.avg_profit_pct === null || agg.avg_profit_pct === undefined) ? null : Math.round(agg.avg_profit_pct)
+            },
+            signals: rows.results || []
+          }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        } catch (e) {
+          return new Response(JSON.stringify({ success: false, error: e.message }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+      }
+
+      // ============================================
       // LEARNING SYSTEM ENDPOINTS
       // ============================================
-      
+
       // Get learning stats overview
       if (path === "/learning/stats") {
         if (!env.SIGNALS_CACHE) {
@@ -3766,7 +4483,203 @@ export default {
           headers: { ...corsHeaders, "Content-Type": "application/json" }
         });
       }
-      
+
+      // Paper-trading ROI ledger: real profitability of signals, broken
+      // down by score band, market type, entry band, factor and source.
+      // Add ?trades=1 to include the recent per-signal trade log.
+      if (path === "/learning/ledger") {
+        if (!env.SIGNALS_CACHE) {
+          return new Response(JSON.stringify({ error: "No cache configured" }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+        const ledger = await env.SIGNALS_CACHE.get(LEDGER_KEY, { type: "json" });
+        const view = buildLedgerView(ledger);
+        let recentTrades = null;
+        if (url.searchParams.get("trades")) {
+          recentTrades = await env.SIGNALS_CACHE.get(LEDGER_TRADES_KEY, { type: "json" }) || [];
+        }
+        return new Response(JSON.stringify({
+          success: true,
+          note: view ? "Each entry = a hypothetical $" + PAPER_STAKE + " buy at signal entry price. roiPct is on graded (WIN/LOSS) trades only." : "No settled signals recorded yet.",
+          ledger: view,
+          recentTrades: recentTrades
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+
+      // Agent calibration: how the agent's independent probabilities score
+      // against ground-truth (Gamma) settlements, vs the market baseline.
+      // ?records=1 includes the per-investigation records.
+      if (path === "/learning/brier") {
+        if (!env.SIGNALS_CACHE) {
+          return new Response(JSON.stringify({ error: "No cache configured" }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+        const report = await buildBrierReport(env);
+        let records = null;
+        if (url.searchParams.get("records")) {
+          const idx = await env.SIGNALS_CACHE.get("investigation_index", { type: "json" }) || [];
+          records = [];
+          for (const k of idx.slice(-100)) {
+            const inv = await env.SIGNALS_CACHE.get(k, { type: "json" });
+            if (inv) records.push(inv);
+          }
+        }
+        return new Response(JSON.stringify({ success: true, report: report, records: records }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+
+      // Manually trigger / inspect an investigation.
+      // /investigate?slug=<marketSlug>&direction=<outcome>[&title=..&force=1]
+      if (path === "/investigate") {
+        if (!env.ANTHROPIC_API_KEY) {
+          return new Response(JSON.stringify({ error: "ANTHROPIC_API_KEY not configured" }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+        const slug = url.searchParams.get("slug");
+        const direction = url.searchParams.get("direction") || "Yes";
+        if (!slug) {
+          return new Response(JSON.stringify({ error: "slug required: /investigate?slug=<marketSlug>&direction=<outcome>" }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+        const sig = {
+          marketSlug: slug,
+          directionRaw: direction,
+          marketTitle: url.searchParams.get("title") || null,
+          avgEntryPrice: url.searchParams.get("price") ? parseInt(url.searchParams.get("price"), 10) : null,
+          eventDate: url.searchParams.get("eventDate") || null,
+          detectedAt: new Date().toISOString()
+        };
+        try {
+          const r = await investigateSignal(env, sig, { force: !!url.searchParams.get("force") });
+          return new Response(JSON.stringify(r), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        } catch (e) {
+          return new Response(JSON.stringify({ ok: false, error: e.message }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+      }
+
+      // Deterministic multi-outcome overround scan. ?live=1 runs it now;
+      // otherwise returns the last cron result.
+      if (path === "/sweep/overround") {
+        try {
+          if (url.searchParams.get("live")) {
+            const over = await scanOverround(env);
+            return new Response(JSON.stringify({ success: true, ...over }), {
+              headers: { ...corsHeaders, "Content-Type": "application/json" }
+            });
+          }
+          const last = env.SIGNALS_CACHE ? await env.SIGNALS_CACHE.get("overround_last", { type: "json" }) : null;
+          return new Response(JSON.stringify({ success: true, note: "Add ?live=1 to run now.", last: last }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        } catch (e) {
+          return new Response(JSON.stringify({ success: false, error: e.message }), {
+            status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+      }
+
+      // Agent-flagged mispricing opportunities (from the criteria/stale sweep).
+      // ?run=1 triggers one sweep pass now (bounded by budget param, default 1).
+      if (path === "/sweep/opportunities") {
+        if (!env.SIGNALS_CACHE) {
+          return new Response(JSON.stringify({ error: "No cache configured" }), {
+            status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+        let ran = null;
+        if (url.searchParams.get("run") && env.ANTHROPIC_API_KEY) {
+          const budget = parseInt(url.searchParams.get("budget") || "1", 10);
+          ran = await runMispricingSweep(env, Math.max(1, Math.min(budget, 5)));
+        }
+        const opps = await env.SIGNALS_CACHE.get("sweep_opportunities", { type: "json" }) || [];
+        return new Response(JSON.stringify({ success: true, ran: ran, opportunities: opps }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+
+      // D1 analytics (queryable). No-op note when the DB binding is absent.
+      if (path === "/db/status") {
+        if (!env.DB) {
+          return new Response(JSON.stringify({ enabled: false, note: "No D1 binding. Provision with `wrangler d1 create polymarket-scanner`, bind as DB in wrangler.toml, then apply migrations/0001_init.sql." }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+        try {
+          const inv = await env.DB.prepare("SELECT COUNT(*) n, SUM(status='done') done, SUM(settled_by='gamma') settled FROM investigations").first();
+          const opp = await env.DB.prepare("SELECT COUNT(*) n FROM opportunities").first();
+          const sig = await env.DB.prepare("SELECT COUNT(*) n FROM signals_log").first();
+          const brier = await env.DB.prepare("SELECT COUNT(*) n, AVG(agent_brier) agentBrier, AVG(market_brier) marketBrier FROM investigations WHERE agent_brier IS NOT NULL").first();
+          return new Response(JSON.stringify({ enabled: true, investigations: inv, opportunities: opp, signals: sig, brier: brier }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        } catch (e) {
+          return new Response(JSON.stringify({ enabled: true, error: e.message, hint: "Did you apply migrations/0001_init.sql?" }), {
+            status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+      }
+
+      if (path === "/db/investigations") {
+        if (!env.DB) {
+          return new Response(JSON.stringify({ enabled: false, note: "No D1 binding configured." }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+        const limit = Math.min(parseInt(url.searchParams.get("limit") || "50", 10), 200);
+        const src = url.searchParams.get("source");
+        try {
+          let stmt;
+          if (src) {
+            stmt = env.DB.prepare("SELECT * FROM investigations WHERE source=?1 ORDER BY updated_at DESC LIMIT ?2").bind(src, limit);
+          } else {
+            stmt = env.DB.prepare("SELECT * FROM investigations ORDER BY updated_at DESC LIMIT ?1").bind(limit);
+          }
+          const rows = await stmt.all();
+          return new Response(JSON.stringify({ enabled: true, results: rows.results || [] }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        } catch (e) {
+          return new Response(JSON.stringify({ enabled: true, error: e.message }), {
+            status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+      }
+
+      if (path === "/db/opportunities") {
+        if (!env.DB) {
+          return new Response(JSON.stringify({ enabled: false, note: "No D1 binding configured." }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+        const limit = Math.min(parseInt(url.searchParams.get("limit") || "50", 10), 200);
+        try {
+          const rows = await env.DB.prepare("SELECT * FROM opportunities ORDER BY found_at DESC LIMIT ?1").bind(limit).all();
+          return new Response(JSON.stringify({ enabled: true, results: rows.results || [] }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        } catch (e) {
+          return new Response(JSON.stringify({ enabled: true, error: e.message }), {
+            status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+      }
+
       // Get wallet specialization
       if (path.startsWith("/learning/specialization/")) {
         const address = path.split("/")[3];
@@ -3861,7 +4774,7 @@ export default {
         return new Response(JSON.stringify({
           status: "ok",
           timestamp: new Date().toISOString(),
-          version: "17.1.2 - Fix Polymarket team matching + add debug info",
+          version: "21.1.0 - Modularize: extract src/odds.js + src/gamma.js from index.js",
           cache: cacheStats
         }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" }
@@ -3890,6 +4803,9 @@ export default {
       startedAt: new Date().toISOString(),
       scan: null,
       settlement: null,
+      investigations: null,
+      overround: null,
+      sweep: null,
       lines: null,
       optimization: null,
       error: null
@@ -3905,20 +4821,89 @@ export default {
       };
       
       // Check for new high-value signals and send alerts
+      let alertableSignals = [];
       if (result.success && result.signals && result.signals.length > 0) {
         // Only check signals that meet alert thresholds (score >= 100, bet >= $20k)
-        const alertableSignals = result.signals.filter(s => s.score >= 100 && s.largestBet >= 20000);
+        alertableSignals = result.signals.filter(s => s.score >= 100 && s.largestBet >= 20000);
         if (alertableSignals.length > 0) {
+          // Alerts fire FIRST, unblocked - never coupled to LLM latency.
           await checkAndSendAlerts(alertableSignals, env);
           console.log(`Checked ${alertableSignals.length} signals for alerts`);
         }
       }
-      
+
+      // AGENT INVESTIGATION: independently price the top alert-tier signals.
+      // Runs after alerts (decoupled), bounded per run and per day for cost.
+      if (env.ANTHROPIC_API_KEY && alertableSignals.length > 0) {
+        try {
+          const perRun = parseInt(env.INVESTIGATION_PER_RUN || "2", 10);
+          const dailyCap = parseInt(env.INVESTIGATION_DAILY_CAP || "50", 10);
+          const spentToday = await investigationCountToday(env);
+          const budget = Math.max(0, Math.min(perRun, dailyCap - spentToday));
+          const candidates = alertableSignals
+            .slice()
+            .sort((a, b) => b.score - a.score)
+            .slice(0, budget);
+          let investigated = 0;
+          for (const sig of candidates) {
+            const r = await investigateSignal(env, sig);
+            if (r.ok && !r.skipped) investigated++;
+          }
+          cronStatus.investigations = {
+            attempted: candidates.length,
+            completed: investigated,
+            spentToday: spentToday + investigated,
+            dailyCap: dailyCap
+          };
+          console.log(`Investigations: ${investigated}/${candidates.length} (${spentToday + investigated}/${dailyCap} today)`);
+        } catch (e) {
+          console.error("Investigation phase error:", e.message);
+          cronStatus.investigations = { error: e.message };
+        }
+      }
+
+      // MISPRICING SWEEPS (#4): deterministic overround every run (cheap),
+      // plus a gentle agent sweep sharing the same daily agent-spend cap.
+      try {
+        const over = await scanOverround(env);
+        cronStatus.overround = { scanned: over.scanned, flagged: over.flagged.length };
+        console.log(`Overround: ${over.flagged.length} flagged of ${over.scanned} multi-outcome events`);
+      } catch (e) {
+        console.error("Overround scan error:", e.message);
+        cronStatus.overround = { error: e.message };
+      }
+      if (env.ANTHROPIC_API_KEY && (env.SWEEP_ENABLED || "true") !== "false") {
+        try {
+          const dailyCap = parseInt(env.INVESTIGATION_DAILY_CAP || "50", 10);
+          const sweepPerRun = parseInt(env.SWEEP_PER_RUN || "1", 10);
+          const spent = await investigationCountToday(env);
+          const sweepBudget = Math.max(0, Math.min(sweepPerRun, dailyCap - spent));
+          if (sweepBudget > 0) {
+            const sweep = await runMispricingSweep(env, sweepBudget);
+            cronStatus.sweep = sweep;
+            console.log(`Sweep: ${sweep.done} investigated, ${sweep.opportunities} opportunities`);
+          } else {
+            cronStatus.sweep = { skipped: "daily cap reached" };
+          }
+        } catch (e) {
+          console.error("Mispricing sweep error:", e.message);
+          cronStatus.sweep = { error: e.message };
+        }
+      }
+
       // Run settlement checker to learn from outcomes
       console.log("Running settlement checker...");
       const settlementResults = await processSettledSignals(env);
       console.log(`Settlement: ${settlementResults.processed} processed, ${settlementResults.wins}W-${settlementResults.losses}L`);
       cronStatus.settlement = settlementResults;
+
+      // Mirror any KV-settled outcomes into D1 that the hot-path missed
+      // (e.g. signals_log rows written before the DB binding existed).
+      try {
+        cronStatus.signalBackfill = await d1BackfillSignalOutcomes(env, 25);
+      } catch (e) {
+        cronStatus.signalBackfill = { error: e.message };
+      }
       
       // PHASE 2: Update line movements for active signals
       console.log("Checking line movements...");
