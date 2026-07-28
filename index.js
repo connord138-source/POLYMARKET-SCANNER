@@ -834,6 +834,22 @@ async function d1BackfillSignalOutcomes(env, limit) {
   return out;
 }
 
+// Mirror post-signal price snapshots onto the signal's log row so movement
+// survives the 24h KV TTL and shows up in /signals/history.
+async function d1UpdateSignalPrices(env, signalId, lineData) {
+  if (!env.DB || !signalId || !lineData) return;
+  try {
+    await env.DB.prepare(
+      "UPDATE signals_log SET price_30m=?2, price_1h=?3, price_move_pct=?4 WHERE id=?1"
+    ).bind(
+      signalId,
+      (typeof lineData.priceAfter30min === "number" ? Math.round(lineData.priceAfter30min) : null),
+      (typeof lineData.priceAfter1hr === "number" ? Math.round(lineData.priceAfter1hr) : null),
+      (typeof lineData.movementPct === "number" ? lineData.movementPct : null)
+    ).run();
+  } catch (e) { console.log("D1 update signal prices error:", e.message); }
+}
+
 async function d1InsertOpportunity(env, opp) {
   if (!env.DB || !opp) return;
   try {
@@ -2021,14 +2037,19 @@ async function updateLineMovements(env) {
         movement = entryPrice - latestPrice;
       }
       
+      const prevCurrent = lineData.currentPrice;
       lineData.movementPct = Math.round(movement * 10) / 10;
       lineData.confirmed = movement > 2;  // Line moved 2%+ in our direction
-      
-      if (updated) {
+
+      // Persist snapshot milestones AND fresh current-price reads so the
+      // dashboard's "price since signal" stays live between milestones.
+      if (updated || lineData.currentPrice !== prevCurrent) {
         await env.SIGNALS_CACHE.put(lineKey, JSON.stringify(lineData), {
           expirationTtl: 24 * 60 * 60
         });
-        results.updated++;
+        // Durable mirror on the signal's log row (guarded no-op without DB).
+        await d1UpdateSignalPrices(env, signalId, lineData);
+        if (updated) results.updated++;
         if (lineData.confirmed) results.confirmed++;
       }
     }
@@ -3120,7 +3141,7 @@ export default {
           else if (histStatus === "won") where = "WHERE outcome = 'WIN'";
           else if (histStatus === "lost") where = "WHERE outcome = 'LOSS'";
           const rows = await env.DB.prepare(
-            "SELECT id, market_slug, direction_raw, market_title, market_type, score, largest_bet, volume, num_wallets, avg_entry_price, event_date, detected_at, outcome, winning_outcome, profit_pct, settled_by, settled_at " +
+            "SELECT id, market_slug, direction_raw, market_title, market_type, score, largest_bet, volume, num_wallets, avg_entry_price, event_date, detected_at, outcome, winning_outcome, profit_pct, settled_by, settled_at, price_30m, price_1h, price_move_pct " +
             "FROM signals_log " + where + " ORDER BY detected_at DESC LIMIT ?1"
           ).bind(histLimit).all();
           const agg = await env.DB.prepare(
