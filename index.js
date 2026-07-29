@@ -728,7 +728,13 @@ async function recordSignalOutcome(env, signalKey, signalData, outcome, meta) {
     expirationTtl: (outcome === "UNKNOWN" ? 7 : 30) * 24 * 60 * 60
   });
 
-  if (outcome === "WIN" || outcome === "LOSS") {
+  // Only Gamma-confirmed outcomes train the model. The trades/odds-API
+  // settlement heuristics can mislabel a market that merely trades near 95c as
+  // resolved, and a wrong label poisons factor weights and wallet win rates
+  // permanently. Heuristic settlements still record to KV/D1 for history (and
+  // are tagged settledBy), they just don't feed the learning loop.
+  var groundTruth = meta.settledBy === "gamma";
+  if ((outcome === "WIN" || outcome === "LOSS") && groundTruth) {
     if (signalData.factors && signalData.factors.length > 0) {
       await updateFactorStats(env, signalData.factors, outcome);
     }
@@ -2328,7 +2334,7 @@ async function getStreakBonus(env, walletAddresses) {
 // Based on historical accuracy of factors + wallet track record
 async function calculateConfidence(env, factors, walletAddresses, score) {
   if (!env.SIGNALS_CACHE) {
-    return { confidence: 50, level: "MEDIUM", factors: [] };
+    return { confidence: null, rated: false, level: "UNRATED", factors: [] };
   }
   
   try {
@@ -2369,21 +2375,34 @@ async function calculateConfidence(env, factors, walletAddresses, score) {
       }
     }
     
-    // Calculate overall confidence
-    let confidence;
+    // Overall confidence is EMPIRICAL only — how signals like this have
+    // actually resolved (factor win rates) and/or the involved wallets' proven
+    // track records. It is never derived from the score itself; doing so would
+    // make "confidence" a circular restatement of the score. With no factor
+    // history AND no proven wallet, the signal is UNRATED (null), not assigned
+    // a fabricated number.
+    let confidence = null;
+    let rated = false;
     if (totalSamples > 0) {
       const factorAvgWinRate = weightedWinRate / totalSamples;
-      // Blend factor confidence with wallet confidence (60/40 split)
-      confidence = Math.round(factorAvgWinRate * 0.6 + walletConfidence * 0.4);
-    } else {
-      // No factor data yet, use wallet confidence or base on score
-      confidence = bestWalletWinRate || Math.min(70, 40 + score / 5);
+      // Blend factor win rate with wallet win rate only when wallet data
+      // exists; otherwise the factor rate stands alone (no neutral-50 dilution).
+      confidence = (bestWalletWinRate != null)
+        ? Math.round(factorAvgWinRate * 0.6 + walletConfidence * 0.4)
+        : Math.round(factorAvgWinRate);
+      rated = true;
+    } else if (bestWalletWinRate != null) {
+      confidence = Math.round(bestWalletWinRate);
+      rated = true;
     }
-    
+
     // Determine confidence level
     let level;
     let emoji;
-    if (confidence >= 75) {
+    if (!rated) {
+      level = "UNRATED";
+      emoji = "—";
+    } else if (confidence >= 75) {
       level = "VERY HIGH";
       emoji = "🔥";
     } else if (confidence >= 65) {
@@ -2399,19 +2418,20 @@ async function calculateConfidence(env, factors, walletAddresses, score) {
       level = "VERY LOW";
       emoji = "❌";
     }
-    
+
     return {
       confidence,
+      rated,
       level,
       emoji,
-      label: `${emoji} ${confidence}% confidence (${level})`,
+      label: rated ? `${emoji} ${confidence}% confidence (${level})` : "Unrated — not enough settled history yet",
       factorBreakdown: factorConfidence,
       walletWinRate: bestWalletWinRate,
       totalHistoricalSamples: totalSamples
     };
   } catch (e) {
     console.error("Error calculating confidence:", e.message);
-    return { confidence: 50, level: "MEDIUM", factors: [] };
+    return { confidence: null, rated: false, level: "UNRATED", factors: [] };
   }
 }
 
@@ -6151,6 +6171,7 @@ function formatDirectionForDisplay(direction, marketTitle, marketSlug) {
       // Calculate confidence (Phase 3)
       const confidence = await calculateConfidence(env, factors, involvedWallets, score);
       signal.confidence = confidence.confidence;
+      signal.confidenceRated = confidence.rated === true;
       signal.confidenceLevel = confidence.level;
       signal.confidenceLabel = confidence.label;
       
@@ -6650,15 +6671,21 @@ async function getWalletPnL(address) {
       const isOpen = hasPosition && !likelySettled;
       
       if (totalRedeemed > 0) {
-        // Won - got payout
+        // Market resolved (a payout was redeemed). Classify by NET profit, not
+        // by the mere presence of a redeem: a wallet can redeem and still be
+        // net-down on the market (it bought more than the winning position
+        // returned, or averaged in badly). Counting those as wins inflates the
+        // win rate — which drives the proven-winner score bonus (up to +80) and
+        // the confidence blend — so a redeemed-but-net-loss market is a LOSS.
         const profit = totalRedeemed - totalBought + totalSold;
-        totalWins += Math.max(0, profit);
-        winCount++;
+        const won = profit > 0;
+        if (won) { totalWins += profit; winCount++; }
+        else { totalLosses += Math.abs(profit); lossCount++; }
         resolvedBets.push({
           market: data.title,
           marketSlug: data.slug,
           outcome: data.outcome,
-          result: 'WIN',
+          result: won ? 'WIN' : 'LOSS',
           invested: Math.round(totalBought),
           returned: Math.round(totalRedeemed + totalSold),
           profit: Math.round(profit),
