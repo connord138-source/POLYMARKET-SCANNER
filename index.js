@@ -3290,7 +3290,28 @@ export default {
           headers: { ...corsHeaders, "Content-Type": "application/json" }
         });
       }
-      
+
+      // Reset the factor-learning table. The accumulated factor_stats were built
+      // partly from odds/trades-heuristic settlements that can mislabel a market;
+      // now that only Gamma-confirmed outcomes train the model (see
+      // recordSignalOutcome), wiping the old table lets learning restart clean
+      // under the ground-truth-only regime. Admin-gated via requiresAdmin.
+      if (path === "/admin/reset-learning") {
+        if (!env.SIGNALS_CACHE) return atJson({ success: false, error: "No cache configured" }, 500);
+        try {
+          const prev = await env.SIGNALS_CACHE.get(KV_KEYS.FACTOR_STATS, { type: "json" }) || {};
+          const clearedFactors = Object.keys(prev).length;
+          await env.SIGNALS_CACHE.delete(KV_KEYS.FACTOR_STATS);
+          return atJson({
+            success: true,
+            message: "Factor-learning table reset. Only Gamma-confirmed settlements will retrain it from here.",
+            clearedFactors
+          });
+        } catch (e) {
+          return atJson({ success: false, error: e.message }, 500);
+        }
+      }
+
       // ============================================
       // SIGNAL HISTORY (settlement tracking)
       // ============================================
