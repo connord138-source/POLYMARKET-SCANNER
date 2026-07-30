@@ -140,6 +140,7 @@ var KV_KEYS = {
   SIGNALS_PREFIX: "signal:",           // signal:{id} -> signal details for learning
   PENDING_SIGNALS: "pending_signals",  // Array of signal IDs awaiting settlement
   FACTOR_STATS: "factor_stats",        // Factor performance tracking
+  COMBO_STATS: "factor_combo_stats",   // Win/loss records for co-occurring factor PAIRS
   LEARNING_META: "learning_meta"       // Metadata about learning system
 };
 
@@ -543,10 +544,81 @@ async function updateFactorStats(env, factors, outcome) {
   }
 }
 
+// Track win/loss records for PAIRS of factors that co-occur on a settled
+// signal. Individual factor stats say which single patterns resolve well;
+// combos reveal which pattern PAIRS reinforce (or cancel) each other — e.g.
+// "whaleSize50k + concentrated" may win far more than either factor alone.
+// Stored as one KV blob keyed canonically "factorA+factorB" (sorted).
+// Gated to Gamma-confirmed WIN/LOSS by the caller (recordSignalOutcome).
+async function updateComboStats(env, factors, outcome) {
+  if (!env.SIGNALS_CACHE || !factors || factors.length < 2) return;
+  try {
+    var comboStats = await env.SIGNALS_CACHE.get(KV_KEYS.COMBO_STATS, { type: "json" }) || {};
+    var uniq = Array.from(new Set(factors)).sort();
+    for (var i = 0; i < uniq.length; i++) {
+      for (var j = i + 1; j < uniq.length; j++) {
+        var key = uniq[i] + "+" + uniq[j];
+        if (!comboStats[key]) comboStats[key] = { wins: 0, losses: 0, winRate: 50, lastUpdated: null };
+        if (outcome === "WIN") comboStats[key].wins += 1;
+        else comboStats[key].losses += 1;
+        var total = comboStats[key].wins + comboStats[key].losses;
+        comboStats[key].winRate = Math.round((comboStats[key].wins / total) * 100);
+        comboStats[key].lastUpdated = new Date().toISOString();
+      }
+    }
+    await env.SIGNALS_CACHE.put(KV_KEYS.COMBO_STATS, JSON.stringify(comboStats));
+  } catch (e) {
+    console.error("Error updating combo stats:", e.message);
+  }
+}
+
+// Turn the raw factor table into a plain-English "trust these / fade these"
+// recommendation. Only factors with enough settled history (>= MIN games)
+// inform it, so a single lucky/unlucky signal can't drive the advice.
+function buildAIRecommendation(factorStats) {
+  var MIN = 3; // settled games before a factor is allowed to inform advice
+  var withData = [];
+  for (var name in factorStats) {
+    var d = factorStats[name];
+    var games = (d.wins || 0) + (d.losses || 0);
+    if (games >= MIN) {
+      withData.push({
+        name: name, wins: d.wins || 0, losses: d.losses || 0,
+        games: games, winRate: d.winRate,
+        record: (d.wins || 0) + "W-" + (d.losses || 0) + "L"
+      });
+    }
+  }
+  if (withData.length === 0) {
+    return { hasRecommendation: false, factorsWithData: 0, overallConfidence: 0, recommendation: "", bestFactors: [], worstFactors: [] };
+  }
+  var best = withData.filter(function (f) { return f.winRate >= 60; })
+    .sort(function (a, b) { return b.winRate - a.winRate; }).slice(0, 3);
+  var worst = withData.filter(function (f) { return f.winRate <= 40; })
+    .sort(function (a, b) { return a.winRate - b.winRate; }).slice(0, 3);
+  var totalW = 0, totalL = 0;
+  withData.forEach(function (f) { totalW += f.wins; totalL += f.losses; });
+  var overallConfidence = totalW + totalL > 0 ? Math.round((totalW / (totalW + totalL)) * 100) : 0;
+
+  var parts = [];
+  if (best.length) parts.push("Favor signals showing " + best.map(function (f) { return f.name + " (" + f.winRate + "%)"; }).join(", ") + ".");
+  if (worst.length) parts.push("Discount or fade " + worst.map(function (f) { return f.name + " (" + f.winRate + "%)"; }).join(", ") + ".");
+  if (!parts.length) parts.push("No factor is decisively strong or weak yet — keep gathering settled outcomes.");
+
+  return {
+    hasRecommendation: best.length > 0 || worst.length > 0,
+    factorsWithData: withData.length,
+    overallConfidence: overallConfidence,
+    recommendation: parts.join(" "),
+    bestFactors: best.map(function (f) { return { name: f.name, record: f.record, winRate: f.winRate }; }),
+    worstFactors: worst.map(function (f) { return { name: f.name, record: f.record, winRate: f.winRate }; })
+  };
+}
+
 // Get current factor weights for scoring
 async function getFactorWeights(env) {
   if (!env.SIGNALS_CACHE) return {};
-  
+
   try {
     const factorStats = await env.SIGNALS_CACHE.get(KV_KEYS.FACTOR_STATS, { type: "json" }) || {};
     const weights = {};
@@ -737,6 +809,7 @@ async function recordSignalOutcome(env, signalKey, signalData, outcome, meta) {
   if ((outcome === "WIN" || outcome === "LOSS") && groundTruth) {
     if (signalData.factors && signalData.factors.length > 0) {
       await updateFactorStats(env, signalData.factors, outcome);
+      await updateComboStats(env, signalData.factors, outcome);
     }
     var marketType = detectMarketType(signalData.marketTitle);
     for (var w = 0; w < (signalData.wallets || []).length; w++) {
@@ -3300,12 +3373,16 @@ export default {
         if (!env.SIGNALS_CACHE) return atJson({ success: false, error: "No cache configured" }, 500);
         try {
           const prev = await env.SIGNALS_CACHE.get(KV_KEYS.FACTOR_STATS, { type: "json" }) || {};
+          const prevCombos = await env.SIGNALS_CACHE.get(KV_KEYS.COMBO_STATS, { type: "json" }) || {};
           const clearedFactors = Object.keys(prev).length;
+          const clearedCombos = Object.keys(prevCombos).length;
           await env.SIGNALS_CACHE.delete(KV_KEYS.FACTOR_STATS);
+          await env.SIGNALS_CACHE.delete(KV_KEYS.COMBO_STATS);
           return atJson({
             success: true,
-            message: "Factor-learning table reset. Only Gamma-confirmed settlements will retrain it from here.",
-            clearedFactors
+            message: "Factor + combo learning tables reset. Only Gamma-confirmed settlements will retrain them from here.",
+            clearedFactors,
+            clearedCombos
           });
         } catch (e) {
           return atJson({ success: false, error: e.message }, 500);
@@ -3786,6 +3863,7 @@ export default {
               fadeCount,
               topPerformers: topWallets.slice(0, 10)
             },
+            aiRecommendation: buildAIRecommendation(factorStats),
             factors: factorStats,
             tiers: WALLET_TIERS
           }), {
@@ -3798,7 +3876,45 @@ export default {
           });
         }
       }
-      
+
+      // Which factor PAIRS work best/worst together. Reads the combo table
+      // populated on each Gamma-confirmed settlement (updateComboStats). A pair
+      // must have co-occurred on at least MIN settled signals before it shows,
+      // so a single coincidence can't masquerade as a pattern.
+      if (path === "/learning/combos") {
+        if (!env.SIGNALS_CACHE) return atJson({ success: false, error: "No cache configured" }, 500);
+        try {
+          const comboStats = await env.SIGNALS_CACHE.get(KV_KEYS.COMBO_STATS, { type: "json" }) || {};
+          const MIN = 2; // settled co-occurrences before a pair qualifies
+          const all = Object.entries(comboStats).map(([k, d]) => ({
+            name: k.replace("+", " + "),
+            wins: d.wins || 0,
+            losses: d.losses || 0,
+            games: (d.wins || 0) + (d.losses || 0),
+            winRate: d.winRate,
+            lastUpdated: d.lastUpdated
+          }));
+          const qualified = all
+            .filter(c => c.games >= MIN)
+            .sort((a, b) => (b.winRate - a.winRate) || (b.games - a.games));
+          const bestCombos = qualified.filter(c => c.winRate >= 55).slice(0, 10);
+          const worstCombos = qualified
+            .filter(c => c.winRate <= 45)
+            .sort((a, b) => (a.winRate - b.winRate) || (b.games - a.games))
+            .slice(0, 10);
+          return atJson({
+            success: true,
+            combos: qualified,
+            bestCombos,
+            worstCombos,
+            totalTracked: all.length,
+            minSamples: MIN
+          });
+        } catch (e) {
+          return atJson({ success: false, error: e.message }, 500);
+        }
+      }
+
       // Get tracked wallet stats
       if (path.startsWith("/learning/wallet/")) {
         const address = path.split("/")[3];
