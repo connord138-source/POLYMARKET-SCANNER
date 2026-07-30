@@ -331,7 +331,7 @@ async function getWalletStats(env, walletAddress) {
 }
 
 // Record bet outcome for a wallet
-async function recordWalletOutcome(env, walletAddress, outcome, profitLoss, marketType, betAmount = 0, signalId = null) {
+async function recordWalletOutcome(env, walletAddress, outcome, profitLoss, marketType, betAmount = 0, signalId = null, marketKey = null) {
   if (!env.SIGNALS_CACHE || !walletAddress) return null;
   
   const key = KV_KEYS.WALLETS_PREFIX + walletAddress.toLowerCase();
@@ -362,7 +362,31 @@ async function recordWalletOutcome(env, walletAddress, outcome, profitLoss, mark
         }
       }
     }
-    
+
+    // Per-market dedup: a wallet's win/loss record counts each market+direction
+    // ONCE, even when the scanner emitted several signal ids for it (the id
+    // embeds the first-trade timestamp, which shifts as the scan window
+    // slides). Duplicates still resolve their pending entry - they just don't
+    // re-count the outcome.
+    if (!stats.countedMarkets) stats.countedMarkets = {};
+    const mk = (marketKey || "").toLowerCase();
+    if (mk && stats.countedMarkets[mk]) {
+      stats.pending = Math.max(0, stats.pending - 1);
+      await env.SIGNALS_CACHE.put(key, JSON.stringify(stats), {
+        expirationTtl: 90 * 24 * 60 * 60
+      });
+      return stats;
+    }
+    if (mk) {
+      stats.countedMarkets[mk] = new Date().toISOString();
+      // Bound the map: keep the ~300 most recent markets
+      const mkKeys = Object.keys(stats.countedMarkets);
+      if (mkKeys.length > 300) {
+        mkKeys.sort((a, b) => new Date(stats.countedMarkets[a]) - new Date(stats.countedMarkets[b]));
+        for (let i = 0; i < mkKeys.length - 300; i++) delete stats.countedMarkets[mkKeys[i]];
+      }
+    }
+
     // Update stats
     stats.totalBets += 1;
     stats.pending = Math.max(0, stats.pending - 1);
@@ -807,13 +831,22 @@ async function recordSignalOutcome(env, signalKey, signalData, outcome, meta) {
   // are tagged settledBy), they just don't feed the learning loop.
   var groundTruth = meta.settledBy === "gamma";
   if ((outcome === "WIN" || outcome === "LOSS") && groundTruth) {
-    if (signalData.factors && signalData.factors.length > 0) {
+    // One market+direction trains the model at most once, no matter how many
+    // signal ids the scanner emitted for it (ids embed the first-trade
+    // timestamp, which shifts as the scan window slides). Marker outlives the
+    // 30-day signal-record TTL.
+    var marketKey = ((signalData.marketSlug || signalData.id || "") + ":" +
+      (signalData.directionRaw || signalData.direction || "")).toLowerCase();
+    var trainedKey = "trained:" + marketKey;
+    var alreadyTrained = await env.SIGNALS_CACHE.get(trainedKey);
+    if (!alreadyTrained && signalData.factors && signalData.factors.length > 0) {
       await updateFactorStats(env, signalData.factors, outcome);
       await updateComboStats(env, signalData.factors, outcome);
+      await env.SIGNALS_CACHE.put(trainedKey, "1", { expirationTtl: 35 * 24 * 60 * 60 });
     }
     var marketType = detectMarketType(signalData.marketTitle);
     for (var w = 0; w < (signalData.wallets || []).length; w++) {
-      await recordWalletOutcome(env, signalData.wallets[w], outcome, profitPct, marketType, signalData.largestBet || 0, signalData.id);
+      await recordWalletOutcome(env, signalData.wallets[w], outcome, profitPct, marketType, signalData.largestBet || 0, signalData.id, marketKey);
     }
   }
 
@@ -3378,11 +3411,32 @@ export default {
           const clearedCombos = Object.keys(prevCombos).length;
           await env.SIGNALS_CACHE.delete(KV_KEYS.FACTOR_STATS);
           await env.SIGNALS_CACHE.delete(KV_KEYS.COMBO_STATS);
+
+          // Optional: ?wallets=true also wipes per-wallet learning records
+          // (wallet:* + the tracked index). Deletes are batched to stay under
+          // the per-request subrequest limit - call repeatedly until
+          // walletsRemaining is false.
+          let clearedWallets = 0;
+          let walletsRemaining = false;
+          if (url.searchParams.get("wallets") === "true") {
+            const page = await env.SIGNALS_CACHE.list({ prefix: KV_KEYS.WALLETS_PREFIX, limit: 40 });
+            for (const k of page.keys) {
+              await env.SIGNALS_CACHE.delete(k.name);
+              clearedWallets++;
+            }
+            walletsRemaining = page.list_complete === false || page.keys.length === 40;
+            if (!walletsRemaining) {
+              await env.SIGNALS_CACHE.delete("tracked_wallet_index");
+            }
+          }
+
           return atJson({
             success: true,
             message: "Factor + combo learning tables reset. Only Gamma-confirmed settlements will retrain them from here.",
             clearedFactors,
-            clearedCombos
+            clearedCombos,
+            clearedWallets,
+            walletsRemaining
           });
         } catch (e) {
           return atJson({ success: false, error: e.message }, 500);
@@ -6330,32 +6384,41 @@ function formatDirectionForDisplay(direction, marketTitle, marketSlug) {
       
       // Store signal for learning (async, don't await)
       if (env.SIGNALS_CACHE && score >= 50) {
-        storeSignalForLearning(env, signal, factors, involvedWallets).catch(e => 
-          console.error("Error storing signal for learning:", e.message)
-        );
-        
-        // PHASE 2: Track line movement for this signal
-        trackLineMovement(env, g.marketSlug, g.direction, avgEntry, signal.id).catch(e =>
-          console.error("Error tracking line movement:", e.message)
-        );
-        
-        // Track wallets that placed significant bets ($1k+ for tracking purposes)
-        for (const trade of g.trades) {
-          if (trade._usdValue >= 1000) {
+        const bigTrades = g.trades.filter(t => t._usdValue >= 1000);
+        const learnGroup = { marketTitle: g.marketTitle, marketSlug: g.marketSlug, direction: g.direction };
+        (async () => {
+          // The scanner re-derives the same signals from the same 48h trade
+          // window on every run (cron: every 5 minutes). A signal id already
+          // in KV was stored by an earlier run - and may have SETTLED since.
+          // Re-storing would reset its outcome to null, re-queue it for
+          // settlement, and re-train factor/wallet learning on the same
+          // market over and over. First store wins; re-detections are no-ops.
+          const alreadyStored = await env.SIGNALS_CACHE.get(KV_KEYS.SIGNALS_PREFIX + signal.id);
+          if (alreadyStored) return;
+
+          await storeSignalForLearning(env, signal, factors, involvedWallets);
+
+          // Track wallets that placed significant bets ($1k+), once per signal
+          for (const trade of bigTrades) {
             const wallet = trade.proxyWallet || trade.user || trade.maker;
             if (wallet) {
-              updateWalletStats(env, wallet, {
+              await updateWalletStats(env, wallet, {
                 signalId: signal.id,
-                market: g.marketTitle,
-                marketSlug: g.marketSlug,
-                direction: formatDirectionForDisplay(g.direction, g.marketTitle, g.marketSlug),
-                directionRaw: g.direction,
+                market: learnGroup.marketTitle,
+                marketSlug: learnGroup.marketSlug,
+                direction: formatDirectionForDisplay(learnGroup.direction, learnGroup.marketTitle, learnGroup.marketSlug),
+                directionRaw: learnGroup.direction,
                 amount: trade._usdValue,
                 price: Math.round(parseFloat(trade.price || 0) * 100)
               }).catch(e => console.error("Error updating wallet:", e.message));
             }
           }
-        }
+        })().catch(e => console.error("Error storing signal for learning:", e.message));
+
+        // PHASE 2: Track line movement for this signal
+        trackLineMovement(env, g.marketSlug, g.direction, avgEntry, signal.id).catch(e =>
+          console.error("Error tracking line movement:", e.message)
+        );
       }
       
       newSignals.push(signal);
