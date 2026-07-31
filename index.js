@@ -3283,13 +3283,19 @@ export default {
           });
         }
         try {
+          // Assumed round-trip cost (bid/ask spread) in probability points,
+          // subtracted from gross edge to get net. Polymarket taker fees are
+          // ~0; the real cost is crossing the spread. Conservative default.
+          const SPREAD_POINTS = 2;
+
           const AGG =
             "COUNT(*) AS total, " +
             "SUM(outcome='WIN') AS wins, " +
             "SUM(outcome='LOSS') AS losses, " +
             "SUM(outcome='UNKNOWN') AS unknown, " +
             "SUM(outcome IS NULL) AS pending, " +
-            "AVG(CASE WHEN outcome IN ('WIN','LOSS') THEN profit_pct END) AS avg_profit_pct";
+            "AVG(CASE WHEN outcome IN ('WIN','LOSS') THEN profit_pct END) AS avg_profit_pct, " +
+            "AVG(CASE WHEN outcome IN ('WIN','LOSS') THEN avg_entry_price END) AS avg_entry";
 
           // All four breakdowns read from the deduped view (one canonical row
           // per market+direction) so duplicate signal ids for the same market
@@ -3326,8 +3332,22 @@ export default {
             AGG + " FROM dedup WHERE rn = 1 GROUP BY band"
           ).all();
 
+          // Edge = win rate minus the price paid. Buying a binary contract at
+          // entry price p that resolves YES pays $1: expected value per $1
+          // staked = winRate - p (in probability points), i.e. the true ROI.
+          // Positive net edge (after the assumed spread) is the only thing
+          // that makes a signal band profitable to follow, regardless of how
+          // high its suspicion score is.
           const shape = (rows) => (rows.results || []).map((r) => {
             const settled = (r.wins || 0) + (r.losses || 0);
+            const winRate = settled > 0 ? Math.round(((r.wins || 0) / settled) * 100) : null;
+            const avgEntry = (r.avg_entry === null || r.avg_entry === undefined) ? null : Math.round(r.avg_entry);
+            let edgeGross = null, edgeNet = null, hasEdge = null;
+            if (winRate !== null && avgEntry !== null) {
+              edgeGross = winRate - avgEntry;
+              edgeNet = edgeGross - SPREAD_POINTS;
+              hasEdge = edgeNet > 0;
+            }
             return {
               band: r.band,
               total: r.total || 0,
@@ -3336,13 +3356,25 @@ export default {
               unknown: r.unknown || 0,
               pending: r.pending || 0,
               settled,
-              winRate: settled > 0 ? Math.round(((r.wins || 0) / settled) * 100) : null,
+              winRate,
+              avgEntry,
+              edgeGross,
+              edgeNet,
+              hasEdge,
               avgProfitPct: (r.avg_profit_pct === null || r.avg_profit_pct === undefined) ? null : Math.round(r.avg_profit_pct)
             };
           });
 
+          // Overall edge across all settled (deduped) signals.
+          const overallRow = await env.DB.prepare(
+            D1_DEDUP_CTE + "SELECT 'overall' AS band, " + AGG + " FROM dedup WHERE rn = 1"
+          ).all();
+          const overall = shape(overallRow)[0] || null;
+
           return new Response(JSON.stringify({
             success: true,
+            overall,
+            spreadPoints: SPREAD_POINTS,
             byScore: shape(byScore),
             byType: shape(byType),
             byEntry: shape(byEntry),
