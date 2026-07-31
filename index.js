@@ -869,6 +869,19 @@ async function recordSignalOutcome(env, signalKey, signalData, outcome, meta) {
 // dashboard and ad-hoc SQL). See migrations/0001_init.sql.
 // ============================================================
 
+// One canonical row per market+direction for read-side stats. The scanner can
+// store the same market under several signal ids (the id embeds the group's
+// first-trade timestamp, which shifts as the 48h scan window slides), so
+// counting raw rows double-counts those markets. Prefer settled over pending,
+// decisive (WIN/LOSS) over UNKNOWN, then the earliest detection - the one a
+// user could actually have acted on. All duplicate rows stay in the table;
+// this only shapes what the read endpoints count.
+var D1_DEDUP_CTE =
+  "WITH dedup AS (SELECT *, ROW_NUMBER() OVER (" +
+  "PARTITION BY market_slug, COALESCE(direction_raw,'') " +
+  "ORDER BY (outcome IS NULL) ASC, (outcome='UNKNOWN') ASC, detected_at ASC" +
+  ") AS rn FROM signals_log) ";
+
 async function d1UpsertInvestigation(env, inv) {
   if (!env.DB || !inv || !inv.invKey) return;
   try {
@@ -3278,32 +3291,39 @@ export default {
             "SUM(outcome IS NULL) AS pending, " +
             "AVG(CASE WHEN outcome IN ('WIN','LOSS') THEN profit_pct END) AS avg_profit_pct";
 
+          // All four breakdowns read from the deduped view (one canonical row
+          // per market+direction) so duplicate signal ids for the same market
+          // don't multi-count in any band.
           const byScore = await env.DB.prepare(
+            D1_DEDUP_CTE +
             "SELECT CASE WHEN score >= 100 THEN '100+' WHEN score >= 70 THEN '70-99' WHEN score >= 50 THEN '50-69' ELSE 'under 50' END AS band, " +
-            AGG + " FROM signals_log GROUP BY band"
+            AGG + " FROM dedup WHERE rn = 1 GROUP BY band"
           ).all();
 
           const byType = await env.DB.prepare(
+            D1_DEDUP_CTE +
             "SELECT COALESCE(market_type, 'other') AS band, " + AGG +
-            " FROM signals_log GROUP BY band"
+            " FROM dedup WHERE rn = 1 GROUP BY band"
           ).all();
 
           const byEntry = await env.DB.prepare(
+            D1_DEDUP_CTE +
             "SELECT CASE WHEN avg_entry_price IS NULL THEN 'unknown' " +
             "WHEN avg_entry_price <= 20 THEN '1-20 (longshot)' " +
             "WHEN avg_entry_price <= 40 THEN '21-40' " +
             "WHEN avg_entry_price <= 60 THEN '41-60 (tossup)' " +
             "WHEN avg_entry_price <= 80 THEN '61-80' " +
             "ELSE '81-99 (favorite)' END AS band, " +
-            AGG + " FROM signals_log GROUP BY band"
+            AGG + " FROM dedup WHERE rn = 1 GROUP BY band"
           ).all();
 
           const byMovement = await env.DB.prepare(
+            D1_DEDUP_CTE +
             "SELECT CASE WHEN price_move_pct IS NULL THEN 'not tracked' " +
             "WHEN price_move_pct > 2 THEN 'moved with whales (>+2)' " +
             "WHEN price_move_pct < -2 THEN 'moved against whales (<-2)' " +
             "ELSE 'flat (-2 to +2)' END AS band, " +
-            AGG + " FROM signals_log GROUP BY band"
+            AGG + " FROM dedup WHERE rn = 1 GROUP BY band"
           ).all();
 
           const shape = (rows) => (rows.results || []).map((r) => {
@@ -3465,23 +3485,27 @@ export default {
         try {
           const histLimit = Math.min(Math.max(parseInt(url.searchParams.get("limit") || "100", 10) || 100, 1), 200);
           const histStatus = (url.searchParams.get("status") || "all").toLowerCase();
-          let where = "";
-          if (histStatus === "pending") where = "WHERE outcome IS NULL";
-          else if (histStatus === "settled") where = "WHERE outcome IS NOT NULL";
-          else if (histStatus === "won") where = "WHERE outcome = 'WIN'";
-          else if (histStatus === "lost") where = "WHERE outcome = 'LOSS'";
+          // Filters compose with the dedup CTE: rn = 1 keeps one canonical row
+          // per market+direction (see D1_DEDUP_CTE).
+          let where = "WHERE rn = 1";
+          if (histStatus === "pending") where += " AND outcome IS NULL";
+          else if (histStatus === "settled") where += " AND outcome IS NOT NULL";
+          else if (histStatus === "won") where += " AND outcome = 'WIN'";
+          else if (histStatus === "lost") where += " AND outcome = 'LOSS'";
           const rows = await env.DB.prepare(
+            D1_DEDUP_CTE +
             "SELECT id, market_slug, direction_raw, market_title, market_type, score, largest_bet, volume, num_wallets, avg_entry_price, event_date, detected_at, outcome, winning_outcome, profit_pct, settled_by, settled_at, price_30m, price_1h, price_move_pct " +
-            "FROM signals_log " + where + " ORDER BY detected_at DESC LIMIT ?1"
+            "FROM dedup " + where + " ORDER BY detected_at DESC LIMIT ?1"
           ).bind(histLimit).all();
           const agg = await env.DB.prepare(
+            D1_DEDUP_CTE +
             "SELECT COUNT(*) AS total, " +
             "SUM(CASE WHEN outcome='WIN' THEN 1 ELSE 0 END) AS wins, " +
             "SUM(CASE WHEN outcome='LOSS' THEN 1 ELSE 0 END) AS losses, " +
             "SUM(CASE WHEN outcome='UNKNOWN' THEN 1 ELSE 0 END) AS unknown, " +
             "SUM(CASE WHEN outcome IS NULL THEN 1 ELSE 0 END) AS pending, " +
             "AVG(CASE WHEN outcome IN ('WIN','LOSS') THEN profit_pct END) AS avg_profit_pct " +
-            "FROM signals_log"
+            "FROM dedup WHERE rn = 1"
           ).first();
           const settledCount = (agg.wins || 0) + (agg.losses || 0);
           return new Response(JSON.stringify({
