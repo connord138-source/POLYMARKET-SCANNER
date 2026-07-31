@@ -882,6 +882,82 @@ var D1_DEDUP_CTE =
   "ORDER BY (outcome IS NULL) ASC, (outcome='UNKNOWN') ASC, detected_at ASC" +
   ") AS rn FROM signals_log) ";
 
+// ============================================================
+// EDGE PROFILE
+// Net historical edge (win rate - entry price - spread) per entry-price band,
+// computed from the deduped, settled D1 rows and cached in KV. Used to (a)
+// annotate live scan signals with their band's proven edge so the Scanner can
+// filter to positive-edge signals, and (b) surfaced via /signals/edge-profile.
+// This is the bridge from "measured edge" (Analytics) to "acted-on edge".
+// ============================================================
+var EDGE_SPREAD_POINTS = 2;   // assumed round-trip cost, matches /signals/analytics
+var EDGE_MIN_SAMPLE = 5;      // below this a band's edge is noise, not a signal
+
+function edgeBandKey(entry) {
+  if (entry == null || isNaN(entry)) return "unknown";
+  if (entry <= 20) return "1-20";
+  if (entry <= 40) return "21-40";
+  if (entry <= 60) return "41-60";
+  if (entry <= 80) return "61-80";
+  return "81-99";
+}
+
+async function getEdgeProfile(env) {
+  if (!env.SIGNALS_CACHE) return null;
+  var cached = await env.SIGNALS_CACHE.get("edge_profile", { type: "json" });
+  if (cached && cached.expires && cached.expires > Date.now()) return cached;
+  if (!env.DB) return cached || null;
+  try {
+    var rows = await env.DB.prepare(
+      D1_DEDUP_CTE +
+      "SELECT CASE WHEN avg_entry_price IS NULL THEN 'unknown' " +
+      "WHEN avg_entry_price <= 20 THEN '1-20' WHEN avg_entry_price <= 40 THEN '21-40' " +
+      "WHEN avg_entry_price <= 60 THEN '41-60' WHEN avg_entry_price <= 80 THEN '61-80' " +
+      "ELSE '81-99' END AS band, " +
+      "SUM(outcome='WIN') AS wins, SUM(outcome='LOSS') AS losses, " +
+      "AVG(CASE WHEN outcome IN ('WIN','LOSS') THEN avg_entry_price END) AS avg_entry " +
+      "FROM dedup WHERE rn = 1 GROUP BY band"
+    ).all();
+    var bands = {};
+    for (var i = 0; i < (rows.results || []).length; i++) {
+      var r = rows.results[i];
+      var settled = (r.wins || 0) + (r.losses || 0);
+      if (settled === 0 || r.avg_entry === null || r.avg_entry === undefined) continue;
+      var winRate = Math.round(100 * (r.wins || 0) / settled);
+      var avgEntry = Math.round(r.avg_entry);
+      bands[r.band] = {
+        settled: settled,
+        winRate: winRate,
+        avgEntry: avgEntry,
+        edgeNet: winRate - avgEntry - EDGE_SPREAD_POINTS
+      };
+    }
+    var profile = {
+      bands: bands,
+      spreadPoints: EDGE_SPREAD_POINTS,
+      minSample: EDGE_MIN_SAMPLE,
+      updatedAt: new Date().toISOString(),
+      expires: Date.now() + 60 * 60 * 1000   // 1h
+    };
+    await env.SIGNALS_CACHE.put("edge_profile", JSON.stringify(profile), { expirationTtl: 2 * 60 * 60 });
+    return profile;
+  } catch (e) {
+    console.error("Edge profile error:", e.message);
+    return cached || null;
+  }
+}
+
+// Annotate a signal with its entry band's proven historical edge.
+function annotateSignalEdge(signal, profile) {
+  var band = edgeBandKey(signal.avgEntryPrice);
+  var bp = profile && profile.bands ? profile.bands[band] : null;
+  signal.edgeBand = band;
+  signal.historicalEdgeNet = bp ? bp.edgeNet : null;
+  signal.historicalEdgeSamples = bp ? bp.settled : 0;
+  signal.historicalWinRate = bp ? bp.winRate : null;
+  signal.hasPositiveEdge = !!(bp && bp.settled >= EDGE_MIN_SAMPLE && bp.edgeNet > 0);
+}
+
 async function d1UpsertInvestigation(env, inv) {
   if (!env.DB || !inv || !inv.invKey) return;
   try {
@@ -3502,6 +3578,19 @@ export default {
         }
       }
 
+      // Proven net edge per entry band (what powers the Scanner's
+      // positive-edge filter). KV-cached; recomputed hourly from settled D1.
+      if (path === "/signals/edge-profile") {
+        const profile = await getEdgeProfile(env);
+        return atJson({
+          success: true,
+          spreadPoints: EDGE_SPREAD_POINTS,
+          minSample: EDGE_MIN_SAMPLE,
+          bands: (profile && profile.bands) || {},
+          updatedAt: (profile && profile.updatedAt) || null
+        });
+      }
+
       // ============================================
       // SIGNAL HISTORY (settlement tracking)
       // ============================================
@@ -6040,7 +6129,11 @@ function formatDirectionForDisplay(direction, marketTitle, marketSlug) {
   // Score each group and create signals
   const newSignals = [];
   const debugGroups = []; // Track why groups don't become signals
-  
+
+  // Proven historical edge per entry band (KV-cached), used to annotate each
+  // signal so the Scanner can filter to positive-edge signals. Loaded once.
+  const edgeProfile = await getEdgeProfile(env);
+
   for (const [key, g] of Object.entries(groups)) {
     if (isShortTermGamblingMarket(g.marketTitle)) {
       continue;
@@ -6428,6 +6521,9 @@ function formatDirectionForDisplay(direction, marketTitle, marketSlug) {
       signal.confidenceRated = confidence.rated === true;
       signal.confidenceLevel = confidence.level;
       signal.confidenceLabel = confidence.label;
+
+      // Attach this signal's entry band's proven historical edge.
+      annotateSignalEdge(signal, edgeProfile);
       
       // Check for fade opportunity (Phase 3)
       const fadeCheck = await checkFadeOpportunity(env, involvedWallets, g.direction, g.largestBet);
@@ -6519,7 +6615,12 @@ function formatDirectionForDisplay(direction, marketTitle, marketSlug) {
   
   // Convert back to array
   let allSignals = Array.from(signalMap.values());
-  
+
+  // Re-annotate every signal (including cached ones from prior runs) with the
+  // current edge profile, so the Scanner's positive-edge filter reflects the
+  // latest history for the whole list, not just this run's fresh signals.
+  allSignals.forEach(s => annotateSignalEdge(s, edgeProfile));
+
   // Filter out signals older than 7 days
   const maxAge = 7 * 24 * 60 * 60 * 1000;
   allSignals = allSignals.filter(s => {
