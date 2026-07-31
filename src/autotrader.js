@@ -288,6 +288,7 @@ const DEFAULT_CONFIG = {
   minExpectedValue: 0.10,         // Minimum EV to enter (0.10 = +10%)
   maxEntryCentsSlippage: 5,       // Max absolute cents difference from whale entry
   minAiScore: 40,                 // Minimum AI score to consider
+  requireProvenEdge: true,        // Only trade signals whose entry band has a proven positive historical edge (signal.hasPositiveEdge)
   onlyBuySignals: false,          // If true, ignore SELL signals (safer for start)
   maxEntrySlippage: 15,           // Max % price can move from whale entry before we skip
   entryCooldownSeconds: 120,      // Minimum seconds between new entries
@@ -798,6 +799,16 @@ function evaluateSignal(signal, config, dailyStats, openPositions, perf) {
   const maxRisk = config.bankroll * (config.maxPortfolioRisk / 100);
   if (totalAtRisk >= maxRisk) {
     return { shouldTrade: false, reason: `Portfolio risk limit ($${totalAtRisk} / $${maxRisk})` };
+  }
+
+  // ========== GATE 1b: Proven edge ==========
+  // Don't trade a signal whose entry band hasn't shown a positive historical
+  // edge (win rate - price - spread, >= 5 settled samples). This is the
+  // "nothing reaches the bot until it's proven profitable" safety, tied to the
+  // same edge profile the Scanner filters on. Disable with requireProvenEdge:false.
+  if (config.requireProvenEdge !== false && signal.hasPositiveEdge !== true) {
+    const en = (signal.historicalEdgeNet === null || signal.historicalEdgeNet === undefined) ? "no history" : `${signal.historicalEdgeNet}pt`;
+    return { shouldTrade: false, reason: `No proven edge for entry band ${signal.edgeBand || "?"} (${en})` };
   }
 
   // ========== GATE 2: Is this a new market? ==========
