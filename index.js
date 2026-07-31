@@ -1893,7 +1893,7 @@ async function processSettledSignals(env) {
         // Gamma reports authoritative Polymarket resolution, which is what
         // actually determines whether the bet paid. Try it first for every
         // market type.
-        const gamma = await settleWithGamma(signalData.marketSlug, settleDirection);
+        const gamma = await settleWithGamma(signalData.marketSlug, settleDirection, signalData.marketTitle);
 
         if (gamma.status === "settled") {
           await recordSignalOutcome(env, signalKey, signalData, gamma.outcome, {
