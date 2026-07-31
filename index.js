@@ -699,6 +699,41 @@ function ledgerEntryBand(entryPct) {
   return "75-99";
 }
 
+// Competing paper strategies. Each decides whether a settled signal enters its
+// book (`qualifies`) and which side it takes (`side`): "follow" bets the
+// whale's direction; "fade" bets the opposite side at (100 - entry). They run
+// on the same settled-signal stream so their paper ROIs are directly
+// comparable - the Auto-Trader shouldn't run a rule until its paper book is
+// profitable over a real sample.
+var PAPER_STRATEGIES = [
+  { key: "all", label: "Follow all signals", side: "follow", qualifies: function () { return true; } },
+  { key: "underdog", label: "Underdog entries (≤40¢)", side: "follow", qualifies: function (e) { return e <= 40; } },
+  { key: "fade_favorites", label: "Fade favorites (≥60¢)", side: "fade", qualifies: function (e) { return e >= 60; } },
+  { key: "high_score", label: "High score (≥100)", side: "follow", qualifies: function (e, s) { return (s || 0) >= 100; } }
+];
+
+// Paper P&L for a $100 stake given the side taken and the signal's outcome.
+// Returns { outcome, pnl } where outcome is from the STRATEGY's perspective.
+function paperStrategyResult(side, entry, signalOutcome) {
+  if (side === "fade") {
+    var fadePrice = 100 - entry;               // we buy the other side
+    var fadeWon = signalOutcome === "LOSS";    // fade wins when the signal loses
+    return {
+      outcome: fadeWon ? "WIN" : "LOSS",
+      pnl: fadeWon
+        ? Math.round(PAPER_STAKE * (100 - fadePrice) / fadePrice * 100) / 100
+        : -PAPER_STAKE
+    };
+  }
+  // follow
+  return {
+    outcome: signalOutcome,
+    pnl: signalOutcome === "WIN"
+      ? Math.round(PAPER_STAKE * (100 - entry) / entry * 100) / 100
+      : -PAPER_STAKE
+  };
+}
+
 async function recordPaperTrade(env, signalData, outcome) {
   if (!env.SIGNALS_CACHE) return;
 
@@ -725,9 +760,11 @@ async function recordPaperTrade(env, signalData, outcome) {
         byMarketType: {},
         byEntryBand: {},
         bySource: {},
-        byFactor: {}
+        byFactor: {},
+        byStrategy: {}
       };
     }
+    if (!ledger.byStrategy) ledger.byStrategy = {};
 
     var bumpGroup = function (group, key) {
       if (!key) return;
@@ -742,6 +779,20 @@ async function recordPaperTrade(env, signalData, outcome) {
     bumpGroup(ledger.bySource, signalData.settledBy || "unknown");
     for (var f = 0; f < (signalData.factors || []).length; f++) {
       bumpGroup(ledger.byFactor, signalData.factors[f]);
+    }
+
+    // Competing strategies: each qualifying strategy books this settled signal
+    // on its own side with its own P&L (see PAPER_STRATEGIES).
+    for (var si = 0; si < PAPER_STRATEGIES.length; si++) {
+      var strat = PAPER_STRATEGIES[si];
+      if (!strat.qualifies(entry, signalData.score || 0)) continue;
+      if (!ledger.byStrategy[strat.key]) ledger.byStrategy[strat.key] = emptyLedgerBucket();
+      if (gradeable) {
+        var res = paperStrategyResult(strat.side, entry, outcome);
+        bumpLedgerBucket(ledger.byStrategy[strat.key], res.outcome, res.pnl);
+      } else {
+        bumpLedgerBucket(ledger.byStrategy[strat.key], "UNKNOWN", 0);
+      }
     }
 
     ledger.updatedAt = new Date().toISOString();
@@ -3576,6 +3627,70 @@ export default {
         } catch (e) {
           return atJson({ success: false, error: e.message }, 500);
         }
+      }
+
+      // Competing paper-trading strategies, ranked by ROI. `readyForAuto` is
+      // true once a strategy has a real settled sample AND positive paper ROI -
+      // the bar a rule must clear before the Auto-Trader should run it live.
+      // Computed directly from the deduped settled D1 rows (complete history,
+      // one row per market), falling back to the incremental KV ledger if D1
+      // is unavailable.
+      if (path === "/paper/strategies") {
+        const PROVEN_MIN = 30;
+        let strategies = null;
+        if (env.DB) {
+          try {
+            const rows = await env.DB.prepare(
+              D1_DEDUP_CTE +
+              "SELECT avg_entry_price AS entry, score, outcome FROM dedup " +
+              "WHERE rn = 1 AND outcome IN ('WIN','LOSS') AND avg_entry_price BETWEEN 1 AND 99"
+            ).all();
+            const acc = {};
+            PAPER_STRATEGIES.forEach(s => { acc[s.key] = { label: s.label, side: s.side, wins: 0, losses: 0, staked: 0, pnl: 0 }; });
+            for (const r of (rows.results || [])) {
+              for (const strat of PAPER_STRATEGIES) {
+                if (!strat.qualifies(r.entry, r.score || 0)) continue;
+                const res = paperStrategyResult(strat.side, r.entry, r.outcome);
+                const b = acc[strat.key];
+                if (res.outcome === "WIN") b.wins++; else b.losses++;
+                b.staked += PAPER_STAKE;
+                b.pnl = Math.round((b.pnl + res.pnl) * 100) / 100;
+              }
+            }
+            strategies = Object.keys(acc).map(key => {
+              const b = acc[key];
+              const settled = b.wins + b.losses;
+              const roi = b.staked > 0 ? Math.round((b.pnl / b.staked) * 1000) / 10 : null;
+              return {
+                key, label: b.label, side: b.side,
+                settled, wins: b.wins, losses: b.losses, staked: b.staked, pnl: b.pnl,
+                roi, winRate: settled > 0 ? Math.round((b.wins / settled) * 100) : null,
+                readyForAuto: settled >= PROVEN_MIN && (roi || 0) > 0
+              };
+            });
+          } catch (e) {
+            console.error("paper/strategies D1 error:", e.message);
+          }
+        }
+        if (!strategies) {
+          const ledger = await env.SIGNALS_CACHE.get(LEDGER_KEY, { type: "json" });
+          const byStrategy = (ledger && ledger.byStrategy) || {};
+          const meta = {};
+          PAPER_STRATEGIES.forEach(s => { meta[s.key] = { label: s.label, side: s.side }; });
+          strategies = Object.keys(byStrategy).map(key => {
+            const b = byStrategy[key];
+            const settled = (b.wins || 0) + (b.losses || 0);
+            const roi = b.staked > 0 ? Math.round((b.pnl / b.staked) * 1000) / 10 : null;
+            return {
+              key, label: (meta[key] && meta[key].label) || key, side: (meta[key] && meta[key].side) || "follow",
+              settled, wins: b.wins || 0, losses: b.losses || 0, staked: b.staked || 0, pnl: b.pnl || 0,
+              roi, winRate: settled > 0 ? Math.round((b.wins / settled) * 100) : null,
+              readyForAuto: settled >= PROVEN_MIN && (roi || 0) > 0
+            };
+          });
+        }
+        strategies.sort((a, b) => (b.roi ?? -999) - (a.roi ?? -999));
+        return atJson({ success: true, provenMinSample: PROVEN_MIN, stakePerTrade: PAPER_STAKE, strategies });
       }
 
       // Proven net edge per entry band (what powers the Scanner's
