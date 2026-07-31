@@ -3490,7 +3490,62 @@ async function scanEdges(env) {
   await env.SIGNALS_CACHE.put("edge_opportunities", JSON.stringify(merged), { expirationTtl: 7 * 24 * 3600 });
   const summary = { at: Date.now(), scanned, sports, found: found.length, newCount };
   await env.SIGNALS_CACHE.put("edge_scan_last", JSON.stringify(summary), { expirationTtl: 3600 });
+
+  // Best-effort push alert for FRESH, strong edges (>= 6pts). No-op unless
+  // Twilio + subscribers are configured; the /edge/opportunities feed is the
+  // always-available surface.
+  const freshStrong = found.filter(o => !existing.some(e => e.id === o.id) && o.edgeNet >= 6);
+  if (freshStrong.length > 0) {
+    try { await alertEdgeOpportunities(env, freshStrong); } catch (e) { console.error("edge alert error:", e.message); }
+  }
   return summary;
+}
+
+// Settle open edge opportunities once their game is over (Gamma ground truth),
+// so the "vegas_edge" strategy earns a real paper track record.
+async function settleEdgeOpportunities(env) {
+  if (!env.SIGNALS_CACHE) return { checked: 0, settled: 0 };
+  let opps = await env.SIGNALS_CACHE.get("edge_opportunities", { type: "json" }) || [];
+  let checked = 0, settledN = 0;
+  const now = Date.now();
+  for (const o of opps) {
+    if (o.outcome) continue;
+    const start = o.commenceTime ? new Date(o.commenceTime).getTime() : 0;
+    if (!start || (now - start) < 4 * 3600 * 1000) continue;   // wait ~4h after tip
+    checked++;
+    try {
+      const res = await settleWithGamma(o.polySlug || "", o.team, o.game);
+      if (res.status === "settled" && (res.outcome === "WIN" || res.outcome === "LOSS")) {
+        o.outcome = res.outcome;
+        o.settledAt = new Date().toISOString();
+        o.pnl = res.outcome === "WIN"
+          ? Math.round(PAPER_STAKE * (100 - o.polyPrice) / o.polyPrice * 100) / 100
+          : -PAPER_STAKE;
+        settledN++;
+      }
+    } catch (e) { /* leave open, retry next cycle */ }
+  }
+  if (settledN > 0) {
+    await env.SIGNALS_CACHE.put("edge_opportunities", JSON.stringify(opps), { expirationTtl: 7 * 24 * 3600 });
+  }
+  return { checked, settled: settledN };
+}
+
+// Best-effort SMS alert for fresh edges (reuses the whale-alert subscriber list
+// and Twilio config; silently does nothing when unconfigured).
+async function alertEdgeOpportunities(env, opps) {
+  if (!env.TWILIO_SID || !env.SIGNALS_CACHE) return;
+  let subs = await env.SIGNALS_CACHE.get("alert_subscribers", { type: "json" });
+  subs = (subs && Array.isArray(subs)) ? subs.filter(s => s.active) : [];
+  if (!subs.length) return;
+  const top = opps.slice(0, 3).map(o =>
+    `${o.team} ${o.polyPrice}¢ (Vegas ${o.vegasProb}%, +${o.edgeNet}pt)`
+  ).join("; ");
+  const msg = `EDGERUNNER edge: ${top}`;
+  for (const sub of subs) {
+    if (sub.categories && !sub.categories.includes("all") && !sub.categories.includes("sports")) continue;
+    try { await sendSMS(sub.phone, msg, env); await new Promise(r => setTimeout(r, 100)); } catch (e) {}
+  }
 }
 
 export default {
@@ -3953,6 +4008,29 @@ export default {
             };
           });
         }
+        // Vegas edge: a second, independent strategy sourced from the
+        // proactive odds scanner (not whale signals), tracked through Gamma
+        // settlement in edge_opportunities.
+        try {
+          const opps = await env.SIGNALS_CACHE.get("edge_opportunities", { type: "json" }) || [];
+          const settled = opps.filter(o => o.outcome === "WIN" || o.outcome === "LOSS");
+          if (settled.length > 0) {
+            let wins = 0, losses = 0, pnl = 0, staked = 0;
+            for (const o of settled) {
+              if (o.outcome === "WIN") wins++; else losses++;
+              staked += PAPER_STAKE; pnl += (o.pnl || 0);
+            }
+            pnl = Math.round(pnl * 100) / 100;
+            const roi = staked > 0 ? Math.round((pnl / staked) * 1000) / 10 : null;
+            strategies.push({
+              key: "vegas_edge", label: "Vegas edge (Odds API)", side: "follow",
+              settled: settled.length, wins, losses, staked, pnl, roi,
+              winRate: settled.length ? Math.round((wins / settled.length) * 100) : null,
+              readyForAuto: settled.length >= PROVEN_MIN && (roi || 0) > 0
+            });
+          }
+        } catch (e) { /* leave strategies as-is */ }
+
         strategies.sort((a, b) => (b.roi ?? -999) - (a.roi ?? -999));
         return atJson({ success: true, provenMinSample: PROVEN_MIN, stakePerTrade: PAPER_STAKE, strategies });
       }
@@ -5973,6 +6051,13 @@ export default {
       } catch (e) {
         console.error("Edge scan error:", e.message);
         cronStatus.edgeScan = { error: e.message };
+      }
+      // Settle finished edge opportunities into the vegas_edge track record.
+      try {
+        cronStatus.edgeSettle = await settleEdgeOpportunities(env);
+      } catch (e) {
+        console.error("Edge settle error:", e.message);
+        cronStatus.edgeSettle = { error: e.message };
       }
 
       // Mirror any KV-settled outcomes into D1 that the hot-path missed
