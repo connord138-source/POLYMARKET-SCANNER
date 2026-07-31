@@ -134,46 +134,54 @@ function getTeamFullName(code) {
   return TEAM_ALIASES[code.toLowerCase()] || code;
 }
 
-// Get scores/results from The Odds API
+// KV-cached fetch wrapper for The Odds API. Every uncached call costs credits
+// (1 per market per region), so we serve a recent cached copy when possible.
+// The free tier is only ~500 credits/month; caching keeps sustained use viable.
+async function cachedOddsFetch(env, cacheKey, url, ttlSeconds) {
+  if (env.SIGNALS_CACHE) {
+    try {
+      var hit = await env.SIGNALS_CACHE.get(cacheKey, { type: "json" });
+      if (hit) return hit;
+    } catch (e) { /* fall through to live fetch */ }
+  }
+  var response = await fetch(url);
+  if (!response.ok) {
+    console.error("Odds API error " + response.status + " for " + cacheKey);
+    return null;
+  }
+  var data = await response.json();
+  if (env.SIGNALS_CACHE && data) {
+    try { await env.SIGNALS_CACHE.put(cacheKey, JSON.stringify(data), { expirationTtl: ttlSeconds }); } catch (e) { /* best-effort */ }
+  }
+  return data;
+}
+
+// Get scores/results from The Odds API (cached 30 min - final scores are stable).
 async function getGameScores(env, sportKey, daysFrom) {
   if (!env.ODDS_API_KEY) {
     console.log("No ODDS_API_KEY configured");
     return null;
   }
-  
   try {
-    var url = ODDS_API_BASE + "/sports/" + sportKey + "/scores/?apiKey=" + env.ODDS_API_KEY + "&daysFrom=" + (daysFrom || 3);
-    var response = await fetch(url);
-    
-    if (!response.ok) {
-      console.error("Odds API scores error: " + response.status);
-      return null;
-    }
-    
-    return await response.json();
+    var df = daysFrom || 3;
+    var url = ODDS_API_BASE + "/sports/" + sportKey + "/scores/?apiKey=" + env.ODDS_API_KEY + "&daysFrom=" + df;
+    return await cachedOddsFetch(env, "odds_scores:" + sportKey + ":" + df, url, 1800);
   } catch (e) {
     console.error("Error fetching scores:", e.message);
     return null;
   }
 }
 
-// Get current odds from The Odds API
+// Get current odds from The Odds API (cached 15 min to conserve credits).
 async function getGameOdds(env, sportKey, markets) {
   if (!env.ODDS_API_KEY) {
     console.log("No ODDS_API_KEY configured");
     return null;
   }
-  
   try {
-    var url = ODDS_API_BASE + "/sports/" + sportKey + "/odds/?apiKey=" + env.ODDS_API_KEY + "&regions=us&markets=" + (markets || 'h2h,spreads') + "&oddsFormat=american";
-    var response = await fetch(url);
-    
-    if (!response.ok) {
-      console.error("Odds API odds error: " + response.status);
-      return null;
-    }
-    
-    return await response.json();
+    var mk = markets || 'h2h,spreads';
+    var url = ODDS_API_BASE + "/sports/" + sportKey + "/odds/?apiKey=" + env.ODDS_API_KEY + "&regions=us&markets=" + mk + "&oddsFormat=american";
+    return await cachedOddsFetch(env, "odds_lines:" + sportKey + ":" + mk, url, 900);
   } catch (e) {
     console.error("Error fetching odds:", e.message);
     return null;
