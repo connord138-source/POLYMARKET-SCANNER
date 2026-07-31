@@ -3414,17 +3414,23 @@ export default {
 
           // Optional: ?wallets=true also wipes per-wallet learning records
           // (wallet:* + the tracked index). Deletes are batched to stay under
-          // the per-request subrequest limit - call repeatedly until
-          // walletsRemaining is false.
+          // the per-request subrequest limit. Thread the returned `cursor`
+          // into the next call (&cursor=...) for guaranteed forward progress -
+          // KV listings are eventually consistent, so re-listing from the
+          // start keeps serving just-deleted keys. Done when walletsRemaining
+          // is false.
           let clearedWallets = 0;
           let walletsRemaining = false;
+          let nextCursor = null;
           if (url.searchParams.get("wallets") === "true") {
-            const page = await env.SIGNALS_CACHE.list({ prefix: KV_KEYS.WALLETS_PREFIX, limit: 40 });
-            for (const k of page.keys) {
-              await env.SIGNALS_CACHE.delete(k.name);
-              clearedWallets++;
-            }
-            walletsRemaining = page.list_complete === false || page.keys.length === 40;
+            const reqCursor = url.searchParams.get("cursor") || undefined;
+            const page = await env.SIGNALS_CACHE.list({
+              prefix: KV_KEYS.WALLETS_PREFIX, limit: 40, cursor: reqCursor
+            });
+            await Promise.all(page.keys.map(k => env.SIGNALS_CACHE.delete(k.name)));
+            clearedWallets = page.keys.length;
+            walletsRemaining = page.list_complete === false;
+            nextCursor = walletsRemaining ? (page.cursor || null) : null;
             if (!walletsRemaining) {
               await env.SIGNALS_CACHE.delete("tracked_wallet_index");
             }
@@ -3436,7 +3442,8 @@ export default {
             clearedFactors,
             clearedCombos,
             clearedWallets,
-            walletsRemaining
+            walletsRemaining,
+            cursor: nextCursor
           });
         } catch (e) {
           return atJson({ success: false, error: e.message }, 500);
