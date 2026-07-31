@@ -3243,7 +3243,9 @@ async function buildOddsComparison(env, sport) {
   if (!env.ODDS_API_KEY) return { error: "Odds API not configured. Add ODDS_API_KEY to secrets." };
 
   const oddsData = await getGameOdds(env, sportKey, 'h2h,spreads');   // KV-cached
-  const tradesRes = await fetch(`${POLYMARKET_API}/trades?limit=2000`);
+  // 5000 (vs 2000) roughly doubles the number of today's liquid games that
+  // appear in the window - a market only shows up if it has traded recently.
+  const tradesRes = await fetch(`${POLYMARKET_API}/trades?limit=5000`);
   const allTrades = tradesRes.ok ? await tradesRes.json() : [];
 
   const sportPrefix = sport.toLowerCase() + '-';
@@ -3255,7 +3257,7 @@ async function buildOddsComparison(env, sport) {
   const polyPrices = {};
   for (const trade of sportsTrades) {
     const slug = trade.eventSlug || trade.slug || '';
-    const match = slug.match(/^(nba|nfl|mlb|nhl)-([a-z]+)-([a-z]+)-(\d{4}-\d{2}-\d{2})/i);
+    const match = slug.match(/^(nba|nfl|mlb|nhl|wnba|ncaab|ncaaf)-([a-z]+)-([a-z]+)-(\d{4}-\d{2}-\d{2})/i);
     if (!match) continue;
     const gameKey = `${match[2]}-${match[3]}-${match[4]}`.toLowerCase();
     const isSpread = slug.includes('-spread');
@@ -3399,6 +3401,96 @@ function shapeEdgeDetection(sport, cmp) {
     },
     topEdges, allGames: games
   };
+}
+
+// ============================================================
+// PROACTIVE EDGE SCANNER
+// Runs on the cron: finds live Vegas-vs-Polymarket mispricings across the
+// sports actually trading right now, stores them, and (later) tracks them
+// through settlement. This is the "push" version of the Edge Detector - it
+// hunts edges continuously instead of only when someone opens the page.
+// ============================================================
+var EDGE_ALERT_MIN = 4;   // net devigged points to log as an opportunity
+// Team sports with the standard "<sport>-<away>-<home>-<date>" Polymarket slug
+// and a real Odds API league key. (Tennis/MMA use non-team slugs; excluded.)
+var EDGE_SCAN_SPORTS = ["mlb", "nba", "wnba", "nfl", "nhl", "ncaab", "ncaaf"];
+
+// Which of our scannable sports are actively trading on Polymarket right now,
+// so we only spend odds credits on in-season leagues.
+async function detectActiveSports(env) {
+  try {
+    const res = await fetch(`${POLYMARKET_API}/trades?limit=5000`);
+    if (!res.ok) return [];
+    const trades = await res.json();
+    const present = new Set();
+    for (const t of trades) {
+      const s = String(t.eventSlug || t.slug || "").toLowerCase();
+      const m = s.match(/^([a-z]+)-/);
+      if (m && EDGE_SCAN_SPORTS.includes(m[1]) && SPORT_KEY_MAP[m[1]]) present.add(m[1]);
+    }
+    return Array.from(present);
+  } catch (e) {
+    console.error("detectActiveSports error:", e.message);
+    return [];
+  }
+}
+
+async function scanEdges(env) {
+  if (!env.ODDS_API_KEY || !env.SIGNALS_CACHE) return { skipped: "not configured" };
+  // Odds are cached 15 min; don't re-scan more often than that.
+  const last = await env.SIGNALS_CACHE.get("edge_scan_last", { type: "json" });
+  if (last && last.at && (Date.now() - last.at) < 14 * 60 * 1000) {
+    return { skipped: "throttled", nextInMin: Math.ceil((14 * 60 * 1000 - (Date.now() - last.at)) / 60000) };
+  }
+
+  const sports = await detectActiveSports(env);
+  const found = [];
+  let scanned = 0;
+  for (const sport of sports.slice(0, 5)) {   // cap per scan for credit safety
+    const cmp = await buildOddsComparison(env, sport);
+    if (cmp.error) continue;
+    scanned++;
+    for (const g of cmp.games) {
+      for (const side of ["home", "away"]) {
+        const edge = g.edge[side];
+        const pm = g.polymarket && g.polymarket.moneyline ? g.polymarket.moneyline[side] : null;
+        const vegProb = g.vegas && g.vegas.moneyline ? (g.vegas.moneyline[side] || {}).prob : null;
+        if (edge !== null && edge >= EDGE_ALERT_MIN && pm && pm.price) {
+          found.push({
+            id: `${sport}:${g.id}:${side}`,
+            sport, game: `${g.awayTeam} @ ${g.homeTeam}`,
+            homeTeam: g.homeTeam, awayTeam: g.awayTeam, commenceTime: g.commenceTime,
+            side, team: side === "home" ? g.homeTeam : g.awayTeam,
+            vegasProb: vegProb, polyPrice: pm.price, edgeNet: edge,
+            polySlug: pm.slug || null,
+            detectedAt: new Date().toISOString(),
+            outcome: null, settledAt: null, pnl: null
+          });
+        }
+      }
+    }
+  }
+
+  // Merge with existing: keep first detection + settlement, refresh live price.
+  let existing = await env.SIGNALS_CACHE.get("edge_opportunities", { type: "json" }) || [];
+  const byId = {};
+  for (const o of existing) byId[o.id] = o;
+  let newCount = 0;
+  for (const o of found) {
+    if (byId[o.id]) {
+      byId[o.id].polyPrice = o.polyPrice;
+      byId[o.id].vegasProb = o.vegasProb;
+      byId[o.id].edgeNet = o.edgeNet;
+    } else {
+      byId[o.id] = o;
+      newCount++;
+    }
+  }
+  let merged = Object.values(byId).sort((a, b) => new Date(b.detectedAt) - new Date(a.detectedAt)).slice(0, 200);
+  await env.SIGNALS_CACHE.put("edge_opportunities", JSON.stringify(merged), { expirationTtl: 7 * 24 * 3600 });
+  const summary = { at: Date.now(), scanned, sports, found: found.length, newCount };
+  await env.SIGNALS_CACHE.put("edge_scan_last", JSON.stringify(summary), { expirationTtl: 3600 });
+  return summary;
 }
 
 export default {
@@ -4866,7 +4958,25 @@ export default {
           return atJson({ success: false, error: e.message }, 500);
         }
       }
-      
+
+      // Stored live edge opportunities from the proactive cron scan.
+      if (path === "/edge/opportunities") {
+        const opps = await env.SIGNALS_CACHE.get("edge_opportunities", { type: "json" }) || [];
+        const lastScan = await env.SIGNALS_CACHE.get("edge_scan_last", { type: "json" });
+        const open = opps.filter(o => !o.outcome);
+        const settled = opps.filter(o => o.outcome === "WIN" || o.outcome === "LOSS");
+        const wins = settled.filter(o => o.outcome === "WIN").length;
+        return atJson({
+          success: true,
+          count: opps.length,
+          openCount: open.length,
+          settledCount: settled.length,
+          winRate: settled.length ? Math.round((wins / settled.length) * 100) : null,
+          lastScan,
+          opportunities: opps.slice(0, 100)
+        });
+      }
+
       // Get Vegas odds for comparison with Polymarket
       // Usage: /odds/compare?sport=nba or /odds/compare?sport=nfl
       if (path === "/odds/compare") {
@@ -5855,6 +5965,15 @@ export default {
       const settlementResults = await processSettledSignals(env);
       console.log(`Settlement: ${settlementResults.processed} processed, ${settlementResults.wins}W-${settlementResults.losses}L`);
       cronStatus.settlement = settlementResults;
+
+      // PROACTIVE EDGE SCAN: hunt live Vegas-vs-Polymarket mispricings across
+      // in-season sports (self-throttled to ~15min to respect odds credits).
+      try {
+        cronStatus.edgeScan = await scanEdges(env);
+      } catch (e) {
+        console.error("Edge scan error:", e.message);
+        cronStatus.edgeScan = { error: e.message };
+      }
 
       // Mirror any KV-settled outcomes into D1 that the hot-path missed
       // (e.g. signals_log rows written before the DB binding existed).
