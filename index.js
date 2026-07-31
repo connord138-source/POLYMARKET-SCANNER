@@ -3229,6 +3229,178 @@ function requiresAdmin(path, url, method) {
   return false;
 }
 
+// ============================================================
+// VEGAS <-> POLYMARKET COMPARISON (shared)
+// Used by /odds/compare-all and /edge/detect. Edge is computed against
+// DEVIGGED Vegas probabilities: raw American-odds implied probs include the
+// bookmaker's vig and sum to >100%, so comparing Polymarket price to the raw
+// prob overstates edge on BOTH sides and manufactures false value bets. We
+// normalize home/away to sum to 100% first.
+// ============================================================
+async function buildOddsComparison(env, sport) {
+  const sportKey = SPORT_KEY_MAP[sport];
+  if (!sportKey) return { error: "Sport not supported. Try: nba, nfl, mlb, nhl" };
+  if (!env.ODDS_API_KEY) return { error: "Odds API not configured. Add ODDS_API_KEY to secrets." };
+
+  const oddsData = await getGameOdds(env, sportKey, 'h2h,spreads');   // KV-cached
+  const tradesRes = await fetch(`${POLYMARKET_API}/trades?limit=2000`);
+  const allTrades = tradesRes.ok ? await tradesRes.json() : [];
+
+  const sportPrefix = sport.toLowerCase() + '-';
+  const sportsTrades = allTrades.filter(t =>
+    (t.eventSlug && t.eventSlug.toLowerCase().startsWith(sportPrefix)) ||
+    (t.slug && t.slug.toLowerCase().startsWith(sportPrefix))
+  );
+
+  const polyPrices = {};
+  for (const trade of sportsTrades) {
+    const slug = trade.eventSlug || trade.slug || '';
+    const match = slug.match(/^(nba|nfl|mlb|nhl)-([a-z]+)-([a-z]+)-(\d{4}-\d{2}-\d{2})/i);
+    if (!match) continue;
+    const gameKey = `${match[2]}-${match[3]}-${match[4]}`.toLowerCase();
+    const isSpread = slug.includes('-spread');
+    const price = parseFloat(trade.price) * 100;
+    const outcome = trade.outcome || '';
+    if (!polyPrices[gameKey]) {
+      polyPrices[gameKey] = {
+        awayCode: match[2].toLowerCase(), homeCode: match[3].toLowerCase(),
+        date: match[4], moneyline: {}, spread: {}, lastUpdate: trade.timestamp
+      };
+    }
+    if (trade.timestamp > polyPrices[gameKey].lastUpdate) polyPrices[gameKey].lastUpdate = trade.timestamp;
+    const awayTeamFull = getTeamFullName(match[2]).toLowerCase();
+    const homeTeamFull = getTeamFullName(match[3]).toLowerCase();
+    const outcomeLower = outcome.toLowerCase();
+    let isAwayTeam = false, isHomeTeam = false;
+    if (outcomeLower.includes(awayTeamFull) || awayTeamFull.includes(outcomeLower) || outcomeLower === match[2].toLowerCase()) {
+      isAwayTeam = true;
+    } else if (outcomeLower.includes(homeTeamFull) || homeTeamFull.includes(outcomeLower) || outcomeLower === match[3].toLowerCase()) {
+      isHomeTeam = true;
+    } else {
+      const awayWords = awayTeamFull.split(' '), homeWords = homeTeamFull.split(' ');
+      if (awayWords.some(w => w.length > 3 && outcomeLower.includes(w))) isAwayTeam = true;
+      else if (homeWords.some(w => w.length > 3 && outcomeLower.includes(w))) isHomeTeam = true;
+    }
+    const bucket = isSpread ? polyPrices[gameKey].spread : polyPrices[gameKey].moneyline;
+    if (isAwayTeam) bucket.away = { price: Math.round(price), slug, team: outcome };
+    else if (isHomeTeam) bucket.home = { price: Math.round(price), slug, team: outcome };
+  }
+
+  const games = (oddsData || []).map(game => {
+    const preferredBooks = ['fanduel', 'draftkings', 'betmgm'];
+    let h2hOdds = null, spreadOdds = null;
+    for (const bookKey of preferredBooks) {
+      const book = game.bookmakers?.find(b => b.key === bookKey);
+      if (book) {
+        if (!h2hOdds) { const m = book.markets?.find(m => m.key === 'h2h'); if (m) h2hOdds = m.outcomes; }
+        if (!spreadOdds) { const m = book.markets?.find(m => m.key === 'spreads'); if (m) spreadOdds = m.outcomes; }
+      }
+      if (h2hOdds && spreadOdds) break;
+    }
+
+    const gameDate = game.commence_time ? game.commence_time.split('T')[0] : '';
+    let polyData = null;
+    for (const [key, data] of Object.entries(polyPrices)) {
+      const awayName = getTeamFullName(data.awayCode).toLowerCase();
+      const homeName = getTeamFullName(data.homeCode).toLowerCase();
+      const vegasAway = game.away_team.toLowerCase(), vegasHome = game.home_team.toLowerCase();
+      const awayMatch = vegasAway.includes(awayName) || awayName.includes(vegasAway);
+      const homeMatch = vegasHome.includes(homeName) || homeName.includes(vegasHome);
+      if (awayMatch && homeMatch && key.includes(gameDate)) { polyData = data; break; }
+    }
+
+    // DEVIG: normalize the two raw implied probs to sum to 100%.
+    const homeAmerican = h2hOdds?.find(o => o.name === game.home_team)?.price;
+    const awayAmerican = h2hOdds?.find(o => o.name === game.away_team)?.price;
+    const rawHome = (homeAmerican !== undefined && homeAmerican !== null) ? americanToProb(homeAmerican) : null;
+    const rawAway = (awayAmerican !== undefined && awayAmerican !== null) ? americanToProb(awayAmerican) : null;
+    let vegasHomeProb = null, vegasAwayProb = null;
+    if (rawHome !== null && rawAway !== null && (rawHome + rawAway) > 0) {
+      vegasHomeProb = Math.round((rawHome / (rawHome + rawAway)) * 100);
+      vegasAwayProb = Math.round((rawAway / (rawHome + rawAway)) * 100);
+    } else {
+      if (rawHome !== null) vegasHomeProb = Math.round(rawHome * 100);
+      if (rawAway !== null) vegasAwayProb = Math.round(rawAway * 100);
+    }
+
+    let homeEdge = null, awayEdge = null;
+    if (polyData?.moneyline?.home?.price && vegasHomeProb !== null) homeEdge = vegasHomeProb - polyData.moneyline.home.price;
+    if (polyData?.moneyline?.away?.price && vegasAwayProb !== null) awayEdge = vegasAwayProb - polyData.moneyline.away.price;
+
+    let bestBet = null;
+    if (homeEdge !== null && homeEdge >= 5) bestBet = { team: game.home_team, edge: homeEdge, type: 'moneyline' };
+    else if (awayEdge !== null && awayEdge >= 5) bestBet = { team: game.away_team, edge: awayEdge, type: 'moneyline' };
+
+    return {
+      id: game.id, homeTeam: game.home_team, awayTeam: game.away_team, commenceTime: game.commence_time,
+      vegas: {
+        moneyline: h2hOdds ? {
+          home: { odds: homeAmerican, prob: vegasHomeProb },
+          away: { odds: awayAmerican, prob: vegasAwayProb }
+        } : null,
+        spread: spreadOdds ? {
+          home: { line: spreadOdds.find(o => o.name === game.home_team)?.point, odds: spreadOdds.find(o => o.name === game.home_team)?.price },
+          away: { line: spreadOdds.find(o => o.name === game.away_team)?.point, odds: spreadOdds.find(o => o.name === game.away_team)?.price }
+        } : null,
+        devigged: true
+      },
+      polymarket: polyData ? {
+        moneyline: { home: polyData.moneyline.home || null, away: polyData.moneyline.away || null },
+        spread: { home: polyData.spread.home || null, away: polyData.spread.away || null },
+        lastUpdate: polyData.lastUpdate
+      } : null,
+      edge: { home: homeEdge, away: awayEdge, bestBet },
+      hasPolymarket: !!polyData
+    };
+  });
+
+  return { games, polymarketGamesFound: Object.keys(polyPrices).length, polymarketGameKeys: Object.keys(polyPrices) };
+}
+
+// Shape the comparison into the Edge Detector page's contract
+// (dataSources / summary / topEdges / allGames).
+function shapeEdgeDetection(sport, cmp) {
+  const games = (cmp.games || []).map(g => {
+    const hE = (g.edge.home === null || g.edge.home === undefined) ? -100 : g.edge.home;
+    const aE = (g.edge.away === null || g.edge.away === undefined) ? -100 : g.edge.away;
+    const bestEdge = Math.max(hE, aE);
+    const edgeScore = bestEdge > 0 ? Math.min(100, Math.round(bestEdge * 6)) : 0;
+    const confidence = bestEdge >= 8 ? 'high' : bestEdge >= 4 ? 'medium' : 'low';
+    const side = hE >= aE ? 'home' : 'away';
+    const betTeam = side === 'home' ? g.homeTeam : g.awayTeam;
+    const polyPrice = side === 'home' ? g.polymarket?.moneyline?.home?.price : g.polymarket?.moneyline?.away?.price;
+    const vegProb = side === 'home' ? g.vegas?.moneyline?.home?.prob : g.vegas?.moneyline?.away?.prob;
+    const signals = [];
+    if (g.hasPolymarket && bestEdge > 0) signals.push({ type: 'polymarket_divergence', edge: bestEdge, strength: confidence });
+    return {
+      ...g, edgeScore, confidence, signalCount: signals.length, signals,
+      recommendation: {
+        action: confidence === 'high' ? 'STRONG' : 'LEAN',
+        summary: g.hasPolymarket
+          ? (bestEdge > 0 ? `Polymarket ${polyPrice}¢ is cheap vs Vegas ${vegProb}% (no-vig)` : 'Priced in line with Vegas')
+          : 'No matching Polymarket market',
+        betSide: (bestEdge > 0 && g.hasPolymarket) ? `${betTeam} @ ${polyPrice}¢` : null,
+        details: g.hasPolymarket && bestEdge > 0
+          ? [`Vegas no-vig: ${betTeam} ${vegProb}%`, `Polymarket: ${polyPrice}¢`, `Edge: +${bestEdge} pts`]
+          : []
+      }
+    };
+  });
+  const withEdge = games.filter(g => g.edgeScore >= 30);
+  const topEdges = withEdge.slice().sort((a, b) => b.edgeScore - a.edgeScore).slice(0, 10);
+  return {
+    success: true, sport,
+    dataSources: { vegasPolymarket: true, sharpLines: false, bettingSplits: false },
+    summary: {
+      totalGames: games.length,
+      gamesWithEdge: withEdge.length,
+      highConfidence: games.filter(g => g.confidence === 'high' && g.edgeScore >= 30).length,
+      mediumConfidence: games.filter(g => g.confidence === 'medium' && g.edgeScore >= 30).length
+    },
+    topEdges, allGames: games
+  };
+}
+
 export default {
   // HTTP request handler
   async fetch(request, env, ctx) {
@@ -4650,296 +4822,48 @@ export default {
       // Returns both Vegas odds and current Polymarket prices for each game
       if (path === "/odds/compare-all") {
         const sport = url.searchParams.get("sport") || "nba";
-        const sportKey = SPORT_KEY_MAP[sport];
-        
-        if (!sportKey) {
-          return new Response(JSON.stringify({
-            success: false,
-            error: "Sport not supported. Try: nba, nfl, mlb, nhl"
-          }), {
-            headers: { ...corsHeaders, "Content-Type": "application/json" }
-          });
-        }
-        
-        if (!env.ODDS_API_KEY) {
-          return new Response(JSON.stringify({
-            success: false,
-            error: "Odds API not configured. Add ODDS_API_KEY to secrets."
-          }), {
-            headers: { ...corsHeaders, "Content-Type": "application/json" }
-          });
-        }
-        
         try {
-          // 1. Fetch Vegas odds
-          const oddsData = await getGameOdds(env, sportKey, 'h2h,spreads');
-          
-          // 2. Fetch recent Polymarket trades to find sports markets
-          const tradesRes = await fetch(`${POLYMARKET_API}/trades?limit=2000`);
-          const allTrades = tradesRes.ok ? await tradesRes.json() : [];
-          
-          // Filter to sports trades for this sport
-          const sportPrefix = sport.toLowerCase() + '-';
-          const sportsTrades = allTrades.filter(t => 
-            (t.eventSlug && t.eventSlug.toLowerCase().startsWith(sportPrefix)) ||
-            (t.slug && t.slug.toLowerCase().startsWith(sportPrefix))
-          );
-          
-          // Build map of current Polymarket prices by game
-          // Key: "awaycode-homecode-date" -> { mlPrice, spreadPrices }
-          const polyPrices = {};
-          
-          for (const trade of sportsTrades) {
-            const slug = trade.eventSlug || trade.slug || '';
-            // Parse slug: nba-por-was-2026-01-28 or nba-por-was-2026-01-28-spread-away-7pt5
-            const match = slug.match(/^(nba|nfl|mlb|nhl)-([a-z]+)-([a-z]+)-(\d{4}-\d{2}-\d{2})/i);
-            if (!match) continue;
-            
-            const gameKey = `${match[2]}-${match[3]}-${match[4]}`.toLowerCase();
-            const isSpread = slug.includes('-spread');
-            const price = parseFloat(trade.price) * 100; // Convert to percentage
-            const outcome = trade.outcome || '';
-            
-            if (!polyPrices[gameKey]) {
-              polyPrices[gameKey] = {
-                awayCode: match[2].toLowerCase(),
-                homeCode: match[3].toLowerCase(),
-                date: match[4],
-                moneyline: {},
-                spread: {},
-                lastUpdate: trade.timestamp
-              };
-            }
-            
-            // Update if this trade is more recent
-            if (trade.timestamp > polyPrices[gameKey].lastUpdate) {
-              polyPrices[gameKey].lastUpdate = trade.timestamp;
-            }
-            
-            // Get full team names for matching
-            const awayTeamFull = getTeamFullName(match[2]).toLowerCase();
-            const homeTeamFull = getTeamFullName(match[3]).toLowerCase();
-            const outcomeLower = outcome.toLowerCase();
-            
-            // Determine which team this price is for based on outcome
-            let isAwayTeam = false;
-            let isHomeTeam = false;
-            
-            // Check if outcome matches away team
-            if (outcomeLower.includes(awayTeamFull) || awayTeamFull.includes(outcomeLower) ||
-                outcomeLower === match[2].toLowerCase()) {
-              isAwayTeam = true;
-            }
-            // Check if outcome matches home team  
-            else if (outcomeLower.includes(homeTeamFull) || homeTeamFull.includes(outcomeLower) ||
-                     outcomeLower === match[3].toLowerCase()) {
-              isHomeTeam = true;
-            }
-            // Try partial match on team name (e.g., "Thunder" matches "Oklahoma City Thunder")
-            else {
-              const awayWords = awayTeamFull.split(' ');
-              const homeWords = homeTeamFull.split(' ');
-              if (awayWords.some(w => w.length > 3 && outcomeLower.includes(w))) {
-                isAwayTeam = true;
-              } else if (homeWords.some(w => w.length > 3 && outcomeLower.includes(w))) {
-                isHomeTeam = true;
-              }
-            }
-            
-            if (isSpread) {
-              // Spread bet
-              if (isAwayTeam) {
-                polyPrices[gameKey].spread.away = {
-                  price: Math.round(price),
-                  slug: slug
-                };
-              } else if (isHomeTeam) {
-                polyPrices[gameKey].spread.home = {
-                  price: Math.round(price),
-                  slug: slug
-                };
-              }
-            } else {
-              // Moneyline bet
-              if (isAwayTeam) {
-                polyPrices[gameKey].moneyline.away = { 
-                  price: Math.round(price), 
-                  slug: slug,
-                  team: outcome
-                };
-              } else if (isHomeTeam) {
-                polyPrices[gameKey].moneyline.home = { 
-                  price: Math.round(price), 
-                  slug: slug,
-                  team: outcome
-                };
-              }
-            }
-          }
-          
-          // Debug: log what we found
-          console.log(`Found ${Object.keys(polyPrices).length} Polymarket games for ${sport}`);
-          
-          // 3. Match Vegas games to Polymarket prices
-          const games = (oddsData || []).map(game => {
-            // Get consensus Vegas odds
-            const preferredBooks = ['fanduel', 'draftkings', 'betmgm'];
-            let h2hOdds = null;
-            let spreadOdds = null;
-            
-            for (const bookKey of preferredBooks) {
-              const book = game.bookmakers?.find(b => b.key === bookKey);
-              if (book) {
-                if (!h2hOdds) {
-                  const h2hMarket = book.markets?.find(m => m.key === 'h2h');
-                  if (h2hMarket) h2hOdds = h2hMarket.outcomes;
-                }
-                if (!spreadOdds) {
-                  const spreadMarket = book.markets?.find(m => m.key === 'spreads');
-                  if (spreadMarket) spreadOdds = spreadMarket.outcomes;
-                }
-              }
-              if (h2hOdds && spreadOdds) break;
-            }
-            
-            // Find matching Polymarket data
-            // Try to match by team names to codes
-            const gameDate = game.commence_time ? game.commence_time.split('T')[0] : '';
-            let polyData = null;
-            
-            // Search for matching Polymarket game
-            for (const [key, data] of Object.entries(polyPrices)) {
-              const awayName = getTeamFullName(data.awayCode).toLowerCase();
-              const homeName = getTeamFullName(data.homeCode).toLowerCase();
-              
-              const vegasAway = game.away_team.toLowerCase();
-              const vegasHome = game.home_team.toLowerCase();
-              
-              // Check if teams match (either direction)
-              const awayMatch = vegasAway.includes(awayName) || awayName.includes(vegasAway);
-              const homeMatch = vegasHome.includes(homeName) || homeName.includes(vegasHome);
-              
-              // Also check date matches
-              const dateMatch = key.includes(gameDate);
-              
-              if (awayMatch && homeMatch && dateMatch) {
-                polyData = data;
-                break;
-              }
-            }
-            
-            // Calculate Vegas implied probabilities
-            const vegasHomeProb = h2hOdds?.find(o => o.name === game.home_team)?.price ? 
-              Math.round(americanToProb(h2hOdds.find(o => o.name === game.home_team).price) * 100) : null;
-            const vegasAwayProb = h2hOdds?.find(o => o.name === game.away_team)?.price ?
-              Math.round(americanToProb(h2hOdds.find(o => o.name === game.away_team).price) * 100) : null;
-            
-            // Calculate edge (positive = Polymarket is better value)
-            let homeEdge = null;
-            let awayEdge = null;
-            
-            if (polyData?.moneyline?.home?.price && vegasHomeProb) {
-              homeEdge = vegasHomeProb - polyData.moneyline.home.price;
-            }
-            if (polyData?.moneyline?.away?.price && vegasAwayProb) {
-              awayEdge = vegasAwayProb - polyData.moneyline.away.price;
-            }
-            
-            // Determine best bet
-            let bestBet = null;
-            if (homeEdge !== null && homeEdge >= 5) {
-              bestBet = { team: game.home_team, edge: homeEdge, type: 'moneyline' };
-            } else if (awayEdge !== null && awayEdge >= 5) {
-              bestBet = { team: game.away_team, edge: awayEdge, type: 'moneyline' };
-            }
-            
-            return {
-              id: game.id,
-              homeTeam: game.home_team,
-              awayTeam: game.away_team,
-              commenceTime: game.commence_time,
-              vegas: {
-                moneyline: h2hOdds ? {
-                  home: { 
-                    odds: h2hOdds.find(o => o.name === game.home_team)?.price,
-                    prob: vegasHomeProb
-                  },
-                  away: { 
-                    odds: h2hOdds.find(o => o.name === game.away_team)?.price,
-                    prob: vegasAwayProb
-                  }
-                } : null,
-                spread: spreadOdds ? {
-                  home: {
-                    line: spreadOdds.find(o => o.name === game.home_team)?.point,
-                    odds: spreadOdds.find(o => o.name === game.home_team)?.price
-                  },
-                  away: {
-                    line: spreadOdds.find(o => o.name === game.away_team)?.point,
-                    odds: spreadOdds.find(o => o.name === game.away_team)?.price
-                  }
-                } : null
-              },
-              polymarket: polyData ? {
-                moneyline: {
-                  home: polyData.moneyline.home || null,
-                  away: polyData.moneyline.away || null
-                },
-                spread: {
-                  home: polyData.spread.home || null,
-                  away: polyData.spread.away || null
-                },
-                lastUpdate: polyData.lastUpdate
-              } : null,
-              edge: {
-                home: homeEdge,
-                away: awayEdge,
-                bestBet: bestBet
-              },
-              hasPolymarket: !!polyData
-            };
+          const cmp = await buildOddsComparison(env, sport);
+          if (cmp.error) return atJson({ success: false, error: cmp.error });
+          const games = cmp.games.slice().sort((a, b) => {
+            const am = Math.max(a.edge.home ?? -100, a.edge.away ?? -100);
+            const bm = Math.max(b.edge.home ?? -100, b.edge.away ?? -100);
+            return bm - am;
           });
-          
-          // Sort: games with value bets first
-          games.sort((a, b) => {
-            const aMaxEdge = Math.max(a.edge.home || -100, a.edge.away || -100);
-            const bMaxEdge = Math.max(b.edge.home || -100, b.edge.away || -100);
-            return bMaxEdge - aMaxEdge;
-          });
-          
-          // Separate value bets
           const valueBets = games.filter(g => g.edge.bestBet !== null);
-          
-          return new Response(JSON.stringify({
-            success: true,
-            sport: sport,
-            sportKey: sportKey,
+          return atJson({
+            success: true, sport, sportKey: SPORT_KEY_MAP[sport],
             timestamp: new Date().toISOString(),
-            gamesCount: games.length,
-            valueBetsCount: valueBets.length,
-            polymarketGamesFound: Object.keys(polyPrices).length,
-            polymarketGameKeys: Object.keys(polyPrices),
+            gamesCount: games.length, valueBetsCount: valueBets.length,
+            polymarketGamesFound: cmp.polymarketGamesFound,
+            polymarketGameKeys: cmp.polymarketGameKeys,
             valueBets: valueBets.map(g => ({
               game: `${g.awayTeam} @ ${g.homeTeam}`,
-              team: g.edge.bestBet.team,
-              edge: g.edge.bestBet.edge,
-              type: g.edge.bestBet.type,
+              team: g.edge.bestBet.team, edge: g.edge.bestBet.edge, type: g.edge.bestBet.type,
               vegasProb: g.edge.bestBet.team === g.homeTeam ? g.vegas.moneyline?.home?.prob : g.vegas.moneyline?.away?.prob,
               polyPrice: g.edge.bestBet.team === g.homeTeam ? g.polymarket?.moneyline?.home?.price : g.polymarket?.moneyline?.away?.price
             })),
-            games: games
-          }), {
-            headers: { ...corsHeaders, "Content-Type": "application/json" }
+            games
           });
-          
         } catch (e) {
-          return new Response(JSON.stringify({
-            success: false,
-            error: e.message,
-            stack: e.stack
-          }), {
-            headers: { ...corsHeaders, "Content-Type": "application/json" }
-          });
+          return atJson({ success: false, error: e.message }, 500);
+        }
+      }
+
+      // Edge Detector: Vegas (no-vig) vs Polymarket, shaped for the UI.
+      if (path.startsWith("/edge/detect/") || path === "/edge/detect") {
+        const sport = path.split("/")[3] || url.searchParams.get("sport") || "nba";
+        try {
+          const cmp = await buildOddsComparison(env, sport);
+          if (cmp.error) {
+            return atJson({ success: false, error: cmp.error,
+              dataSources: { vegasPolymarket: false, sharpLines: false, bettingSplits: false },
+              summary: { totalGames: 0, gamesWithEdge: 0, highConfidence: 0, mediumConfidence: 0 },
+              topEdges: [], allGames: [] });
+          }
+          return atJson(shapeEdgeDetection(sport, cmp));
+        } catch (e) {
+          return atJson({ success: false, error: e.message }, 500);
         }
       }
       
