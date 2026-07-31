@@ -12,6 +12,7 @@ var ODDS_API_BASE = "https://api.the-odds-api.com/v4";
 var SPORT_KEY_MAP = {
   'nfl': 'americanfootball_nfl',
   'nba': 'basketball_nba',
+  'wnba': 'basketball_wnba',
   'mlb': 'baseball_mlb',
   'nhl': 'icehockey_nhl',
   'ncaaf': 'americanfootball_ncaaf',
