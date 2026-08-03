@@ -6068,21 +6068,20 @@ export default {
         cronStatus.signalBackfill = { error: e.message };
       }
 
-      // AUTO-TRADER: process fresh signals when the bot is enabled
-      // (throttled to one pass per 5 minutes, mirrors the v18 cron).
+      // AUTO-TRADER: process this cron's already-computed signals. Reuses the
+      // top-of-cron scan (`result.signals`) instead of running a second
+      // expensive runScan, which was both wasteful and unreliable (the old
+      // ">5 min" throttle oscillated around the 5-min cron interval and kept
+      // skipping the block). processSignals has its own per-entry cooldown and
+      // daily caps, so running every cron is safe.
       try {
         const atConfig = await getAutotraderConfig(env);
-        if (atConfig.enabled) {
-          const lastAutoRun = await env.SIGNALS_CACHE?.get('last_autotrader_run');
-          const minSinceAuto = lastAutoRun ? (Date.now() - new Date(lastAutoRun).getTime()) / 60000 : 999;
-          if (minSinceAuto > 5) {
-            const atScan = await runScan(48, 15, env);
-            if (atScan.signals && atScan.signals.length > 0) {
-              const atResult = await processSignals(env, atScan.signals);
-              cronStatus.autotrader = atResult;
-            }
-            await env.SIGNALS_CACHE?.put('last_autotrader_run', new Date().toISOString());
-          }
+        if (atConfig.enabled && result.signals && result.signals.length > 0) {
+          const atResult = await processSignals(env, result.signals);
+          cronStatus.autotrader = atResult;
+          await env.SIGNALS_CACHE?.put('last_autotrader_run', new Date().toISOString());
+        } else {
+          cronStatus.autotrader = { skipped: atConfig.enabled ? "no signals this scan" : "bot disabled" };
         }
       } catch (e) {
         cronStatus.autotrader = { error: e.message };
