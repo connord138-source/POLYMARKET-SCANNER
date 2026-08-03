@@ -17,6 +17,7 @@ import { calculateConfidence, getFactorStats, hasStrongCombo } from './at-learni
 
 const GAMMA_API = 'https://gamma-api.polymarket.com';
 const CLOB_API = 'https://clob.polymarket.com';
+const POLY_DATA_API = 'https://data-api.polymarket.com';
 
 // ============================================================
 // KV KEY CONSTANTS
@@ -212,6 +213,50 @@ async function fetchLivePrices(env, positions) {
   }
   
   return priceMap;
+}
+
+// Detect whether the whale we mirrored has since sold/reduced their position.
+// For each open position we watch its whaleWallet's recent Polymarket activity;
+// a SELL (or REDEEM/MERGE) in the same market after we entered means the smart
+// money is heading out — the reason we entered is gone, so we mirror the exit.
+// Returns a Set of marketSlugs where the whale has exited.
+async function detectWhaleExits(env, positions) {
+  const exited = new Set();
+  if (!positions || positions.length === 0) return exited;
+
+  // Group positions by the wallet to watch (dedupe API calls).
+  const byWallet = {};
+  for (const p of positions) {
+    const w = (p.whaleWallet || '').toLowerCase();
+    if (!w || w === 'unknown' || !p.marketSlug) continue;
+    (byWallet[w] = byWallet[w] || []).push(p);
+  }
+  const wallets = Object.keys(byWallet);
+
+  for (const wallet of wallets.slice(0, 30)) {   // cap per run
+    try {
+      const res = await fetch(`${POLY_DATA_API}/activity?user=${wallet}&limit=100`);
+      if (!res.ok) continue;
+      const acts = await res.json();
+      if (!Array.isArray(acts)) continue;
+      for (const p of byWallet[wallet]) {
+        const slug = (p.marketSlug || '').toLowerCase();
+        const openedMs = new Date(p.openedAt).getTime();
+        const sold = acts.some((a) => {
+          const aSlug = String(a.slug || a.eventSlug || '').toLowerCase();
+          if (!aSlug || !(aSlug === slug || aSlug.includes(slug) || slug.includes(aSlug))) return false;
+          let ts = a.timestamp || 0;
+          if (ts && ts < 1e12) ts *= 1000;
+          if (ts <= openedMs) return false;   // only sells AFTER we entered
+          const side = String(a.side || '').toUpperCase();
+          const type = String(a.type || '').toUpperCase();
+          return side === 'SELL' || type === 'REDEEM' || type === 'MERGE';
+        });
+        if (sold) exited.add(p.marketSlug);
+      }
+    } catch (e) { /* skip this wallet */ }
+  }
+  return exited;
 }
 
 // Normalize market title for duplicate matching
@@ -1033,11 +1078,10 @@ function shouldExitPosition(position, currentPrice, config, signal) {
   }
 
   // === MIRROR EXIT ===
+  // The whale we copied has sold. The edge that justified the position is gone,
+  // so follow them out regardless of current P&L.
   if (config.mirrorExits && signal?.whaleIsSelling) {
-    const absPctChange = Math.abs(pctChange);
-    if (absPctChange >= 2) {
-      return { shouldExit: true, reason: 'Mirrored wallet exiting position', exitType: 'mirror_exit' };
-    }
+    return { shouldExit: true, reason: 'Whale exited — mirroring their sell', exitType: 'mirror_exit' };
   }
 
   return { shouldExit: false };
@@ -1141,7 +1185,12 @@ export async function processSignals(env, signals) {
 
   // --- STEP 1: Fetch live prices for all open positions from Polymarket ---
   const livePriceMap = await fetchLivePrices(env, openPositions);
-  
+
+  // Which positions' whales have already sold (mirror-exit signal).
+  const whaleExitedSlugs = config.mirrorExits !== false
+    ? await detectWhaleExits(env, openPositions)
+    : new Set();
+
   // --- STEP 2: Check exit conditions on open positions ---
   // Clean up stale pendingExit flags — but only if pending for > 30 minutes with no queue entry
   // This prevents clearing pendingExit immediately after executor fills a sell
@@ -1167,7 +1216,12 @@ export async function processSignals(env, signals) {
     results.exitChecks++;
     
     // Priority: 1) Live CLOB price, 2) Signal scan price, 3) Entry price (stale)
-    const currentSignal = signals.find(s => s.marketSlug === position.marketSlug);
+    let currentSignal = signals.find(s => s.marketSlug === position.marketSlug);
+    // Flag whale-exit so shouldExitPosition can mirror it, even when there's no
+    // fresh signal for this market this scan.
+    if (whaleExitedSlugs.has(position.marketSlug)) {
+      currentSignal = { ...(currentSignal || {}), whaleIsSelling: true };
+    }
     const liveData = livePriceMap.get(position.marketSlug);
     
     let currentPrice;
