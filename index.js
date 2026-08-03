@@ -3548,6 +3548,42 @@ async function alertEdgeOpportunities(env, opps) {
   }
 }
 
+// Map our scanner's signal shape to the fields the grafted autotrader
+// (evaluateSignal) expects. Without this, price/time/wallet gates read
+// undefined — displayPrice falls back to 50%, uniqueWallets to 0, and every
+// signal is rejected as "No winning wallet on signal". A wallet only routes
+// through the quality gate when it has real proven history (>=5 settled bets,
+// >=60% WR); otherwise the signal uses the score-based high-conviction bypass.
+function adaptSignalForAutotrader(signal) {
+  const entry = signal.avgEntryPrice;
+  let hasWinningWallet = false;
+  let winningWalletInfo = null;
+  for (const t of (signal.topTrades || [])) {
+    if (t.winRate != null && (t.totalBets || 0) >= 5 && t.winRate >= 60) {
+      if (!winningWalletInfo || t.winRate > winningWalletInfo.winRate) {
+        winningWalletInfo = {
+          winRate: t.winRate, totalBets: t.totalBets,
+          record: `${t.totalBets} bets`, tier: t.winRate >= 70 ? 'ELITE' : 'STRONG'
+        };
+        hasWinningWallet = true;
+      }
+    }
+  }
+  return {
+    ...signal,
+    uniqueWallets: signal.numWallets || 0,
+    displayPrice: entry,
+    entryPrice: entry,
+    priceAtSignal: entry,
+    title: signal.marketTitle,
+    marketType: detectMarketType(signal.marketTitle),
+    hoursUntilEnd: signal.hoursUntilEvent,
+    whaleIsSelling: false,
+    hasWinningWallet,
+    winningWalletInfo
+  };
+}
+
 export default {
   // HTTP request handler
   async fetch(request, env, ctx) {
@@ -6077,7 +6113,8 @@ export default {
       try {
         const atConfig = await getAutotraderConfig(env);
         if (atConfig.enabled && result.signals && result.signals.length > 0) {
-          const atResult = await processSignals(env, result.signals);
+          const atSignals = result.signals.map(adaptSignalForAutotrader);
+          const atResult = await processSignals(env, atSignals);
           cronStatus.autotrader = atResult;
           await env.SIGNALS_CACHE?.put('last_autotrader_run', new Date().toISOString());
         } else {
