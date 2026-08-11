@@ -1,0 +1,72 @@
+name: Backend Snapshot
+
+# Snapshots the live worker's read-only state into status/backend.json so
+# Claude Code sessions (whose egress policy blocks the workers.dev domain)
+# can always see current auto-trader / AI-learning / edge state via the repo.
+# Runs on a schedule and on demand (workflow_dispatch).
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: backend-snapshot
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch backend state
+        run: |
+          BASE="https://polymarket-scanner.connord138.workers.dev"
+          mkdir -p status /tmp/snap
+          endpoints=(
+            "health|/health"
+            "cronStatus|/cron-status"
+            "config|/autotrader/config"
+            "performance|/autotrader/performance"
+            "daily|/autotrader/daily"
+            "dailyRange|/autotrader/daily-range?days=14"
+            "positions|/autotrader/positions"
+            "aiIntelligence|/autotrader/ai-intelligence"
+            "tradeLog|/autotrader/log?limit=30"
+            "tradeHistory|/autotrader/history?limit=30"
+            "learningStats|/learning/stats"
+            "learningInsights|/learning/insights"
+            "paperStrategies|/paper/strategies"
+            "edgeOpportunities|/edge/opportunities"
+          )
+          args=(--arg fetchedAt "$(date -u +%FT%TZ)")
+          prog='{fetchedAt: $fetchedAt}'
+          for e in "${endpoints[@]}"; do
+            name="${e%%|*}"; path="${e#*|}"
+            if ! curl -sf --max-time 45 "$BASE$path" -o "/tmp/snap/$name.json" \
+               || ! jq -e . "/tmp/snap/$name.json" >/dev/null 2>&1; then
+              echo '{"error":"fetch failed"}' > "/tmp/snap/$name.json"
+              echo "WARN: $path failed"
+            fi
+            args+=(--slurpfile "$name" "/tmp/snap/$name.json")
+            prog+=" + {\"$name\": \$$name[0]}"
+          done
+          jq -n "${args[@]}" "$prog" > status/backend.json
+          echo "Snapshot size: $(wc -c < status/backend.json) bytes"
+
+      - name: Commit if changed
+        run: |
+          git add status/backend.json
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore: backend snapshot [skip ci]"
+          git pull --rebase origin main
+          git push
