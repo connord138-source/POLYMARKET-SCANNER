@@ -97,8 +97,37 @@ async function lookupMarketTokens(slug) {
 }
 
 /**
+ * Price the side a position actually holds. liveData.price is always the
+ * YES-token (outcomes[0]) price, but positions can hold either side — "No",
+ * a team name (outcomes[1]), "Under 8.5", etc. Match the position's direction
+ * against the market's real outcome labels; unmatched directions fall back to
+ * the legacy rule (flip only on literal NO).
+ */
+function priceForPosition(liveData, position) {
+  const yes = liveData.price;
+  const outcomes = Array.isArray(liveData.outcomes) && liveData.outcomes.length >= 2
+    ? liveData.outcomes
+    : ['Yes', 'No'];
+  const norm = (s) => String(s ?? '').trim().toLowerCase();
+  const o0 = norm(outcomes[0]);
+  const o1 = norm(outcomes[1]);
+  for (const raw of [position.directionRaw, position.direction]) {
+    const dir = norm(raw);
+    if (!dir || dir === 'unknown') continue;
+    if (dir === o0) return yes;
+    if (dir === o1) return 100 - yes;
+    // Prefix match covers "Under 8.5" (direction) vs "Under" (outcome)
+    const p0 = o0 && (dir.startsWith(o0) || o0.startsWith(dir));
+    const p1 = o1 && (dir.startsWith(o1) || o1.startsWith(dir));
+    if (p0 && !p1) return yes;
+    if (p1 && !p0) return 100 - yes;
+  }
+  return norm(position.direction) === 'no' ? 100 - yes : yes;
+}
+
+/**
  * Fetch live prices for all open positions from Polymarket CLOB
- * Returns a Map of marketSlug → { price (as percent), source, closed }
+ * Returns a Map of marketSlug → { price (as percent), source, closed, outcomes }
  */
 async function fetchLivePrices(env, positions) {
   const priceMap = new Map(); // marketSlug → { price, source }
@@ -154,20 +183,22 @@ async function fetchLivePrices(env, positions) {
       if (gammaPrice) {
         // YES price = gammaPrices[0], NO price = 1 - YES price
         const yesPercent = Math.round(gammaPrice[0] * 100);
-        priceMap.set(item.slug, { 
-          price: yesPercent, 
+        priceMap.set(item.slug, {
+          price: yesPercent,
           source: 'gamma_resolved',
-          closed: true 
+          closed: true,
+          outcomes: item.tokens.outcomes
         });
       }
       continue;
     }
-    
+
     // Map the YES token to this slug
     // We always fetch YES token midpoint — NO price is just (100 - YES)
-    tokenIdToSlug.set(item.tokens.yesTokenId, { 
-      slug: item.slug, 
-      direction: item.position.direction 
+    tokenIdToSlug.set(item.tokens.yesTokenId, {
+      slug: item.slug,
+      direction: item.position.direction,
+      outcomes: item.tokens.outcomes
     });
   }
   
@@ -193,10 +224,11 @@ async function fetchLivePrices(env, positions) {
             if (info) {
               // Midpoint is a decimal (e.g. 0.65 = 65%)
               const yesPercent = Math.round(mid * 100);
-              priceMap.set(info.slug, { 
-                price: yesPercent, 
+              priceMap.set(info.slug, {
+                price: yesPercent,
                 source: 'clob_midpoint',
-                closed: false 
+                closed: false,
+                outcomes: info.outcomes
               });
             }
           }
@@ -206,12 +238,42 @@ async function fetchLivePrices(env, positions) {
       console.error('CLOB midpoint batch fetch error:', e.message);
     }
   }
-  
+
+  // Step 4: Any slug still without a price usually means the order book is
+  // gone — which on Polymarket means the market RESOLVED. The token cache
+  // pinned closed:false at entry time, so re-check Gamma fresh; if the market
+  // settled, emit its final price so the exit engine records the real
+  // win/loss instead of voiding the trade after maxHoldHours (stale_timeout).
+  const missingSlugs = [...new Set(
+    tokenLookups.filter(t => !priceMap.has(t.slug)).map(t => t.slug)
+  )];
+  for (let i = 0; i < missingSlugs.length; i += 5) {
+    const batch = missingSlugs.slice(i, i + 5);
+    await Promise.allSettled(batch.map(async (slug) => {
+      const fresh = await lookupMarketTokens(slug);
+      if (!fresh) return;
+      tokenCache[slug] = fresh;
+      cacheUpdated = true;
+      const gp = fresh.gammaPrices;
+      // Only trust settled-looking prices (≥95¢ on one side). A market that
+      // closed near its trading range is a void/refund — correctly ends up
+      // as a stale push instead of a fake win/loss.
+      if (fresh.closed && gp && Math.max(gp[0], 1 - gp[0]) >= 0.95) {
+        priceMap.set(slug, {
+          price: Math.round(gp[0] * 100),
+          source: 'gamma_resolved',
+          closed: true,
+          outcomes: fresh.outcomes
+        });
+      }
+    }));
+  }
+
   // Save updated token cache
   if (cacheUpdated) {
     await saveTokenCache(env, tokenCache);
   }
-  
+
   return priceMap;
 }
 
@@ -333,6 +395,7 @@ const DEFAULT_CONFIG = {
   minExpectedValue: 0.10,         // Minimum EV to enter (0.10 = +10%)
   maxEntryCentsSlippage: 5,       // Max absolute cents difference from whale entry
   minAiScore: 40,                 // Minimum AI score to consider
+  maxEventHorizonHours: 168,      // Skip markets resolving further out than this (0 = disabled)
   requireProvenEdge: true,        // Only trade signals whose entry band has a proven positive historical edge (signal.hasPositiveEdge)
   onlyBuySignals: false,          // If true, ignore SELL signals (safer for start)
   maxEntrySlippage: 15,           // Max % price can move from whale entry before we skip
@@ -876,6 +939,15 @@ function evaluateSignal(signal, config, dailyStats, openPositions, perf) {
     return { shouldTrade: false, reason: `Event has ended (${Math.abs(Math.round(signal.hoursUntilEnd))}h ago)` };
   }
 
+  // ========== GATE 3b: Is the event too far out? ==========
+  // Whale-mirroring is a short-horizon edge and maxHoldHours caps holds at a
+  // few days; a market that resolves weeks from now just occupies a position
+  // slot until the hold timer voids it. Unknown horizons are allowed through.
+  const horizonHours = config.maxEventHorizonHours ?? 168;
+  if (horizonHours > 0 && signal.hoursUntilEnd != null && signal.hoursUntilEnd > horizonHours) {
+    return { shouldTrade: false, reason: `Event too far out (${Math.round(signal.hoursUntilEnd / 24)}d > ${Math.round(horizonHours / 24)}d horizon)` };
+  }
+
   // ========== GATE 4: Basic signal filters ==========
   if (config.onlyBuySignals && signal.whaleIsSelling) {
     return { shouldTrade: false, reason: 'SELL signal filtered (onlyBuySignals=true)' };
@@ -1228,13 +1300,9 @@ export async function processSignals(env, signals) {
     let priceSource;
     
     if (liveData) {
-      // We have a real price from Polymarket CLOB or Gamma
-      // liveData.price is YES price as percent. Convert based on position direction.
-      if (position.direction === 'NO') {
-        currentPrice = 100 - liveData.price;
-      } else {
-        currentPrice = liveData.price;
-      }
+      // We have a real price from Polymarket CLOB or Gamma.
+      // liveData.price is the YES-outcome price; convert to the side we hold.
+      currentPrice = priceForPosition(liveData, position);
       priceSource = liveData.source;
     } else if (currentSignal?.displayPrice) {
       currentPrice = currentSignal.displayPrice;
@@ -1487,7 +1555,7 @@ export async function processSignals(env, signals) {
     let hasLivePrice = true;
     
     if (liveData) {
-      currentPrice = p.direction === 'NO' ? (100 - liveData.price) : liveData.price;
+      currentPrice = priceForPosition(liveData, p);
       if (liveData.closed) return false; // Resolved market — already exited above
     } else if (currentSignal?.displayPrice) {
       currentPrice = currentSignal.displayPrice;
@@ -1678,6 +1746,7 @@ export async function processSignals(env, signals) {
       marketType: signal.marketType,
       signalSubType: signal.signalSubType || 'moneyline',
       direction: signal.direction,
+      directionRaw: signal.directionRaw || null, // exact Polymarket outcome label
       whaleAction: evaluation.whaleAction,
       entryPrice: evaluation.entryPrice,
       size: evaluation.positionSize,
