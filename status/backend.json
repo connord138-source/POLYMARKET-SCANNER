@@ -1,21 +1,21 @@
 {
-  "fetchedAt": "2026-08-11T20:55:38Z",
+  "fetchedAt": "2026-08-11T21:39:38Z",
   "health": {
     "status": "ok",
-    "timestamp": "2026-08-11T20:55:38.762Z",
+    "timestamp": "2026-08-11T21:39:39.756Z",
     "version": "21.1.0 - Modularize: extract src/odds.js + src/gamma.js from index.js",
     "cache": {
-      "signalCount": 8759,
-      "oldestSignal": "2026-08-04T20:54:29.000Z",
-      "newestSignal": "2026-08-11T20:46:06.000Z"
+      "signalCount": 8777,
+      "oldestSignal": "2026-08-04T21:37:26.000Z",
+      "newestSignal": "2026-08-11T21:31:36.000Z"
     }
   },
   "cronStatus": {
     "success": true,
     "lastRun": {
-      "startedAt": "2026-08-11T20:50:19.883Z",
+      "startedAt": "2026-08-11T21:35:52.632Z",
       "scan": {
-        "signals": 285,
+        "signals": 300,
         "success": true
       },
       "settlement": {
@@ -39,7 +39,7 @@
       "error": null,
       "edgeScan": {
         "skipped": "throttled",
-        "nextInMin": 4
+        "nextInMin": 5
       },
       "edgeSettle": {
         "checked": 0,
@@ -51,29 +51,23 @@
         "expired": 0
       },
       "autotrader": {
-        "evaluated": 285,
+        "evaluated": 300,
         "tradesOpened": 0,
-        "tradesPaperTraded": 1,
+        "tradesPaperTraded": 0,
         "tradesQueued": 0,
-        "skipped": 284,
+        "skipped": 300,
         "skipReasons": {
-          "Entry price too high for sports_binary (81% > 52%)": 1,
-          "Entry price too high for sports_binary (80% > 52%)": 1,
-          "Category \"tennis\" is blocked": 10,
-          "Entry price too high for sports_binary (69% > 52%)": 1,
-          "Duplicate market (already traded)": 53,
-          "Category \"esports\" is blocked": 4,
-          "Entry price too high for sports_other (59% > 55%)": 1,
-          "Max open positions reached (15)": 213
+          "Max open positions reached (15)": 244,
+          "Duplicate market (already traded)": 56
         },
         "exitChecks": 15,
-        "positionsExited": 1,
+        "positionsExited": 0,
         "errors": [],
         "openPositions": 15,
         "dailyPnL": -1.46,
         "totalPnL": 3135.1749494949495
       },
-      "completedAt": "2026-08-11T20:51:51.320Z"
+      "completedAt": "2026-08-11T21:36:27.763Z"
     },
     "cronSchedule": "Every 5 minutes",
     "note": "Settlement runs automatically. Sports events settle ~12h after game ends."
@@ -123,6 +117,7 @@
     "minExpectedValue": 0,
     "maxEntryCentsSlippage": 5,
     "minAiScore": 0,
+    "maxEventHorizonHours": 168,
     "requireProvenEdge": false,
     "onlyBuySignals": true,
     "maxEntrySlippage": 15,
@@ -798,7 +793,8 @@
       "aiConfidence": null,
       "strongCombo": null,
       "isHighConviction": true,
-      "shares": 5.084745762711865
+      "shares": 5.084745762711865,
+      "peakPctGain": 0
     }
   ],
   "aiIntelligence": {
@@ -1166,16 +1162,6 @@
   },
   "tradeLog": [
     {
-      "type": "EXIT",
-      "market": "LoL: KT Rolster vs Dplus KIA (BO3) - LCK Round 3-4 Legend Group",
-      "shouldExit": true,
-      "reason": "Max hold time exceeded (24h > 24h)",
-      "exitType": "timeout",
-      "pnl": 0,
-      "paperTrade": true,
-      "timestamp": "2026-08-11T12:41:27.924Z"
-    },
-    {
       "type": "SKIP",
       "market": "LoL: Hanwha Life Esports vs DN SOOPers (BO5) - KeSPA Cup Playoffs",
       "reason": "Entry price too high for sports_binary (81% > 52%)",
@@ -1453,6 +1439,14 @@
       "whaleAction": "BUY",
       "marketCategory": "other",
       "timestamp": "2026-08-11T20:51:47.851Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "LoL: Hanwha Life Esports vs DN SOOPers (BO5) - KeSPA Cup Playoffs",
+      "reason": "Max open positions reached (15)",
+      "walletTier": "STRONG",
+      "marketCategory": "other",
+      "timestamp": "2026-08-11T21:06:47.171Z"
     }
   ],
   "tradeHistory": [
@@ -2489,7 +2483,7 @@
       "totalFactorsTracked": 12,
       "totalSignalsProcessed": 1921,
       "overallWinRate": 55,
-      "pendingSignals": 346
+      "pendingSignals": 354
     },
     "walletEdge": {
       "totalTracked": 500,
@@ -2713,7 +2707,7 @@
       "wins": 1057,
       "losses": 864,
       "winRate": 55,
-      "pendingSignals": 346
+      "pendingSignals": 354
     },
     "insights": {
       "bestFactors": [
@@ -2902,12 +2896,13 @@
     "settledCount": 0,
     "winRate": null,
     "lastScan": {
-      "at": 1786480903707,
-      "scanned": 3,
+      "at": 1786483587057,
+      "scanned": 4,
       "sports": [
-        "wnba",
         "mlb",
-        "nba"
+        "wnba",
+        "nfl",
+        "nhl"
       ],
       "found": 0,
       "newCount": 0
