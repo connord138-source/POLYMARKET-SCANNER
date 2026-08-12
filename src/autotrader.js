@@ -62,11 +62,18 @@ async function saveTokenCache(env, cache) {
  */
 async function lookupMarketTokens(slug) {
   try {
-    const res = await fetch(`${GAMMA_API}/markets?slug=${encodeURIComponent(slug)}&limit=1`);
-    if (!res.ok) return null;
-    const markets = await res.json();
+    let res = await fetch(`${GAMMA_API}/markets?slug=${encodeURIComponent(slug)}&limit=1`);
+    let markets = res.ok ? await res.json() : null;
+    if (!markets || markets.length === 0) {
+      // Gamma HIDES closed markets from the default slug listing (see the
+      // note in src/gamma.js) — a resolved market returns [] unless queried
+      // with closed=true. Without this retry, settlement can never find the
+      // very markets it exists to settle.
+      res = await fetch(`${GAMMA_API}/markets?closed=true&slug=${encodeURIComponent(slug)}&limit=1`);
+      markets = res.ok ? await res.json() : null;
+    }
     if (!markets || markets.length === 0) return null;
-    
+
     const market = markets[0];
     const tokenIds = typeof market.clobTokenIds === 'string' 
       ? JSON.parse(market.clobTokenIds) 
@@ -922,6 +929,11 @@ function evaluateSignal(signal, config, dailyStats, openPositions, perf) {
   }
 
   // ========== GATE 2: Is this a new market? ==========
+  // A position without a market slug can never be priced or settled — it
+  // just rides to the stale void. Refuse it up front.
+  if (!signal.marketSlug) {
+    return { shouldTrade: false, reason: 'Signal has no market slug — cannot price or settle' };
+  }
   const signalNormTitle = normalizeMarketKey(signal.marketTitle);
   const isDuplicate = openPositions.some(p =>
     p.marketSlug === signal.marketSlug ||
