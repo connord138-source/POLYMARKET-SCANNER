@@ -1,27 +1,27 @@
 {
-  "fetchedAt": "2026-08-12T21:13:04Z",
+  "fetchedAt": "2026-08-12T22:09:29Z",
   "health": {
     "status": "ok",
-    "timestamp": "2026-08-12T21:13:05.471Z",
+    "timestamp": "2026-08-12T22:09:30.769Z",
     "version": "21.1.0 - Modularize: extract src/odds.js + src/gamma.js from index.js",
     "cache": {
-      "signalCount": 9166,
-      "oldestSignal": "2026-08-05T21:10:26.000Z",
-      "newestSignal": "2026-08-12T21:07:10.000Z"
+      "signalCount": 9199,
+      "oldestSignal": "2026-08-05T22:08:29.000Z",
+      "newestSignal": "2026-08-12T22:01:15.000Z"
     }
   },
   "cronStatus": {
     "success": true,
     "lastRun": {
-      "startedAt": "2026-08-12T21:05:02.332Z",
+      "startedAt": "2026-08-12T22:05:02.333Z",
       "scan": {
-        "signals": 405,
+        "signals": 439,
         "success": true
       },
       "settlement": {
-        "processed": 1,
+        "processed": 0,
         "wins": 0,
-        "losses": 1,
+        "losses": 0,
         "errors": 0
       },
       "investigations": null,
@@ -35,33 +35,11 @@
         "confirmed": 0,
         "total": 0
       },
-      "optimization": {
-        "optimized": true,
-        "totalFactors": 13,
-        "totalOptimized": 2,
-        "optimizations": [
-          {
-            "factor": "lastMinute6h",
-            "winRate": 55,
-            "samples": 298,
-            "oldWeight": 1.3250000000000002,
-            "newWeight": 1.25,
-            "change": -0.08
-          },
-          {
-            "factor": "concentrated",
-            "winRate": 53,
-            "samples": 460,
-            "oldWeight": 1.22,
-            "newWeight": 1.16,
-            "change": -0.06
-          }
-        ]
-      },
+      "optimization": null,
       "error": null,
       "edgeScan": {
         "skipped": "throttled",
-        "nextInMin": 4
+        "nextInMin": 5
       },
       "edgeSettle": {
         "checked": 0,
@@ -73,48 +51,33 @@
         "expired": 0
       },
       "autotrader": {
-        "evaluated": 405,
+        "evaluated": 439,
         "tradesOpened": 0,
-        "tradesPaperTraded": 0,
+        "tradesPaperTraded": 1,
         "tradesQueued": 0,
-        "skipped": 405,
+        "skipped": 438,
         "skipReasons": {
-          "Duplicate market (already traded)": 69,
-          "Category \"esports\" is blocked": 98,
+          "Duplicate market (already traded)": 70,
+          "Category \"esports\" is blocked": 9,
+          "Category \"tennis\" is blocked": 3,
           "Entry price too high for sports_binary (79% > 52%)": 1,
           "Entry price too high for sports_binary (68% > 52%)": 1,
-          "Entry price too high for sports_binary (63% > 52%)": 2,
-          "Category \"tennis\" is blocked": 9,
-          "Entry price too high for other (82% > 80%)": 2,
-          "Entry price too high for sports_binary (76% > 52%)": 2,
-          "Entry price too high for sports_binary (65% > 52%)": 2,
-          "Signal has no market slug — cannot price or settle": 5,
-          "Event too far out (41d > 7d horizon)": 4,
-          "Entry price too high for sports_binary (61% > 52%)": 1,
-          "Entry price too high for sports_binary (59% > 52%)": 1,
-          "Event too far out (140d > 7d horizon)": 1,
-          "Entry price too high for other (83% > 80%)": 1,
-          "Event too far out (50d > 7d horizon)": 3,
-          "Entry price too high for sports_binary (60% > 52%)": 1,
-          "Event too far out (118d > 7d horizon)": 1,
-          "Event too far out (39d > 7d horizon)": 5,
-          "Event too far out (40d > 7d horizon)": 12,
-          "Entry price too high for sports_binary (69% > 52%)": 1,
-          "No winning wallet on signal": 173,
-          "Event too far out (142d > 7d horizon)": 3,
-          "Event too far out (143d > 7d horizon)": 4,
-          "Event too far out (7d > 7d horizon)": 1,
-          "Event too far out (141d > 7d horizon)": 1,
-          "Event too far out (10d > 7d horizon)": 1
+          "Entry price too high for sports_binary (63% > 52%)": 1,
+          "Entry price too high for other (82% > 80%)": 1,
+          "Entry price too high for sports_binary (76% > 52%)": 1,
+          "Entry price too high for sports_binary (65% > 52%)": 1,
+          "Signal has no market slug — cannot price or settle": 1,
+          "Event too far out (41d > 7d horizon)": 1,
+          "Daily trade limit reached (30)": 348
         },
-        "exitChecks": 13,
-        "positionsExited": 0,
+        "exitChecks": 15,
+        "positionsExited": 1,
         "errors": [],
-        "openPositions": 13,
-        "dailyPnL": 2.5500000000000007,
-        "totalPnL": 3137.7249494949488
+        "openPositions": 15,
+        "dailyPnL": -0.26999999999999913,
+        "totalPnL": 3131.7249494949488
       },
-      "completedAt": "2026-08-12T21:07:38.266Z"
+      "completedAt": "2026-08-12T22:07:24.622Z"
     },
     "cronSchedule": "Every 5 minutes",
     "note": "Settlement runs automatically. Sports events settle ~12h after game ends."
@@ -218,12 +181,12 @@
     "_v3ProfitOverhaul": true
   },
   "performance": {
-    "totalTrades": 180,
-    "wins": 69,
-    "losses": 111,
+    "totalTrades": 183,
+    "wins": 70,
+    "losses": 113,
     "pushes": 282,
     "winRate": 38,
-    "totalPnL": 3137.7249494949488,
+    "totalPnL": 3134.9049494949486,
     "bestTrade": {
       "market": "Will Bitcoin dip to $55,000 in February?",
       "pnl": 1228.57,
@@ -234,15 +197,15 @@
       "pnl": -170.11,
       "date": "2026-02-15T00:20:13.015Z"
     },
-    "avgReturn": 17.43,
-    "currentStreak": -1,
+    "avgReturn": 17.13,
+    "currentStreak": 1,
     "longestWinStreak": 23,
     "longestLoseStreak": 32,
     "byMarketType": {
       "other": {
-        "wins": 40,
-        "losses": 41,
-        "pnl": 1309.4799999999998
+        "wins": 41,
+        "losses": 43,
+        "pnl": 1306.6599999999999
       },
       "sports-other": {
         "wins": 17,
@@ -292,9 +255,9 @@
         "pnl": -27.317272727272726
       },
       "HIGH_CONVICTION": {
-        "wins": 27,
-        "losses": 55,
-        "pnl": 23.05999999999999
+        "wins": 28,
+        "losses": 57,
+        "pnl": 20.23999999999999
       }
     },
     "bySport": {},
@@ -302,13 +265,13 @@
   },
   "daily": {
     "date": "2026-08-12",
-    "tradesOpened": 25,
-    "tradesClosed": 27,
-    "totalSpent": 75,
-    "totalReturned": 85.55,
-    "realizedPnL": 2.5500000000000007,
-    "wins": 12,
-    "losses": 13,
+    "tradesOpened": 30,
+    "tradesClosed": 30,
+    "totalSpent": 90,
+    "totalReturned": 91.72999999999999,
+    "realizedPnL": -0.26999999999999913,
+    "wins": 13,
+    "losses": 15,
     "skippedReasons": {}
   },
   "dailyRange": {
@@ -316,13 +279,13 @@
     "days": [
       {
         "date": "2026-08-12",
-        "tradesOpened": 25,
-        "tradesClosed": 27,
-        "totalSpent": 75,
-        "totalReturned": 85.55,
-        "realizedPnL": 2.5500000000000007,
-        "wins": 12,
-        "losses": 13,
+        "tradesOpened": 30,
+        "tradesClosed": 30,
+        "totalSpent": 90,
+        "totalReturned": 91.72999999999999,
+        "realizedPnL": -0.26999999999999913,
+        "wins": 13,
+        "losses": 15,
         "skippedReasons": {}
       },
       {
@@ -652,32 +615,6 @@
       "peakPctGain": 0
     },
     {
-      "id": "at_1786559274768_rty7ly",
-      "marketSlug": "mlb-tb-oak-2026-08-12-total-9pt5",
-      "marketTitle": "Tampa Bay Rays vs. Athletics: O/U 9.5",
-      "marketType": "other",
-      "signalSubType": "moneyline",
-      "direction": "Under 9.5",
-      "directionRaw": "Under",
-      "whaleAction": "BUY",
-      "entryPrice": 52,
-      "size": 3,
-      "walletTier": "HIGH_CONVICTION",
-      "walletWinRate": 0,
-      "walletBets": 0,
-      "score": 120,
-      "confidence": 55,
-      "hoursUntilEvent": 5.5,
-      "openedAt": "2026-08-12T18:27:54.768Z",
-      "paperTrade": true,
-      "marketCategory": "other",
-      "aiConfidence": null,
-      "strongCombo": null,
-      "isHighConviction": true,
-      "shares": 5.769230769230769,
-      "peakPctGain": 0
-    },
-    {
       "id": "at_1786564052683_zkmh2g",
       "marketSlug": "mlb-col-ari-2026-08-12-total-9pt5",
       "marketTitle": "Colorado Rockies vs. Arizona Diamondbacks: O/U 9.5",
@@ -805,7 +742,84 @@
       "strongCombo": null,
       "isHighConviction": true,
       "shares": 5.660377358490566,
+      "peakPctGain": -1.8867924528301887
+    },
+    {
+      "id": "at_1786569196892_s44n7s",
+      "marketSlug": "lib-pal-cep-2026-08-12-spread-home-1pt5",
+      "marketTitle": "Spread: SE Palmeiras (-1.5)",
+      "marketType": "other",
+      "signalSubType": "moneyline",
+      "direction": "SE Palmeiras",
+      "directionRaw": "SE Palmeiras",
+      "whaleAction": "BUY",
+      "entryPrice": 51,
+      "size": 3,
+      "walletTier": "HIGH_CONVICTION",
+      "walletWinRate": 0,
+      "walletBets": 0,
+      "score": 90,
+      "confidence": 56,
+      "hoursUntilEvent": 2.8,
+      "openedAt": "2026-08-12T21:13:16.892Z",
+      "paperTrade": true,
+      "marketCategory": "other",
+      "aiConfidence": null,
+      "strongCombo": null,
+      "isHighConviction": true,
+      "shares": 5.88235294117647,
       "peakPctGain": 0
+    },
+    {
+      "id": "at_1786570640467_0hgis7",
+      "marketSlug": "sud-tig-tor-2026-08-12-tig",
+      "marketTitle": "Will CA Tigre win on 2026-08-12?",
+      "marketType": "other",
+      "signalSubType": "moneyline",
+      "direction": "No",
+      "directionRaw": "No",
+      "whaleAction": "BUY",
+      "entryPrice": 49,
+      "size": 3,
+      "walletTier": "HIGH_CONVICTION",
+      "walletWinRate": 0,
+      "walletBets": 0,
+      "score": 106,
+      "confidence": 58,
+      "hoursUntilEvent": 2.4,
+      "openedAt": "2026-08-12T21:37:20.467Z",
+      "paperTrade": true,
+      "marketCategory": "sports_binary",
+      "aiConfidence": null,
+      "strongCombo": null,
+      "isHighConviction": true,
+      "shares": 6.122448979591836,
+      "peakPctGain": 0
+    },
+    {
+      "id": "at_1786572439065_w7637i",
+      "marketSlug": "lol-blg-jdg-2026-08-12-game2",
+      "marketTitle": "LoL: Bilibili Gaming vs JD Gaming - Game 2 Winner",
+      "marketType": "other",
+      "signalSubType": "moneyline",
+      "direction": "JD Gaming",
+      "directionRaw": "JD Gaming",
+      "whaleAction": "BUY",
+      "entryPrice": 37,
+      "size": 3,
+      "walletTier": "HIGH_CONVICTION",
+      "walletWinRate": 0,
+      "walletBets": 0,
+      "score": 105,
+      "confidence": 56,
+      "hoursUntilEvent": 10.2,
+      "openedAt": "2026-08-12T22:07:19.065Z",
+      "paperTrade": true,
+      "marketCategory": "other",
+      "aiConfidence": null,
+      "strongCombo": null,
+      "isHighConviction": true,
+      "shares": 8.108108108108109
     }
   ],
   "aiIntelligence": {
@@ -833,13 +847,13 @@
       {
         "name": "whaleSize25k",
         "wins": 113,
-        "losses": 82,
+        "losses": 83,
         "winRate": 58,
-        "weight": 1.23,
-        "lastUpdated": "2026-08-12T19:41:56.462Z",
-        "previousWeight": 1.29,
-        "optimizedAt": "2026-08-12T19:52:44.353Z",
-        "total": 195
+        "weight": 1.29,
+        "lastUpdated": "2026-08-12T21:56:55.688Z",
+        "previousWeight": 1.3699999999999999,
+        "optimizedAt": "2026-08-12T21:57:33.449Z",
+        "total": 196
       },
       {
         "name": "strongWallet",
@@ -857,22 +871,22 @@
         "wins": 194,
         "losses": 150,
         "winRate": 56,
-        "weight": 1.34,
+        "weight": 1.2,
         "lastUpdated": "2026-08-12T21:12:09.965Z",
-        "previousWeight": 1.27,
-        "optimizedAt": "2026-08-12T21:02:36.267Z",
+        "previousWeight": 1.26,
+        "optimizedAt": "2026-08-12T21:52:29.659Z",
         "total": 344
       },
       {
         "name": "lastMinute6h",
         "wins": 164,
-        "losses": 134,
+        "losses": 135,
         "winRate": 55,
         "weight": 1.25,
-        "lastUpdated": "2026-08-12T21:07:13.093Z",
+        "lastUpdated": "2026-08-12T21:56:55.688Z",
         "previousWeight": 1.3250000000000002,
-        "optimizedAt": "2026-08-12T21:07:37.901Z",
-        "total": 298
+        "optimizedAt": "2026-08-12T21:57:33.449Z",
+        "total": 299
       },
       {
         "name": "sportsMarket",
@@ -899,13 +913,13 @@
       {
         "name": "concentrated",
         "wins": 244,
-        "losses": 217,
+        "losses": 218,
         "winRate": 53,
-        "weight": 1.295,
-        "lastUpdated": "2026-08-12T21:12:09.965Z",
-        "previousWeight": 1.22,
-        "optimizedAt": "2026-08-12T21:07:37.901Z",
-        "total": 461
+        "weight": 1.22,
+        "lastUpdated": "2026-08-12T21:56:55.688Z",
+        "previousWeight": 1.295,
+        "optimizedAt": "2026-08-12T21:57:33.449Z",
+        "total": 462
       },
       {
         "name": "eliteWallet",
@@ -954,13 +968,13 @@
       {
         "name": "concentrated",
         "wins": 244,
-        "losses": 217,
+        "losses": 218,
         "winRate": 53,
-        "weight": 1.295,
-        "lastUpdated": "2026-08-12T21:12:09.965Z",
-        "previousWeight": 1.22,
-        "optimizedAt": "2026-08-12T21:07:37.901Z",
-        "total": 461
+        "weight": 1.22,
+        "lastUpdated": "2026-08-12T21:56:55.688Z",
+        "previousWeight": 1.295,
+        "optimizedAt": "2026-08-12T21:57:33.449Z",
+        "total": 462
       },
       {
         "name": "whaleSize50k",
@@ -987,23 +1001,23 @@
       {
         "name": "lastMinute6h",
         "wins": 164,
-        "losses": 134,
+        "losses": 135,
         "winRate": 55,
         "weight": 1.25,
-        "lastUpdated": "2026-08-12T21:07:13.093Z",
+        "lastUpdated": "2026-08-12T21:56:55.688Z",
         "previousWeight": 1.3250000000000002,
-        "optimizedAt": "2026-08-12T21:07:37.901Z",
-        "total": 298
+        "optimizedAt": "2026-08-12T21:57:33.449Z",
+        "total": 299
       },
       {
         "name": "whaleSize15k",
         "wins": 194,
         "losses": 150,
         "winRate": 56,
-        "weight": 1.34,
+        "weight": 1.2,
         "lastUpdated": "2026-08-12T21:12:09.965Z",
-        "previousWeight": 1.27,
-        "optimizedAt": "2026-08-12T21:02:36.267Z",
+        "previousWeight": 1.26,
+        "optimizedAt": "2026-08-12T21:52:29.659Z",
         "total": 344
       },
       {
@@ -1020,13 +1034,13 @@
       {
         "name": "whaleSize25k",
         "wins": 113,
-        "losses": 82,
+        "losses": 83,
         "winRate": 58,
-        "weight": 1.23,
-        "lastUpdated": "2026-08-12T19:41:56.462Z",
-        "previousWeight": 1.29,
-        "optimizedAt": "2026-08-12T19:52:44.353Z",
-        "total": 195
+        "weight": 1.29,
+        "lastUpdated": "2026-08-12T21:56:55.688Z",
+        "previousWeight": 1.3699999999999999,
+        "optimizedAt": "2026-08-12T21:57:33.449Z",
+        "total": 196
       }
     ],
     "recommendation": {
@@ -1048,7 +1062,7 @@
         {
           "name": "whaleSize25k",
           "winRate": 58,
-          "record": "113W-82L",
+          "record": "113W-83L",
           "isDiscovered": false
         }
       ],
@@ -1172,125 +1186,6 @@
     "totalFactors": 12
   },
   "tradeLog": [
-    {
-      "type": "PAPER_TRADE",
-      "market": "Tampa Bay Rays vs. Athletics: O/U 9.5",
-      "size": 3,
-      "entryPrice": 52,
-      "walletTier": "HIGH_CONVICTION",
-      "walletWR": 0,
-      "betSummary": null,
-      "whaleAction": "BUY",
-      "marketCategory": "other",
-      "timestamp": "2026-08-12T18:27:55.323Z"
-    },
-    {
-      "type": "EXIT",
-      "market": "Baltimore Orioles vs. Minnesota Twins: O/U 8.5",
-      "reason": "Market resolved (gamma_resolved). Final price: 100%",
-      "exitType": "market_resolved",
-      "pnl": 2.56,
-      "paperTrade": true,
-      "timestamp": "2026-08-12T19:13:00.433Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "Counter-Strike: G2 vs M80 (BO1) - Esports World Cup Group A",
-      "reason": "Category \"esports\" is blocked",
-      "walletTier": "STRONG",
-      "marketCategory": "esports",
-      "timestamp": "2026-08-12T19:13:01.597Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "Will the U.S. invade Iran before 2027?",
-      "reason": "Event too far out (140d > 7d horizon)",
-      "marketCategory": "politics",
-      "timestamp": "2026-08-12T19:13:02.104Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "Fed rate hike in 2026?",
-      "reason": "Event too far out (118d > 7d horizon)",
-      "marketCategory": "politics",
-      "timestamp": "2026-08-12T19:13:02.530Z"
-    },
-    {
-      "type": "PAPER_TRADE",
-      "market": "Tampa Bay Rays vs. Athletics",
-      "size": 3,
-      "entryPrice": 33,
-      "walletTier": "HIGH_CONVICTION",
-      "walletWR": 0,
-      "betSummary": null,
-      "whaleAction": "BUY",
-      "marketCategory": "other",
-      "timestamp": "2026-08-12T19:18:06.501Z"
-    },
-    {
-      "type": "EXIT",
-      "market": "Tampa Bay Rays vs. Athletics",
-      "shouldExit": true,
-      "reason": "Take profit hit (+106.1%)",
-      "exitType": "take_profit",
-      "pnl": 3.18,
-      "paperTrade": true,
-      "timestamp": "2026-08-12T19:22:49.302Z"
-    },
-    {
-      "type": "PAPER_TRADE",
-      "market": "LoL: KT Rolster vs Dplus KIA - Game 1 Winner",
-      "size": 3,
-      "entryPrice": 35,
-      "walletTier": "HIGH_CONVICTION",
-      "walletWR": 0,
-      "betSummary": null,
-      "whaleAction": "BUY",
-      "marketCategory": "other",
-      "timestamp": "2026-08-12T19:22:50.810Z"
-    },
-    {
-      "type": "EXIT",
-      "market": "LoL: KT Rolster vs Dplus KIA - Game 1 Winner",
-      "reason": "Market resolved (gamma_resolved). Final price: 0%",
-      "exitType": "market_resolved",
-      "pnl": -3,
-      "paperTrade": true,
-      "timestamp": "2026-08-12T19:27:53.267Z"
-    },
-    {
-      "type": "PAPER_TRADE",
-      "market": "Colorado Rockies vs. Arizona Diamondbacks: O/U 9.5",
-      "size": 3,
-      "entryPrice": 53,
-      "walletTier": "HIGH_CONVICTION",
-      "walletWR": 0,
-      "betSummary": null,
-      "whaleAction": "BUY",
-      "marketCategory": "other",
-      "timestamp": "2026-08-12T19:47:33.047Z"
-    },
-    {
-      "type": "EXIT",
-      "market": "Baltimore Orioles vs. Minnesota Twins: O/U 10.5",
-      "reason": "Market resolved (gamma_resolved). Final price: 0%",
-      "exitType": "market_resolved",
-      "pnl": -3,
-      "paperTrade": true,
-      "timestamp": "2026-08-12T19:52:37.204Z"
-    },
-    {
-      "type": "PAPER_TRADE",
-      "market": "Baltimore Orioles vs. Minnesota Twins: O/U 8.5",
-      "size": 3,
-      "entryPrice": 54,
-      "walletTier": "HIGH_CONVICTION",
-      "walletWR": 0,
-      "betSummary": null,
-      "whaleAction": "BUY",
-      "marketCategory": "other",
-      "timestamp": "2026-08-12T19:52:38.711Z"
-    },
     {
       "type": "EXIT",
       "market": "Baltimore Orioles vs. Minnesota Twins: O/U 8.5",
@@ -1471,111 +1366,127 @@
       "whaleAction": "BUY",
       "marketCategory": "other",
       "timestamp": "2026-08-12T21:02:30.859Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Counter-Strike: G2 vs M80 (BO1) - Esports World Cup Group A",
+      "reason": "Category \"esports\" is blocked",
+      "walletTier": "STRONG",
+      "marketCategory": "esports",
+      "timestamp": "2026-08-12T21:13:14.699Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Will the U.S. invade Iran before 2027?",
+      "reason": "Event too far out (140d > 7d horizon)",
+      "marketCategory": "politics",
+      "timestamp": "2026-08-12T21:13:15.370Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Fed rate hike in 2026?",
+      "reason": "Event too far out (118d > 7d horizon)",
+      "marketCategory": "politics",
+      "timestamp": "2026-08-12T21:13:15.767Z"
+    },
+    {
+      "type": "PAPER_TRADE",
+      "market": "Spread: SE Palmeiras (-1.5)",
+      "size": 3,
+      "entryPrice": 51,
+      "walletTier": "HIGH_CONVICTION",
+      "walletWR": 0,
+      "betSummary": null,
+      "whaleAction": "BUY",
+      "marketCategory": "other",
+      "timestamp": "2026-08-12T21:13:17.257Z"
+    },
+    {
+      "type": "PAPER_TRADE",
+      "market": "Will CA Tigre win on 2026-08-12?",
+      "size": 3,
+      "entryPrice": 49,
+      "walletTier": "HIGH_CONVICTION",
+      "walletWR": 0,
+      "betSummary": null,
+      "whaleAction": "BUY",
+      "marketCategory": "sports_binary",
+      "timestamp": "2026-08-12T21:37:20.834Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Counter-Strike: G2 vs M80 (BO1) - Esports World Cup Group A",
+      "reason": "Max open positions reached (15)",
+      "walletTier": "STRONG",
+      "marketCategory": "esports",
+      "timestamp": "2026-08-12T21:42:20.952Z"
+    },
+    {
+      "type": "EXIT",
+      "market": "Tampa Bay Rays vs. Athletics: O/U 9.5",
+      "reason": "Market resolved (gamma_resolved). Final price: 0%",
+      "exitType": "market_resolved",
+      "pnl": -3,
+      "paperTrade": true,
+      "timestamp": "2026-08-12T21:57:26.588Z"
+    },
+    {
+      "type": "PAPER_TRADE",
+      "market": "Tampa Bay Rays vs. Athletics: O/U 9.5",
+      "size": 3,
+      "entryPrice": 52,
+      "walletTier": "HIGH_CONVICTION",
+      "walletWR": 0,
+      "betSummary": null,
+      "whaleAction": "BUY",
+      "marketCategory": "other",
+      "timestamp": "2026-08-12T21:57:27.906Z"
+    },
+    {
+      "type": "EXIT",
+      "market": "Tampa Bay Rays vs. Athletics: O/U 9.5",
+      "reason": "Market resolved (gamma_resolved). Final price: 0%",
+      "exitType": "market_resolved",
+      "pnl": -3,
+      "paperTrade": true,
+      "timestamp": "2026-08-12T22:02:28.752Z"
+    },
+    {
+      "type": "PAPER_TRADE",
+      "market": "Tampa Bay Rays vs. Athletics",
+      "size": 3,
+      "entryPrice": 33,
+      "walletTier": "HIGH_CONVICTION",
+      "walletWR": 0,
+      "betSummary": null,
+      "whaleAction": "BUY",
+      "marketCategory": "other",
+      "timestamp": "2026-08-12T22:02:30.336Z"
+    },
+    {
+      "type": "EXIT",
+      "market": "Tampa Bay Rays vs. Athletics",
+      "shouldExit": true,
+      "reason": "Take profit hit (+106.1%)",
+      "exitType": "take_profit",
+      "pnl": 3.18,
+      "paperTrade": true,
+      "timestamp": "2026-08-12T22:07:18.131Z"
+    },
+    {
+      "type": "PAPER_TRADE",
+      "market": "LoL: Bilibili Gaming vs JD Gaming - Game 2 Winner",
+      "size": 3,
+      "entryPrice": 37,
+      "walletTier": "HIGH_CONVICTION",
+      "walletWR": 0,
+      "betSummary": null,
+      "whaleAction": "BUY",
+      "marketCategory": "other",
+      "timestamp": "2026-08-12T22:07:19.430Z"
     }
   ],
   "tradeHistory": [
-    {
-      "id": "at_1786395100371_qagpdn",
-      "marketSlug": "mlb-nym-atl-2026-08-10-total-8pt5",
-      "marketTitle": "New York Mets vs. Atlanta Braves: O/U 8.5",
-      "marketType": "other",
-      "signalSubType": "moneyline",
-      "direction": "Over 8.5",
-      "whaleAction": "BUY",
-      "entryPrice": 50,
-      "size": 3,
-      "walletTier": "HIGH_CONVICTION",
-      "walletWinRate": 0,
-      "walletBets": 0,
-      "score": 100,
-      "confidence": 52,
-      "hoursUntilEvent": 3.6,
-      "openedAt": "2026-08-10T20:51:40.371Z",
-      "paperTrade": true,
-      "marketCategory": "other",
-      "aiConfidence": null,
-      "strongCombo": null,
-      "isHighConviction": true,
-      "shares": 6,
-      "peakPctGain": 4,
-      "closedAt": "2026-08-11T20:51:45.521Z",
-      "exitPrice": 50,
-      "exitType": "stale_timeout",
-      "exitReason": "No price data from any source for 24h — force closed",
-      "pnl": 0,
-      "pnlPercent": 0,
-      "outcome": "stale",
-      "entryHourUTC": 20,
-      "exitHourUTC": 20
-    },
-    {
-      "id": "at_1786400194871_2it0y4",
-      "marketSlug": "clarity-act-signed-into-law-in-2026",
-      "marketTitle": "Clarity Act (H.R.3633) signed into law in 2026?",
-      "marketType": "other",
-      "signalSubType": "moneyline",
-      "direction": "No",
-      "whaleAction": "BUY",
-      "entryPrice": 76,
-      "size": 3,
-      "walletTier": "HIGH_CONVICTION",
-      "walletWinRate": 0,
-      "walletBets": 0,
-      "score": 140,
-      "confidence": 53,
-      "hoursUntilEvent": null,
-      "openedAt": "2026-08-10T22:16:34.871Z",
-      "paperTrade": true,
-      "marketCategory": "other",
-      "aiConfidence": null,
-      "strongCombo": null,
-      "isHighConviction": true,
-      "shares": 3.9473684210526314,
-      "peakPctGain": 0,
-      "closedAt": "2026-08-11T22:21:22.798Z",
-      "exitPrice": 76,
-      "exitType": "timeout",
-      "exitReason": "Max hold time exceeded (24h > 24h)",
-      "pnl": 0,
-      "pnlPercent": 0,
-      "outcome": "loss",
-      "entryHourUTC": 22,
-      "exitHourUTC": 22
-    },
-    {
-      "id": "at_1786404408604_7j1oxz",
-      "marketSlug": "mlb-tb-oak-2026-08-10-spread-away-1pt5",
-      "marketTitle": "Spread: Tampa Bay Rays (-1.5)",
-      "marketType": "other",
-      "signalSubType": "moneyline",
-      "direction": "Athletics",
-      "whaleAction": "BUY",
-      "entryPrice": 54,
-      "size": 3,
-      "walletTier": "HIGH_CONVICTION",
-      "walletWinRate": 0,
-      "walletBets": 0,
-      "score": 95,
-      "confidence": 52,
-      "hoursUntilEvent": 1.2,
-      "openedAt": "2026-08-10T23:26:48.604Z",
-      "paperTrade": true,
-      "marketCategory": "other",
-      "aiConfidence": null,
-      "strongCombo": null,
-      "isHighConviction": true,
-      "shares": 5.555555555555555,
-      "peakPctGain": 0,
-      "closedAt": "2026-08-11T23:31:28.675Z",
-      "exitPrice": 54,
-      "exitType": "stale_timeout",
-      "exitReason": "No price data from any source for 24h — force closed",
-      "pnl": 0,
-      "pnlPercent": 0,
-      "outcome": "stale",
-      "entryHourUTC": 23,
-      "exitHourUTC": 23
-    },
     {
       "id": "at_1786421490000_9urrsx",
       "marketSlug": "will-united-russia-er-gain-the-most-seats-in-the-next-russian-parliamentary-election",
@@ -2507,15 +2418,121 @@
       "outcome": "loss",
       "entryHourUTC": 20,
       "exitHourUTC": 20
+    },
+    {
+      "id": "at_1786559274768_rty7ly",
+      "marketSlug": "mlb-tb-oak-2026-08-12-total-9pt5",
+      "marketTitle": "Tampa Bay Rays vs. Athletics: O/U 9.5",
+      "marketType": "other",
+      "signalSubType": "moneyline",
+      "direction": "Under 9.5",
+      "directionRaw": "Under",
+      "whaleAction": "BUY",
+      "entryPrice": 52,
+      "size": 3,
+      "walletTier": "HIGH_CONVICTION",
+      "walletWinRate": 0,
+      "walletBets": 0,
+      "score": 120,
+      "confidence": 55,
+      "hoursUntilEvent": 5.5,
+      "openedAt": "2026-08-12T18:27:54.768Z",
+      "paperTrade": true,
+      "marketCategory": "other",
+      "aiConfidence": null,
+      "strongCombo": null,
+      "isHighConviction": true,
+      "shares": 5.769230769230769,
+      "peakPctGain": 0,
+      "closedAt": "2026-08-12T21:57:24.361Z",
+      "exitPrice": 0,
+      "exitType": "market_resolved",
+      "exitReason": "Market resolved (gamma_resolved). Final price: 0%",
+      "pnl": -3,
+      "pnlPercent": -100,
+      "outcome": "loss",
+      "entryHourUTC": 18,
+      "exitHourUTC": 21
+    },
+    {
+      "id": "at_1786571847531_j3jqqq",
+      "marketSlug": "mlb-tb-oak-2026-08-12-total-9pt5",
+      "marketTitle": "Tampa Bay Rays vs. Athletics: O/U 9.5",
+      "marketType": "other",
+      "signalSubType": "moneyline",
+      "direction": "Under 9.5",
+      "directionRaw": "Under",
+      "whaleAction": "BUY",
+      "entryPrice": 52,
+      "size": 3,
+      "walletTier": "HIGH_CONVICTION",
+      "walletWinRate": 0,
+      "walletBets": 0,
+      "score": 120,
+      "confidence": 55,
+      "hoursUntilEvent": 5.5,
+      "openedAt": "2026-08-12T21:57:27.531Z",
+      "paperTrade": true,
+      "marketCategory": "other",
+      "aiConfidence": null,
+      "strongCombo": null,
+      "isHighConviction": true,
+      "shares": 5.769230769230769,
+      "closedAt": "2026-08-12T22:02:26.889Z",
+      "exitPrice": 0,
+      "exitType": "market_resolved",
+      "exitReason": "Market resolved (gamma_resolved). Final price: 0%",
+      "pnl": -3,
+      "pnlPercent": -100,
+      "outcome": "loss",
+      "entryHourUTC": 21,
+      "exitHourUTC": 22
+    },
+    {
+      "id": "at_1786572149976_7jvpyv",
+      "marketSlug": "mlb-tb-oak-2026-08-12",
+      "marketTitle": "Tampa Bay Rays vs. Athletics",
+      "marketType": "other",
+      "signalSubType": "moneyline",
+      "direction": "Athletics",
+      "directionRaw": "Athletics",
+      "whaleAction": "BUY",
+      "entryPrice": 33,
+      "size": 3,
+      "walletTier": "HIGH_CONVICTION",
+      "walletWinRate": 0,
+      "walletBets": 0,
+      "score": 88,
+      "confidence": 58,
+      "hoursUntilEvent": 4.7,
+      "openedAt": "2026-08-12T22:02:29.976Z",
+      "paperTrade": true,
+      "marketCategory": "other",
+      "aiConfidence": null,
+      "strongCombo": null,
+      "isHighConviction": true,
+      "shares": 9.09090909090909,
+      "peakPctGain": 106.06060606060606,
+      "trailingStopActive": true,
+      "trailingStopLevel": 86.06060606060606,
+      "closedAt": "2026-08-12T22:07:16.127Z",
+      "exitPrice": 68,
+      "exitType": "take_profit",
+      "exitReason": "Take profit hit (+106.1%)",
+      "pnl": 3.18,
+      "pnlPercent": 106.1,
+      "outcome": "win",
+      "entryHourUTC": 22,
+      "exitHourUTC": 22
     }
   ],
   "learningStats": {
     "success": true,
     "overview": {
       "totalFactorsTracked": 13,
-      "totalSignalsProcessed": 2127,
+      "totalSignalsProcessed": 2130,
       "overallWinRate": 55,
-      "pendingSignals": 361
+      "pendingSignals": 373
     },
     "walletEdge": {
       "totalTracked": 500,
@@ -2633,12 +2650,12 @@
       },
       "lastMinute6h": {
         "wins": 164,
-        "losses": 134,
+        "losses": 135,
         "winRate": 55,
         "weight": 1.25,
-        "lastUpdated": "2026-08-12T21:07:13.093Z",
+        "lastUpdated": "2026-08-12T21:56:55.688Z",
         "previousWeight": 1.3250000000000002,
-        "optimizedAt": "2026-08-12T21:07:37.901Z"
+        "optimizedAt": "2026-08-12T21:57:33.449Z"
       },
       "lastMinute2h": {
         "wins": 110,
@@ -2651,30 +2668,30 @@
       },
       "whaleSize25k": {
         "wins": 113,
-        "losses": 82,
+        "losses": 83,
         "winRate": 58,
-        "weight": 1.23,
-        "lastUpdated": "2026-08-12T19:41:56.462Z",
-        "previousWeight": 1.29,
-        "optimizedAt": "2026-08-12T19:52:44.353Z"
+        "weight": 1.29,
+        "lastUpdated": "2026-08-12T21:56:55.688Z",
+        "previousWeight": 1.3699999999999999,
+        "optimizedAt": "2026-08-12T21:57:33.449Z"
       },
       "concentrated": {
         "wins": 244,
-        "losses": 217,
+        "losses": 218,
         "winRate": 53,
-        "weight": 1.295,
-        "lastUpdated": "2026-08-12T21:12:09.965Z",
-        "previousWeight": 1.22,
-        "optimizedAt": "2026-08-12T21:07:37.901Z"
+        "weight": 1.22,
+        "lastUpdated": "2026-08-12T21:56:55.688Z",
+        "previousWeight": 1.295,
+        "optimizedAt": "2026-08-12T21:57:33.449Z"
       },
       "whaleSize15k": {
         "wins": 194,
         "losses": 150,
         "winRate": 56,
-        "weight": 1.34,
+        "weight": 1.2,
         "lastUpdated": "2026-08-12T21:12:09.965Z",
-        "previousWeight": 1.27,
-        "optimizedAt": "2026-08-12T21:02:36.267Z"
+        "previousWeight": 1.26,
+        "optimizedAt": "2026-08-12T21:52:29.659Z"
       },
       "freshWallet": {
         "wins": 30,
@@ -2780,11 +2797,11 @@
   "learningInsights": {
     "success": true,
     "systemPerformance": {
-      "totalSignalsProcessed": 2127,
+      "totalSignalsProcessed": 2130,
       "wins": 1176,
-      "losses": 951,
+      "losses": 954,
       "winRate": 55,
-      "pendingSignals": 361
+      "pendingSignals": 373
     },
     "insights": {
       "bestFactors": [
@@ -2829,8 +2846,8 @@
         "factor": "whaleSize25k",
         "winRate": 58,
         "wins": 113,
-        "losses": 82,
-        "weight": 1.23,
+        "losses": 83,
+        "weight": 1.29,
         "performance": "AVERAGE"
       },
       {
@@ -2846,14 +2863,14 @@
         "winRate": 56,
         "wins": 194,
         "losses": 150,
-        "weight": 1.34,
+        "weight": 1.2,
         "performance": "AVERAGE"
       },
       {
         "factor": "lastMinute6h",
         "winRate": 55,
         "wins": 164,
-        "losses": 134,
+        "losses": 135,
         "weight": 1.25,
         "performance": "AVERAGE"
       },
@@ -2877,8 +2894,8 @@
         "factor": "concentrated",
         "winRate": 53,
         "wins": 244,
-        "losses": 217,
-        "weight": 1.295,
+        "losses": 218,
+        "weight": 1.22,
         "performance": "AVERAGE"
       },
       {
@@ -2942,24 +2959,24 @@
         "key": "high_score",
         "label": "High score (≥100)",
         "side": "follow",
-        "settled": 358,
+        "settled": 359,
         "wins": 206,
-        "losses": 152,
-        "staked": 35800,
-        "pnl": 1888.5,
-        "roi": 5.3,
-        "winRate": 58,
+        "losses": 153,
+        "staked": 35900,
+        "pnl": 1788.5,
+        "roi": 5,
+        "winRate": 57,
         "readyForAuto": true
       },
       {
         "key": "all",
         "label": "Follow all signals",
         "side": "follow",
-        "settled": 1527,
+        "settled": 1528,
         "wins": 837,
-        "losses": 690,
-        "staked": 152700,
-        "pnl": -1805.72,
+        "losses": 691,
+        "staked": 152800,
+        "pnl": -1905.72,
         "roi": -1.2,
         "winRate": 55,
         "readyForAuto": false
@@ -2973,13 +2990,11 @@
     "settledCount": 0,
     "winRate": null,
     "lastScan": {
-      "at": 1786569185974,
-      "scanned": 4,
+      "at": 1786571835901,
+      "scanned": 2,
       "sports": [
         "mlb",
-        "nfl",
-        "wnba",
-        "nba"
+        "wnba"
       ],
       "found": 0,
       "newCount": 0
