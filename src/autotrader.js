@@ -104,6 +104,16 @@ async function lookupMarketTokens(slug) {
   }
 }
 
+// A closed market is safely settle-able when one side is ~certain (>=95c,
+// same convention as src/gamma.js) or when it resolved as an explicit 50/50
+// refund. In-between prices usually mean trading closed but resolution isn't
+// final (e.g. UMA dispute) — keep waiting instead of settling at a non-final
+// price.
+function isSettledPrice(gp) {
+  if (!gp || !gp.length || typeof gp[0] !== 'number' || isNaN(gp[0])) return false;
+  return Math.max(gp[0], 1 - gp[0]) >= 0.95 || gp[0] === 0.5;
+}
+
 /**
  * Price the side a position actually holds. liveData.price is always the
  * YES-token (outcomes[0]) price, but positions can hold either side — "No",
@@ -185,10 +195,11 @@ async function fetchLivePrices(env, positions) {
   for (const item of tokenLookups) {
     if (!item.tokens) continue;
     
-    // If market is closed/resolved, use Gamma prices
+    // If market is closed/resolved, use Gamma prices — but only when the
+    // resolution looks final (same gate as the fresh-lookup path below).
     if (item.tokens.closed || item.tokens.resolved) {
       const gammaPrice = item.tokens.gammaPrices;
-      if (gammaPrice) {
+      if (gammaPrice && isSettledPrice(gammaPrice)) {
         // YES price = gammaPrices[0], NO price = 1 - YES price
         const yesPercent = Math.round(gammaPrice[0] * 100);
         priceMap.set(item.slug, {
@@ -263,10 +274,7 @@ async function fetchLivePrices(env, positions) {
       tokenCache[slug] = fresh;
       cacheUpdated = true;
       const gp = fresh.gammaPrices;
-      // Only trust settled-looking prices (≥95¢ on one side). A market that
-      // closed near its trading range is a void/refund — correctly ends up
-      // as a stale push instead of a fake win/loss.
-      if (fresh.closed && gp && Math.max(gp[0], 1 - gp[0]) >= 0.95) {
+      if (fresh.closed && isSettledPrice(gp)) {
         priceMap.set(slug, {
           price: Math.round(gp[0] * 100),
           source: 'gamma_resolved',
