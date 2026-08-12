@@ -86,6 +86,7 @@ async function lookupMarketTokens(slug) {
       conditionId: market.conditionId || null,
       closed: market.closed || false,
       resolved: market.closed || false,
+      endDate: market.endDate || null,
       outcomes: outcomes || ['Yes', 'No'],
       // Include Gamma's own prices as fallback
       gammaPrices: outcomePrices ? outcomePrices.map(p => parseFloat(p)) : null,
@@ -396,6 +397,7 @@ const DEFAULT_CONFIG = {
   maxEntryCentsSlippage: 5,       // Max absolute cents difference from whale entry
   minAiScore: 40,                 // Minimum AI score to consider
   maxEventHorizonHours: 168,      // Skip markets resolving further out than this (0 = disabled)
+  staleVoidGraceHours: 48,        // Extra hours past maxHoldHours to wait for resolution before voiding a no-price position
   requireProvenEdge: true,        // Only trade signals whose entry band has a proven positive historical edge (signal.hasPositiveEdge)
   onlyBuySignals: false,          // If true, ignore SELL signals (safer for start)
   maxEntrySlippage: 15,           // Max % price can move from whale entry before we skip
@@ -692,7 +694,7 @@ async function updatePerformance(env, closedTrade) {
   perf.totalPnL = (perf.totalPnL || 0) + pnl;
   
   // Skip stale/manual $0 closes — don't count them as wins or losses
-  const isBreakeven = pnl === 0 && (closedTrade.exitType === 'manual' || closedTrade.exitType === 'stale_timeout' || closedTrade.exitType === 'stale_no_signal' || closedTrade.outcome === 'stale');
+  const isBreakeven = pnl === 0 && (closedTrade.exitType === 'manual' || closedTrade.exitType === 'stale_timeout' || closedTrade.exitType === 'stale_no_signal' || closedTrade.exitType === 'timeout' || closedTrade.outcome === 'stale' || closedTrade.outcome === 'push');
   
   if (isBreakeven) {
     // Don't count in totalTrades, wins, losses, or streak — it's not a real trade outcome
@@ -1087,7 +1089,7 @@ function evaluateSignal(signal, config, dailyStats, openPositions, perf) {
 // ============================================================
 // CHECK EXIT CONDITIONS for open positions
 // ============================================================
-function shouldExitPosition(position, currentPrice, config, signal) {
+function shouldExitPosition(position, currentPrice, config, signal, hasLivePrice = true) {
   const entryPrice = position.entryPrice;
   const priceDelta = currentPrice - entryPrice;
   const pctChange = (priceDelta / entryPrice) * 100;
@@ -1136,8 +1138,11 @@ function shouldExitPosition(position, currentPrice, config, signal) {
   }
 
   // === MAX HOLD TIME ===
+  // Only close on timeout when we have a real price to close AT. With a
+  // stale price this just re-books the entry price as a fake $0 outcome —
+  // the stale-void path (with its resolution grace period) owns that case.
   const holdHours = (Date.now() - new Date(position.openedAt).getTime()) / (1000 * 60 * 60);
-  if (config.maxHoldHours && holdHours > config.maxHoldHours) {
+  if (hasLivePrice && config.maxHoldHours && holdHours > config.maxHoldHours) {
     return { shouldExit: true, reason: `Max hold time exceeded (${Math.round(holdHours)}h > ${config.maxHoldHours}h)`, exitType: 'timeout' };
   }
 
@@ -1413,8 +1418,13 @@ export async function processSignals(env, signals) {
       continue;
     }
     
-    // STALE FALLBACK: No price from ANY source after max hold time
-    if (!hasLivePrice && config.maxHoldHours && holdHours > config.maxHoldHours) {
+    // STALE FALLBACK: No price from ANY source after max hold time + grace.
+    // The grace period exists because entries often happen ~24h before a game:
+    // the hold timer expires mid-game, before Gamma marks the market closed.
+    // Waiting a bit longer lets the fresh-Gamma settlement path record the
+    // real outcome instead of voiding the trade at its entry price.
+    const staleGraceHours = config.staleVoidGraceHours ?? 48;
+    if (!hasLivePrice && config.maxHoldHours && holdHours > config.maxHoldHours + staleGraceHours) {
       const closedTrade = {
         ...position,
         marketCategory: position.marketCategory || categorizeMarket(position.marketTitle || ''),
@@ -1453,7 +1463,7 @@ export async function processSignals(env, signals) {
     }
     
     // Normal exit check (with real live price)
-    const exitCheck = shouldExitPosition(position, currentPrice, config, currentSignal);
+    const exitCheck = shouldExitPosition(position, currentPrice, config, currentSignal, hasLivePrice);
     
     // Log deferred take profit (whale still holding)
     if (!exitCheck.shouldExit && config.takeProfitPercent && hasLivePrice) {
@@ -1520,7 +1530,7 @@ export async function processSignals(env, signals) {
         exitReason: exitCheck.reason,
         pnl: pnl.amount,
         pnlPercent: pnl.percent,
-        outcome: pnl.amount > 0 ? 'win' : 'loss',
+        outcome: pnl.amount > 0 ? 'win' : pnl.amount < 0 ? 'loss' : 'push',
       };
       
       await addToHistory(env, closedTrade);
@@ -1564,10 +1574,10 @@ export async function processSignals(env, signals) {
       hasLivePrice = false;
     }
     
-    // Stale fallback
-    if (!hasLivePrice && config.maxHoldHours && holdHours > config.maxHoldHours) return false;
+    // Stale fallback — must mirror the stale-void condition above (incl. grace)
+    if (!hasLivePrice && config.maxHoldHours && holdHours > config.maxHoldHours + (config.staleVoidGraceHours ?? 48)) return false;
     
-    return !shouldExitPosition(p, currentPrice, config, currentSignal).shouldExit;
+    return !shouldExitPosition(p, currentPrice, config, currentSignal, hasLivePrice).shouldExit;
   });
 
   // Save updated positions (peak gain tracking updates)
@@ -1639,6 +1649,40 @@ export async function processSignals(env, signals) {
         });
       }
       continue;
+    }
+
+    // --- UNKNOWN-HORIZON CHECK ---
+    // Signals with no event time slip past Gate 3b (null passes through), so
+    // long-dated markets ("...before 2027") cycle forever: enter → maxHold
+    // timeout → re-enter five minutes later. Before taking a slot, ask Gamma
+    // for the market's endDate and apply the same horizon.
+    const entryHorizonHours = config.maxEventHorizonHours ?? 168;
+    if (entryHorizonHours > 0 && signal.hoursUntilEnd == null) {
+      try {
+        const tk = await lookupMarketTokens(signal.marketSlug);
+        const endMs = tk?.endDate ? new Date(tk.endDate).getTime() : NaN;
+        if (!isNaN(endMs)) {
+          const hrsUntilEnd = (endMs - Date.now()) / (1000 * 60 * 60);
+          if (hrsUntilEnd > entryHorizonHours) {
+            results.skipped++;
+            const reason = `Event too far out (${Math.round(hrsUntilEnd / 24)}d > ${Math.round(entryHorizonHours / 24)}d horizon)`;
+            results.skipReasons[reason] = (results.skipReasons[reason] || 0) + 1;
+            const skipKey = signal.marketSlug || signal.marketTitle || signal.title;
+            if (!config.deduplicateSkipLogs || !skippedMarketsThisCycle.has(skipKey)) {
+              skippedMarketsThisCycle.add(skipKey);
+              await logDecision(env, {
+                type: 'SKIP',
+                market: signal.marketTitle || signal.title,
+                reason,
+                marketCategory: categorizeMarket(signal.marketTitle || signal.title || ''),
+              });
+            }
+            continue;
+          }
+        }
+      } catch (e) {
+        // Gamma unreachable — don't block the entry on a lookup failure
+      }
     }
 
     // --- AI LEARNING INTEGRATION ---
