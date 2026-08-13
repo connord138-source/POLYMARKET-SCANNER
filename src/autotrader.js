@@ -392,8 +392,7 @@ const DEFAULT_CONFIG = {
   minPositionSize: 10,            // Min per trade (avoid dust)
   maxOpenPositions: 10,           // Total concurrent positions
   maxPortfolioRisk: 20,           // % of bankroll at risk at any time
-  dailyProfitTarget: null,        // Pause after hitting this (null = disabled)
-  dailyLossLimit: -150,           // Stop-loss for the day (USDC)
+  dailyLossLimit: -150,           // Stop trading for the day once realized P&L falls to this (USDC, negative)
 
   // Signal Filters
   minWalletWinRate: 70,           // Minimum wallet WR to mirror (%)
@@ -443,9 +442,6 @@ const DEFAULT_CONFIG = {
   cryptoBetSize: 0,
   politicsBetSize: 0,
   weatherBetSize: 25,
-  minDerivativeVolume: 5000,      // Min $ volume for O/U, BTTS markets
-  aiScoreOverrideTier: 80,       // AI score >= this bypasses wallet tier filter
-  aiScoreOverrideMinWR: 55,      // But wallet WR must still be above this for override
   // High conviction bypass — allows trades WITHOUT a winning wallet match when signal is strong enough
   allowHighConvictionBypass: true,
   highConvictionMinScore: 80,         // Signal score must be >= this
@@ -457,7 +453,6 @@ const DEFAULT_CONFIG = {
   trackMarketCategory: true,     // Tag trades with category for analytics
 
   // Learning
-  selfLearning: true,             // Track own trades and adapt
   adaptiveSizing: false,          // Scale size based on bot's own track record (Phase 4)
 
   // AI Learning Integration
@@ -914,6 +909,9 @@ function evaluateSignal(signal, config, dailyStats, openPositions, perf) {
   }
   if (config.maxDailySpend > 0 && dailyStats.totalSpent >= config.maxDailySpend) {
     return { shouldTrade: false, reason: `Daily spend limit reached ($${config.maxDailySpend})` };
+  }
+  if (config.dailyLossLimit && (dailyStats.realizedPnL || 0) <= config.dailyLossLimit) {
+    return { shouldTrade: false, reason: `Daily loss limit hit ($${dailyStats.realizedPnL} <= $${config.dailyLossLimit})` };
   }
   if (config.maxOpenPositions > 0 && openPositions.length >= config.maxOpenPositions) {
     return { shouldTrade: false, reason: `Max open positions reached (${config.maxOpenPositions})` };
