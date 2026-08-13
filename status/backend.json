@@ -1,21 +1,21 @@
 {
-  "fetchedAt": "2026-08-13T18:59:40Z",
+  "fetchedAt": "2026-08-13T19:08:37Z",
   "health": {
     "status": "ok",
-    "timestamp": "2026-08-13T18:59:42.218Z",
+    "timestamp": "2026-08-13T19:08:40.000Z",
     "version": "21.1.0 - Modularize: extract src/odds.js + src/gamma.js from index.js",
     "cache": {
-      "signalCount": 10518,
-      "oldestSignal": "2026-08-06T18:57:14.000Z",
-      "newestSignal": "2026-08-13T18:51:04.000Z"
+      "signalCount": 10521,
+      "oldestSignal": "2026-08-06T19:07:24.000Z",
+      "newestSignal": "2026-08-13T19:00:21.000Z"
     }
   },
   "cronStatus": {
     "success": true,
     "lastRun": {
-      "startedAt": "2026-08-13T18:55:02.332Z",
+      "startedAt": "2026-08-13T19:05:02.351Z",
       "scan": {
-        "signals": 386,
+        "signals": 387,
         "success": true
       },
       "settlement": {
@@ -27,7 +27,7 @@
       "investigations": null,
       "overround": {
         "scanned": 75,
-        "flagged": 43
+        "flagged": 42
       },
       "sweep": null,
       "lines": {
@@ -39,7 +39,7 @@
       "error": null,
       "edgeScan": {
         "skipped": "throttled",
-        "nextInMin": 5
+        "nextInMin": 10
       },
       "edgeSettle": {
         "checked": 0,
@@ -51,14 +51,14 @@
         "expired": 0
       },
       "autotrader": {
-        "evaluated": 386,
+        "evaluated": 387,
         "tradesOpened": 0,
         "tradesPaperTraded": 0,
         "tradesQueued": 0,
-        "skipped": 386,
+        "skipped": 387,
         "skipReasons": {
           "Duplicate market (already traded)": 17,
-          "Daily trade limit reached (30)": 369
+          "Daily trade limit reached (30)": 370
         },
         "exitChecks": 6,
         "positionsExited": 0,
@@ -67,7 +67,7 @@
         "dailyPnL": 2.9800000000000004,
         "totalPnL": 3136.194949494948
       },
-      "completedAt": "2026-08-13T18:57:48.868Z"
+      "completedAt": "2026-08-13T19:07:58.407Z"
     },
     "cronSchedule": "Every 5 minutes",
     "note": "Settlement runs automatically. Sports events settle ~12h after game ends."
@@ -75,16 +75,16 @@
   "config": {
     "enabled": true,
     "paperTradeMode": true,
-    "bankroll": 350,
+    "bankroll": 1000,
     "maxDailyTrades": 30,
-    "maxDailySpend": 100,
+    "maxDailySpend": 300,
     "maxPositionSize": 30,
     "minPositionSize": 2,
     "maxOpenPositions": 15,
     "maxPortfolioRisk": 50,
     "dailyLossLimit": 100,
-    "minWalletWinRate": 55,
-    "minWalletBets": 3,
+    "minWalletWinRate": 60,
+    "minWalletBets": 5,
     "walletTiers": [
       "INSIDER",
       "ELITE",
@@ -103,27 +103,24 @@
       "nhl",
       "ncaab"
     ],
-    "blockedCategories": [
-      "esports",
-      "tennis"
-    ],
-    "minOdds": 10,
-    "maxOdds": 80,
+    "blockedCategories": [],
+    "minOdds": 20,
+    "maxOdds": 60,
     "sportsMaxOdds": 52,
     "sportsMinOdds": 20,
     "derivativeMaxOdds": 55,
     "derivativeMinOdds": 25,
-    "minExpectedValue": 0,
+    "minExpectedValue": 0.1,
     "maxEntryCentsSlippage": 5,
-    "minAiScore": 0,
+    "minAiScore": 40,
     "maxEventHorizonHours": 168,
     "staleVoidGraceHours": 48,
-    "requireProvenEdge": false,
+    "requireProvenEdge": true,
     "onlyBuySignals": true,
     "maxEntrySlippage": 15,
     "entryCooldownSeconds": 120,
     "sizingMethod": "fixed",
-    "fixedSize": 15,
+    "fixedSize": 10,
     "kellyFraction": 0.25,
     "maxKellySize": 200,
     "stopLossPercent": 40,
@@ -136,7 +133,7 @@
     "mirrorExits": true,
     "mirrorExitMinLossPercent": 10,
     "exitBeforeEventHours": 0,
-    "maxHoldHours": 24,
+    "maxHoldHours": 48,
     "sportsPositionScale": 0.25,
     "sportsBetSize": 0,
     "nonSportsBetSize": 0,
@@ -144,16 +141,16 @@
     "politicsBetSize": 0,
     "weatherBetSize": 10,
     "allowHighConvictionBypass": true,
-    "highConvictionMinScore": 80,
-    "highConvictionMinBet": 2000,
-    "highConvictionMinWallets": 1,
-    "highConvictionMaxOdds": 80,
+    "highConvictionMinScore": 85,
+    "highConvictionMinBet": 25000,
+    "highConvictionMinWallets": 2,
+    "highConvictionMaxOdds": 60,
     "highConvictionSizeMultiplier": 0.5,
     "deduplicateSkipLogs": true,
     "trackMarketCategory": true,
     "adaptiveSizing": false,
     "useLearningData": true,
-    "minLearningConfidence": 15,
+    "minLearningConfidence": 35,
     "learningBoostThreshold": 65,
     "learningBoostMultiplier": 1.25,
     "learningPenaltyThreshold": 40,
@@ -165,7 +162,7 @@
     "aiScoreOverrideTier": 80,
     "aiScoreOverrideMinWR": 55,
     "selfLearning": false,
-    "updatedAt": "2026-08-13T17:56:45.243Z",
+    "updatedAt": "2026-08-13T19:07:40.307Z",
     "_clearPositions": true,
     "_liveV2Tuned": true,
     "_v3ProfitOverhaul": true
@@ -2239,7 +2236,7 @@
       "totalFactorsTracked": 13,
       "totalSignalsProcessed": 2323,
       "overallWinRate": 55,
-      "pendingSignals": 352
+      "pendingSignals": 353
     },
     "walletEdge": {
       "totalTracked": 500,
@@ -2489,7 +2486,7 @@
       "wins": 1283,
       "losses": 1040,
       "winRate": 55,
-      "pendingSignals": 352
+      "pendingSignals": 353
     },
     "insights": {
       "bestFactors": [
@@ -2678,12 +2675,11 @@
     "settledCount": 0,
     "winRate": null,
     "lastScan": {
-      "at": 1786646860031,
-      "scanned": 3,
+      "at": 1786647766382,
+      "scanned": 2,
       "sports": [
         "mlb",
-        "wnba",
-        "nba"
+        "wnba"
       ],
       "found": 0,
       "newCount": 0
