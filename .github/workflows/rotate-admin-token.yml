@@ -1,0 +1,41 @@
+name: Rotate Admin Token
+
+# Recovers from a lost admin token. The worker's ADMIN_TOKEN wrangler
+# secret cannot be read back, but it can be replaced: this workflow pushes
+# the ADMIN_TOKEN GitHub repo secret into the worker, then verifies the
+# worker accepts it. Set/update the repo secret first, then run this.
+# The same repo secret authenticates the Apply Autotrader Config workflow.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  rotate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Push ADMIN_TOKEN repo secret into the worker
+        env:
+          ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$ADMIN_TOKEN" ]; then
+            echo "::error::ADMIN_TOKEN repo secret is not set. Add it under Settings > Secrets and variables > Actions (pick any new token value), then re-run this workflow."
+            exit 1
+          fi
+          printf '%s' "$ADMIN_TOKEN" | npx wrangler@4 secret put ADMIN_TOKEN
+
+      - name: Verify the worker accepts the new token
+        env:
+          ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
+        run: |
+          sleep 8
+          code=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ADMIN_TOKEN" "https://polymarket-scanner.connord138.workers.dev/admin/ping")
+          if [ "$code" = "200" ]; then
+            echo "Worker accepts the new token (/admin/ping -> 200). Sign in to the dashboard with it."
+          else
+            echo "::error::/admin/ping returned $code — the worker did not accept the token yet. Wait a minute and re-run the verify (or the whole workflow)."
+            exit 1
+          fi
