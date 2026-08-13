@@ -1671,38 +1671,47 @@ export async function processSignals(env, signals) {
       continue;
     }
 
-    // --- UNKNOWN-HORIZON CHECK ---
-    // Signals with no event time slip past Gate 3b (null passes through), so
-    // long-dated markets ("...before 2027") cycle forever: enter → maxHold
-    // timeout → re-enter five minutes later. Before taking a slot, ask Gamma
-    // for the market's endDate and apply the same horizon.
+    // --- MARKET SANITY CHECK (one Gamma lookup per accepted entry) ---
+    // Two protections:
+    // 1. Refuse markets that are already closed/resolved. Whale signals
+    //    linger in the scanner after a market resolves; entering one "buys"
+    //    at the signal's stale price and instantly settles at 0/100 — a
+    //    phantom outcome that never existed on the exchange.
+    // 2. Signals with no event time slip past Gate 3b (null passes through),
+    //    so long-dated markets cycle forever: enter → maxHold timeout →
+    //    re-enter. Apply the horizon gate using Gamma's endDate.
     const entryHorizonHours = config.maxEventHorizonHours ?? 168;
-    if (entryHorizonHours > 0 && signal.hoursUntilEnd == null) {
-      try {
-        const tk = await lookupMarketTokens(signal.marketSlug);
+    try {
+      const tk = await lookupMarketTokens(signal.marketSlug);
+      let skipReason = null;
+      if (tk?.closed) {
+        skipReason = 'Market already closed/resolved on Gamma';
+      } else if (entryHorizonHours > 0 && signal.hoursUntilEnd == null) {
         const endMs = tk?.endDate ? new Date(tk.endDate).getTime() : NaN;
         if (!isNaN(endMs)) {
           const hrsUntilEnd = (endMs - Date.now()) / (1000 * 60 * 60);
           if (hrsUntilEnd > entryHorizonHours) {
-            results.skipped++;
-            const reason = `Event too far out (${Math.round(hrsUntilEnd / 24)}d > ${Math.round(entryHorizonHours / 24)}d horizon)`;
-            results.skipReasons[reason] = (results.skipReasons[reason] || 0) + 1;
-            const skipKey = signal.marketSlug || signal.marketTitle || signal.title;
-            if (!config.deduplicateSkipLogs || !skippedMarketsThisCycle.has(skipKey)) {
-              skippedMarketsThisCycle.add(skipKey);
-              await logDecision(env, {
-                type: 'SKIP',
-                market: signal.marketTitle || signal.title,
-                reason,
-                marketCategory: categorizeMarket(signal.marketTitle || signal.title || ''),
-              });
-            }
-            continue;
+            skipReason = `Event too far out (${Math.round(hrsUntilEnd / 24)}d > ${Math.round(entryHorizonHours / 24)}d horizon)`;
           }
         }
-      } catch (e) {
-        // Gamma unreachable — don't block the entry on a lookup failure
       }
+      if (skipReason) {
+        results.skipped++;
+        results.skipReasons[skipReason] = (results.skipReasons[skipReason] || 0) + 1;
+        const skipKey = signal.marketSlug || signal.marketTitle || signal.title;
+        if (!config.deduplicateSkipLogs || !skippedMarketsThisCycle.has(skipKey)) {
+          skippedMarketsThisCycle.add(skipKey);
+          await logDecision(env, {
+            type: 'SKIP',
+            market: signal.marketTitle || signal.title,
+            reason: skipReason,
+            marketCategory: categorizeMarket(signal.marketTitle || signal.title || ''),
+          });
+        }
+        continue;
+      }
+    } catch (e) {
+      // Gamma unreachable — don't block the entry on a lookup failure
     }
 
     // --- AI LEARNING INTEGRATION ---
