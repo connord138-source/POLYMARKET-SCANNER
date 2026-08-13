@@ -1,27 +1,27 @@
 {
-  "fetchedAt": "2026-08-13T14:35:50Z",
+  "fetchedAt": "2026-08-13T15:56:00Z",
   "health": {
     "status": "ok",
-    "timestamp": "2026-08-13T14:35:50.909Z",
+    "timestamp": "2026-08-13T15:56:01.843Z",
     "version": "21.1.0 - Modularize: extract src/odds.js + src/gamma.js from index.js",
     "cache": {
-      "signalCount": 10153,
-      "oldestSignal": "2026-08-06T14:34:21.000Z",
-      "newestSignal": "2026-08-13T14:29:40.000Z"
+      "signalCount": 10307,
+      "oldestSignal": "2026-08-06T15:50:20.000Z",
+      "newestSignal": "2026-08-13T15:45:21.000Z"
     }
   },
   "cronStatus": {
     "success": true,
     "lastRun": {
-      "startedAt": "2026-08-13T14:30:02.339Z",
+      "startedAt": "2026-08-13T15:50:02.336Z",
       "scan": {
-        "signals": 301,
+        "signals": 331,
         "success": true
       },
       "settlement": {
-        "processed": 3,
+        "processed": 0,
         "wins": 0,
-        "losses": 3,
+        "losses": 0,
         "errors": 0
       },
       "investigations": null,
@@ -35,33 +35,11 @@
         "confirmed": 0,
         "total": 0
       },
-      "optimization": {
-        "optimized": true,
-        "totalFactors": 13,
-        "totalOptimized": 2,
-        "optimizations": [
-          {
-            "factor": "freshWallet",
-            "winRate": 65,
-            "samples": 46,
-            "oldWeight": 1.475,
-            "newWeight": 1.39,
-            "change": -0.09
-          },
-          {
-            "factor": "strongWallet",
-            "winRate": 59,
-            "samples": 387,
-            "oldWeight": 1.3,
-            "newWeight": 1.24,
-            "change": -0.06
-          }
-        ]
-      },
+      "optimization": null,
       "error": null,
       "edgeScan": {
         "skipped": "throttled",
-        "nextInMin": 9
+        "nextInMin": 5
       },
       "edgeSettle": {
         "checked": 0,
@@ -73,14 +51,15 @@
         "expired": 0
       },
       "autotrader": {
-        "evaluated": 301,
+        "evaluated": 331,
         "tradesOpened": 0,
         "tradesPaperTraded": 0,
         "tradesQueued": 0,
-        "skipped": 301,
+        "skipped": 331,
         "skipReasons": {
-          "Category \"tennis\" is blocked": 9,
-          "Category \"esports\" is blocked": 87,
+          "Category \"tennis\" is blocked": 13,
+          "Duplicate market (already traded)": 8,
+          "Category \"esports\" is blocked": 103,
           "Entry price too high for other (81% > 80%)": 1,
           "Entry price too high for other (82% > 80%)": 3,
           "Entry price too high for sports_binary (76% > 52%)": 2,
@@ -91,15 +70,16 @@
           "Event too far out (117d > 7d horizon)": 1,
           "Event too far out (39d > 7d horizon)": 8,
           "Entry price too high for sports_binary (54% > 52%)": 1,
-          "Duplicate market (already traded)": 4,
-          "Event too far out (40d > 7d horizon)": 10,
+          "Event too far out (40d > 7d horizon)": 9,
           "Entry price too high for sports_binary (61% > 52%)": 1,
           "Entry price too high for sports_binary (84% > 52%)": 1,
           "Entry price too low for sports_binary (17% < 20%)": 1,
-          "No winning wallet on signal": 142,
+          "No winning wallet on signal": 145,
           "Event too far out (142d > 7d horizon)": 2,
-          "Event too far out (38d > 7d horizon)": 5,
+          "Event too far out (38d > 7d horizon)": 7,
+          "Event too far out (18d > 7d horizon)": 1,
           "Signal has no market slug — cannot price or settle": 6,
+          "Event too far out (9d > 7d horizon)": 1,
           "Event too far out (19d > 7d horizon)": 2,
           "Event too far out (322d > 7d horizon)": 1,
           "Event too far out (49d > 7d horizon)": 1,
@@ -107,14 +87,14 @@
           "Event too far out (140d > 7d horizon)": 1,
           "Event too far out (10d > 7d horizon)": 1
         },
-        "exitChecks": 5,
+        "exitChecks": 6,
         "positionsExited": 0,
         "errors": [],
-        "openPositions": 5,
-        "dailyPnL": -1.1299999999999994,
-        "totalPnL": 3132.084949494948
+        "openPositions": 6,
+        "dailyPnL": 2.8500000000000005,
+        "totalPnL": 3136.064949494948
       },
-      "completedAt": "2026-08-13T14:33:16.101Z"
+      "completedAt": "2026-08-13T15:53:02.305Z"
     },
     "cronSchedule": "Every 5 minutes",
     "note": "Settlement runs automatically. Sports events settle ~12h after game ends."
@@ -218,12 +198,12 @@
     "_v3ProfitOverhaul": true
   },
   "performance": {
-    "totalTrades": 220,
-    "wins": 88,
+    "totalTrades": 221,
+    "wins": 89,
     "losses": 132,
     "pushes": 282,
     "winRate": 40,
-    "totalPnL": 3132.084949494948,
+    "totalPnL": 3136.064949494948,
     "bestTrade": {
       "market": "Will Bitcoin dip to $55,000 in February?",
       "pnl": 1228.57,
@@ -234,15 +214,15 @@
       "pnl": -170.11,
       "date": "2026-02-15T00:20:13.015Z"
     },
-    "avgReturn": 14.24,
-    "currentStreak": 5,
+    "avgReturn": 14.19,
+    "currentStreak": 6,
     "longestWinStreak": 23,
     "longestLoseStreak": 32,
     "byMarketType": {
       "other": {
-        "wins": 59,
+        "wins": 60,
         "losses": 62,
-        "pnl": 1303.8399999999997
+        "pnl": 1307.8199999999997
       },
       "sports-other": {
         "wins": 17,
@@ -292,9 +272,9 @@
         "pnl": -27.317272727272726
       },
       "HIGH_CONVICTION": {
-        "wins": 46,
+        "wins": 47,
         "losses": 76,
-        "pnl": 17.41999999999999
+        "pnl": 21.39999999999999
       }
     },
     "bySport": {},
@@ -302,12 +282,12 @@
   },
   "daily": {
     "date": "2026-08-13",
-    "tradesOpened": 27,
-    "tradesClosed": 31,
-    "totalSpent": 81,
-    "totalReturned": 91.86999999999999,
-    "realizedPnL": -1.1299999999999994,
-    "wins": 15,
+    "tradesOpened": 29,
+    "tradesClosed": 32,
+    "totalSpent": 87,
+    "totalReturned": 98.85,
+    "realizedPnL": 2.8500000000000005,
+    "wins": 16,
     "losses": 16,
     "skippedReasons": {}
   },
@@ -316,12 +296,12 @@
     "days": [
       {
         "date": "2026-08-13",
-        "tradesOpened": 27,
-        "tradesClosed": 31,
-        "totalSpent": 81,
-        "totalReturned": 91.86999999999999,
-        "realizedPnL": -1.1299999999999994,
-        "wins": 15,
+        "tradesOpened": 29,
+        "tradesClosed": 32,
+        "totalSpent": 87,
+        "totalReturned": 98.85,
+        "realizedPnL": 2.8500000000000005,
+        "wins": 16,
         "losses": 16,
         "skippedReasons": {}
       },
@@ -596,6 +576,34 @@
       "strongCombo": null,
       "isHighConviction": true,
       "shares": 6.976744186046512,
+      "peakPctGain": 34.883720930232556,
+      "trailingStopActive": true,
+      "trailingStopLevel": 24.883720930232556
+    },
+    {
+      "id": "at_1786632809477_06lhma",
+      "marketSlug": "mlb-cin-cws-2026-08-13",
+      "marketTitle": "Cincinnati Reds vs. Chicago White Sox",
+      "marketType": "other",
+      "signalSubType": "moneyline",
+      "direction": "Cincinnati Reds",
+      "directionRaw": "Cincinnati Reds",
+      "whaleAction": "BUY",
+      "entryPrice": 44,
+      "size": 3,
+      "walletTier": "HIGH_CONVICTION",
+      "walletWinRate": 0,
+      "walletBets": 0,
+      "score": 80,
+      "confidence": 56,
+      "hoursUntilEvent": 9.1,
+      "openedAt": "2026-08-13T14:53:29.477Z",
+      "paperTrade": true,
+      "marketCategory": "other",
+      "aiConfidence": null,
+      "strongCombo": null,
+      "isHighConviction": true,
+      "shares": 6.818181818181818,
       "peakPctGain": 0
     }
   ],
@@ -615,22 +623,22 @@
         "wins": 30,
         "losses": 16,
         "winRate": 65,
-        "weight": 1.39,
+        "weight": 1.33,
         "lastUpdated": "2026-08-13T14:32:34.804Z",
-        "previousWeight": 1.475,
-        "optimizedAt": "2026-08-13T14:33:15.715Z",
+        "previousWeight": 1.39,
+        "optimizedAt": "2026-08-13T14:38:22.850Z",
         "total": 46
       },
       {
         "name": "strongWallet",
-        "wins": 228,
-        "losses": 159,
+        "wins": 229,
+        "losses": 161,
         "winRate": 59,
         "weight": 1.24,
-        "lastUpdated": "2026-08-13T13:12:46.091Z",
+        "lastUpdated": "2026-08-13T14:57:48.037Z",
         "previousWeight": 1.3,
-        "optimizedAt": "2026-08-13T14:33:15.715Z",
-        "total": 387
+        "optimizedAt": "2026-08-13T15:03:19.752Z",
+        "total": 390
       },
       {
         "name": "whaleSize25k",
@@ -645,14 +653,14 @@
       },
       {
         "name": "whaleSize15k",
-        "wins": 206,
-        "losses": 159,
+        "wins": 207,
+        "losses": 160,
         "winRate": 56,
-        "weight": 1.2,
-        "lastUpdated": "2026-08-13T12:27:13.514Z",
-        "previousWeight": 1.26,
-        "optimizedAt": "2026-08-13T12:47:49.996Z",
-        "total": 365
+        "weight": 1.26,
+        "lastUpdated": "2026-08-13T15:37:54.334Z",
+        "previousWeight": 1.34,
+        "optimizedAt": "2026-08-13T15:38:40.574Z",
+        "total": 367
       },
       {
         "name": "lastMinute6h",
@@ -678,14 +686,14 @@
       },
       {
         "name": "concentrated",
-        "wins": 259,
-        "losses": 229,
+        "wins": 260,
+        "losses": 230,
         "winRate": 53,
         "weight": 1.16,
-        "lastUpdated": "2026-08-13T08:52:11.417Z",
+        "lastUpdated": "2026-08-13T14:57:48.037Z",
         "previousWeight": 1.22,
-        "optimizedAt": "2026-08-13T09:23:11.530Z",
-        "total": 488
+        "optimizedAt": "2026-08-13T15:03:19.752Z",
+        "total": 490
       },
       {
         "name": "whaleSize50k",
@@ -700,14 +708,14 @@
       },
       {
         "name": "eliteWallet",
-        "wins": 47,
-        "losses": 44,
-        "winRate": 52,
-        "weight": 1.15,
-        "lastUpdated": "2026-08-13T12:52:23.990Z",
-        "previousWeight": 1.2,
-        "optimizedAt": "2026-08-13T13:13:27.658Z",
-        "total": 91
+        "wins": 48,
+        "losses": 46,
+        "winRate": 51,
+        "weight": 1.14,
+        "lastUpdated": "2026-08-13T15:02:47.465Z",
+        "previousWeight": 1.19,
+        "optimizedAt": "2026-08-13T15:18:21.443Z",
+        "total": 94
       }
     ],
     "bottomFactors": [
@@ -733,14 +741,14 @@
       },
       {
         "name": "eliteWallet",
-        "wins": 47,
-        "losses": 44,
-        "winRate": 52,
-        "weight": 1.15,
-        "lastUpdated": "2026-08-13T12:52:23.990Z",
-        "previousWeight": 1.2,
-        "optimizedAt": "2026-08-13T13:13:27.658Z",
-        "total": 91
+        "wins": 48,
+        "losses": 46,
+        "winRate": 51,
+        "weight": 1.14,
+        "lastUpdated": "2026-08-13T15:02:47.465Z",
+        "previousWeight": 1.19,
+        "optimizedAt": "2026-08-13T15:18:21.443Z",
+        "total": 94
       },
       {
         "name": "whaleSize50k",
@@ -755,14 +763,14 @@
       },
       {
         "name": "concentrated",
-        "wins": 259,
-        "losses": 229,
+        "wins": 260,
+        "losses": 230,
         "winRate": 53,
         "weight": 1.16,
-        "lastUpdated": "2026-08-13T08:52:11.417Z",
+        "lastUpdated": "2026-08-13T14:57:48.037Z",
         "previousWeight": 1.22,
-        "optimizedAt": "2026-08-13T09:23:11.530Z",
-        "total": 488
+        "optimizedAt": "2026-08-13T15:03:19.752Z",
+        "total": 490
       },
       {
         "name": "sportsMarket",
@@ -788,14 +796,14 @@
       },
       {
         "name": "whaleSize15k",
-        "wins": 206,
-        "losses": 159,
+        "wins": 207,
+        "losses": 160,
         "winRate": 56,
-        "weight": 1.2,
-        "lastUpdated": "2026-08-13T12:27:13.514Z",
-        "previousWeight": 1.26,
-        "optimizedAt": "2026-08-13T12:47:49.996Z",
-        "total": 365
+        "weight": 1.26,
+        "lastUpdated": "2026-08-13T15:37:54.334Z",
+        "previousWeight": 1.34,
+        "optimizedAt": "2026-08-13T15:38:40.574Z",
+        "total": 367
       },
       {
         "name": "whaleSize25k",
@@ -810,14 +818,14 @@
       },
       {
         "name": "strongWallet",
-        "wins": 228,
-        "losses": 159,
+        "wins": 229,
+        "losses": 161,
         "winRate": 59,
         "weight": 1.24,
-        "lastUpdated": "2026-08-13T13:12:46.091Z",
+        "lastUpdated": "2026-08-13T14:57:48.037Z",
         "previousWeight": 1.3,
-        "optimizedAt": "2026-08-13T14:33:15.715Z",
-        "total": 387
+        "optimizedAt": "2026-08-13T15:03:19.752Z",
+        "total": 390
       }
     ],
     "recommendation": {
@@ -839,7 +847,7 @@
         {
           "name": "strongWallet",
           "winRate": 59,
-          "record": "228W-159L",
+          "record": "229W-161L",
           "isDiscovered": false
         }
       ],
@@ -858,8 +866,8 @@
         },
         {
           "name": "eliteWallet",
-          "winRate": 52,
-          "record": "47W-44L",
+          "winRate": 51,
+          "record": "48W-46L",
           "isDiscovered": false
         }
       ],
@@ -963,43 +971,6 @@
     "totalFactors": 12
   },
   "tradeLog": [
-    {
-      "type": "SKIP",
-      "market": "Will JD Vance win the 2028 US Presidential Election?",
-      "reason": "Event too far out (817d > 7d horizon)",
-      "marketCategory": "politics",
-      "timestamp": "2026-08-13T05:21:50.030Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "Will the U.S. invade Iran before 2027?",
-      "reason": "Event too far out (140d > 7d horizon)",
-      "marketCategory": "politics",
-      "timestamp": "2026-08-13T05:21:50.686Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "Fed rate hike in 2026?",
-      "reason": "Event too far out (118d > 7d horizon)",
-      "marketCategory": "politics",
-      "timestamp": "2026-08-13T05:21:51.356Z"
-    },
-    {
-      "type": "EXIT",
-      "market": "Texas Rangers vs. Los Angeles Angels: O/U 8.5",
-      "reason": "Market resolved (gamma_resolved). Final price: 100%",
-      "exitType": "market_resolved",
-      "pnl": 3.38,
-      "paperTrade": true,
-      "timestamp": "2026-08-13T05:32:59.290Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "Will JD Vance win the 2028 US Presidential Election?",
-      "reason": "Event too far out (817d > 7d horizon)",
-      "marketCategory": "politics",
-      "timestamp": "2026-08-13T06:22:28.338Z"
-    },
     {
       "type": "SKIP",
       "market": "Will the U.S. invade Iran before 2027?",
@@ -1198,43 +1169,56 @@
       "reason": "Event too far out (117d > 7d horizon)",
       "marketCategory": "politics",
       "timestamp": "2026-08-13T14:03:17.898Z"
+    },
+    {
+      "type": "PAPER_TRADE",
+      "market": "Cincinnati Reds vs. Chicago White Sox",
+      "size": 3,
+      "entryPrice": 44,
+      "walletTier": "HIGH_CONVICTION",
+      "walletWR": 0,
+      "betSummary": null,
+      "whaleAction": "BUY",
+      "marketCategory": "other",
+      "timestamp": "2026-08-13T14:53:29.867Z"
+    },
+    {
+      "type": "PAPER_TRADE",
+      "market": "Game Handicap: TS (-1.5) vs Xtreme Gaming (+1.5)",
+      "size": 3,
+      "entryPrice": 43,
+      "walletTier": "HIGH_CONVICTION",
+      "walletWR": 0,
+      "betSummary": null,
+      "whaleAction": "BUY",
+      "marketCategory": "other",
+      "timestamp": "2026-08-13T14:58:22.076Z"
+    },
+    {
+      "type": "EXIT",
+      "market": "Game Handicap: TS (-1.5) vs Xtreme Gaming (+1.5)",
+      "reason": "Market resolved (gamma_resolved). Final price: 100%",
+      "exitType": "market_resolved",
+      "pnl": 3.98,
+      "paperTrade": true,
+      "timestamp": "2026-08-13T15:03:12.596Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Will JD Vance win the 2028 US Presidential Election?",
+      "reason": "Event too far out (816d > 7d horizon)",
+      "marketCategory": "politics",
+      "timestamp": "2026-08-13T15:07:52.981Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Fed rate hike in 2026?",
+      "reason": "Event too far out (117d > 7d horizon)",
+      "marketCategory": "politics",
+      "timestamp": "2026-08-13T15:07:54.131Z"
     }
   ],
   "tradeHistory": [
-    {
-      "id": "at_1786579368474_ywhct4",
-      "marketSlug": "mlb-col-ari-2026-08-12-total-9pt5",
-      "marketTitle": "Colorado Rockies vs. Arizona Diamondbacks: O/U 9.5",
-      "marketType": "other",
-      "signalSubType": "moneyline",
-      "direction": "Under 9.5",
-      "directionRaw": "Under",
-      "whaleAction": "BUY",
-      "entryPrice": 53,
-      "size": 3,
-      "walletTier": "HIGH_CONVICTION",
-      "walletWinRate": 0,
-      "walletBets": 0,
-      "score": 105,
-      "confidence": 66,
-      "hoursUntilEvent": 4.2,
-      "openedAt": "2026-08-13T00:02:48.474Z",
-      "paperTrade": true,
-      "marketCategory": "other",
-      "aiConfidence": null,
-      "strongCombo": null,
-      "isHighConviction": true,
-      "shares": 5.660377358490566,
-      "closedAt": "2026-08-13T00:07:32.074Z",
-      "exitPrice": 0,
-      "exitType": "market_resolved",
-      "exitReason": "Market resolved (gamma_resolved). Final price: 0%",
-      "pnl": -3,
-      "pnlPercent": -100,
-      "outcome": "loss",
-      "entryHourUTC": 0,
-      "exitHourUTC": 0
-    },
     {
       "id": "at_1786579654216_s46r1p",
       "marketSlug": "mlb-phi-stl-2026-08-12-total-7pt5",
@@ -2236,15 +2220,49 @@
       "outcome": "win",
       "entryHourUTC": 12,
       "exitHourUTC": 12
+    },
+    {
+      "id": "at_1786633101680_8dsunp",
+      "marketSlug": "dota2-ts8-xtreme-2026-08-13-game-handicap-away-1pt5",
+      "marketTitle": "Game Handicap: TS (-1.5) vs Xtreme Gaming (+1.5)",
+      "marketType": "other",
+      "signalSubType": "moneyline",
+      "direction": "Team Spirit",
+      "directionRaw": "Team Spirit",
+      "whaleAction": "BUY",
+      "entryPrice": 43,
+      "size": 3,
+      "walletTier": "HIGH_CONVICTION",
+      "walletWinRate": 0,
+      "walletBets": 0,
+      "score": 83,
+      "confidence": 60,
+      "hoursUntilEvent": 17.6,
+      "openedAt": "2026-08-13T14:58:21.680Z",
+      "paperTrade": true,
+      "marketCategory": "other",
+      "aiConfidence": null,
+      "strongCombo": null,
+      "isHighConviction": true,
+      "shares": 6.976744186046512,
+      "closedAt": "2026-08-13T15:03:10.399Z",
+      "exitPrice": 100,
+      "exitType": "market_resolved",
+      "exitReason": "Market resolved (gamma_resolved). Final price: 100%",
+      "pnl": 3.98,
+      "pnlPercent": 132.6,
+      "outcome": "win",
+      "entryHourUTC": 14,
+      "exitHourUTC": 15
     }
   ],
   "learningStats": {
     "success": true,
     "overview": {
       "totalFactorsTracked": 13,
-      "totalSignalsProcessed": 2294,
+      "totalSignalsProcessed": 2304,
       "overallWinRate": 55,
-      "pendingSignals": 346
+      "pendingSignals": 353
     },
     "walletEdge": {
       "totalTracked": 500,
@@ -2350,49 +2368,49 @@
         "optimizedAt": "2026-08-13T12:03:08.808Z"
       },
       "concentrated": {
-        "wins": 259,
-        "losses": 229,
+        "wins": 260,
+        "losses": 230,
         "winRate": 53,
         "weight": 1.16,
-        "lastUpdated": "2026-08-13T08:52:11.417Z",
+        "lastUpdated": "2026-08-13T14:57:48.037Z",
         "previousWeight": 1.22,
-        "optimizedAt": "2026-08-13T09:23:11.530Z"
+        "optimizedAt": "2026-08-13T15:03:19.752Z"
       },
       "whaleSize15k": {
-        "wins": 206,
-        "losses": 159,
+        "wins": 207,
+        "losses": 160,
         "winRate": 56,
-        "weight": 1.2,
-        "lastUpdated": "2026-08-13T12:27:13.514Z",
-        "previousWeight": 1.26,
-        "optimizedAt": "2026-08-13T12:47:49.996Z"
+        "weight": 1.26,
+        "lastUpdated": "2026-08-13T15:37:54.334Z",
+        "previousWeight": 1.34,
+        "optimizedAt": "2026-08-13T15:38:40.574Z"
       },
       "freshWallet": {
         "wins": 30,
         "losses": 16,
         "winRate": 65,
-        "weight": 1.39,
+        "weight": 1.33,
         "lastUpdated": "2026-08-13T14:32:34.804Z",
-        "previousWeight": 1.475,
-        "optimizedAt": "2026-08-13T14:33:15.715Z"
+        "previousWeight": 1.39,
+        "optimizedAt": "2026-08-13T14:38:22.850Z"
       },
       "strongWallet": {
-        "wins": 228,
-        "losses": 159,
+        "wins": 229,
+        "losses": 161,
         "winRate": 59,
         "weight": 1.24,
-        "lastUpdated": "2026-08-13T13:12:46.091Z",
+        "lastUpdated": "2026-08-13T14:57:48.037Z",
         "previousWeight": 1.3,
-        "optimizedAt": "2026-08-13T14:33:15.715Z"
+        "optimizedAt": "2026-08-13T15:03:19.752Z"
       },
       "eliteWallet": {
-        "wins": 47,
-        "losses": 44,
-        "winRate": 52,
-        "weight": 1.15,
-        "lastUpdated": "2026-08-13T12:52:23.990Z",
-        "previousWeight": 1.2,
-        "optimizedAt": "2026-08-13T13:13:27.658Z"
+        "wins": 48,
+        "losses": 46,
+        "winRate": 51,
+        "weight": 1.14,
+        "lastUpdated": "2026-08-13T15:02:47.465Z",
+        "previousWeight": 1.19,
+        "optimizedAt": "2026-08-13T15:18:21.443Z"
       },
       "sportsMarket": {
         "wins": 21,
@@ -2471,11 +2489,11 @@
   "learningInsights": {
     "success": true,
     "systemPerformance": {
-      "totalSignalsProcessed": 2294,
-      "wins": 1267,
-      "losses": 1027,
+      "totalSignalsProcessed": 2304,
+      "wins": 1271,
+      "losses": 1033,
       "winRate": 55,
-      "pendingSignals": 346
+      "pendingSignals": 353
     },
     "insights": {
       "bestFactors": [
@@ -2492,7 +2510,7 @@
           "winRate": 65,
           "wins": 30,
           "losses": 16,
-          "weight": 1.39,
+          "weight": 1.33,
           "performance": "STRONG"
         }
       ],
@@ -2513,14 +2531,14 @@
         "winRate": 65,
         "wins": 30,
         "losses": 16,
-        "weight": 1.39,
+        "weight": 1.33,
         "performance": "STRONG"
       },
       {
         "factor": "strongWallet",
         "winRate": 59,
-        "wins": 228,
-        "losses": 159,
+        "wins": 229,
+        "losses": 161,
         "weight": 1.24,
         "performance": "AVERAGE"
       },
@@ -2535,9 +2553,9 @@
       {
         "factor": "whaleSize15k",
         "winRate": 56,
-        "wins": 206,
-        "losses": 159,
-        "weight": 1.2,
+        "wins": 207,
+        "losses": 160,
+        "weight": 1.26,
         "performance": "AVERAGE"
       },
       {
@@ -2559,8 +2577,8 @@
       {
         "factor": "concentrated",
         "winRate": 53,
-        "wins": 259,
-        "losses": 229,
+        "wins": 260,
+        "losses": 230,
         "weight": 1.16,
         "performance": "AVERAGE"
       },
@@ -2574,10 +2592,10 @@
       },
       {
         "factor": "eliteWallet",
-        "winRate": 52,
-        "wins": 47,
-        "losses": 44,
-        "weight": 1.15,
+        "winRate": 51,
+        "wins": 48,
+        "losses": 46,
+        "weight": 1.14,
         "performance": "AVERAGE"
       },
       {
@@ -2607,12 +2625,12 @@
         "key": "underdog",
         "label": "Underdog entries (≤40¢)",
         "side": "follow",
-        "settled": 194,
-        "wins": 71,
+        "settled": 195,
+        "wins": 72,
         "losses": 123,
-        "staked": 19400,
-        "pnl": 1204.51,
-        "roi": 6.2,
+        "staked": 19500,
+        "pnl": 1449.34,
+        "roi": 7.4,
         "winRate": 37,
         "readyForAuto": true
       },
@@ -2620,12 +2638,12 @@
         "key": "fade_favorites",
         "label": "Fade favorites (≥60¢)",
         "side": "fade",
-        "settled": 602,
-        "wins": 194,
-        "losses": 408,
-        "staked": 60200,
-        "pnl": 2963.73,
-        "roi": 4.9,
+        "settled": 606,
+        "wins": 196,
+        "losses": 410,
+        "staked": 60600,
+        "pnl": 3405,
+        "roi": 5.6,
         "winRate": 32,
         "readyForAuto": true
       },
@@ -2646,12 +2664,12 @@
         "key": "all",
         "label": "Follow all signals",
         "side": "follow",
-        "settled": 1632,
-        "wins": 891,
-        "losses": 741,
-        "staked": 163200,
-        "pnl": -2769.86,
-        "roi": -1.7,
+        "settled": 1640,
+        "wins": 894,
+        "losses": 746,
+        "staked": 164000,
+        "pnl": -2909.58,
+        "roi": -1.8,
         "winRate": 55,
         "readyForAuto": false
       }
@@ -2664,12 +2682,13 @@
     "settledCount": 0,
     "winRate": null,
     "lastScan": {
-      "at": 1786631262915,
-      "scanned": 3,
+      "at": 1786635771244,
+      "scanned": 4,
       "sports": [
         "mlb",
-        "nfl",
-        "wnba"
+        "wnba",
+        "nba",
+        "nfl"
       ],
       "found": 0,
       "newCount": 0
