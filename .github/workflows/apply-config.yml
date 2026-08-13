@@ -1,0 +1,33 @@
+name: Apply Autotrader Config
+
+# Applies config/autotrader.json to the live worker's auto-trader config
+# (the worker merges these keys into the saved config). Run manually via
+# workflow_dispatch. Requires the ADMIN_TOKEN repo secret (same value as
+# the worker's ADMIN_TOKEN wrangler secret).
+
+on:
+  workflow_dispatch:
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Apply config/autotrader.json to the worker
+        env:
+          ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
+        run: |
+          if [ -z "$ADMIN_TOKEN" ]; then
+            echo "::error::ADMIN_TOKEN repo secret is not set. Add it under Settings > Secrets and variables > Actions (value = the worker's admin token), then re-run this workflow."
+            exit 1
+          fi
+          BASE="https://polymarket-scanner.connord138.workers.dev"
+          jq -e . config/autotrader.json >/dev/null
+          resp=$(curl -sf -X POST "$BASE/autotrader/config" \
+            -H "Authorization: Bearer $ADMIN_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data @config/autotrader.json)
+          echo "$resp" | jq -e '.success == true' >/dev/null || { echo "::error::Config update failed: $resp"; exit 1; }
+          echo "Applied. Key values now live:"
+          echo "$resp" | jq '.config | {fixedSize, bankroll, maxDailyTrades, maxDailySpend, maxHoldHours, minOdds, maxOdds, minWalletWinRate, minWalletBets, minAiScore, minExpectedValue, requireProvenEdge, useLearningData, minLearningConfidence, highConvictionMinScore, highConvictionMinBet, highConvictionMinWallets, highConvictionMaxOdds, blockedCategories}'
