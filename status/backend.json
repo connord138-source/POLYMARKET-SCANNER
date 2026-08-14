@@ -1,21 +1,21 @@
 {
-  "fetchedAt": "2026-08-14T09:56:44Z",
+  "fetchedAt": "2026-08-14T10:57:52Z",
   "health": {
     "status": "ok",
-    "timestamp": "2026-08-14T09:56:44.778Z",
+    "timestamp": "2026-08-14T10:57:53.515Z",
     "version": "21.1.0 - Modularize: extract src/odds.js + src/gamma.js from index.js",
     "cache": {
-      "signalCount": 10732,
-      "oldestSignal": "2026-08-07T09:56:37.000Z",
-      "newestSignal": "2026-08-14T09:49:52.000Z"
+      "signalCount": 10767,
+      "oldestSignal": "2026-08-07T10:56:39.000Z",
+      "newestSignal": "2026-08-14T10:50:27.000Z"
     }
   },
   "cronStatus": {
     "success": true,
     "lastRun": {
-      "startedAt": "2026-08-14T09:50:08.312Z",
+      "startedAt": "2026-08-14T10:50:07.734Z",
       "scan": {
-        "signals": 189,
+        "signals": 216,
         "success": true
       },
       "settlement": {
@@ -27,7 +27,7 @@
       "investigations": null,
       "overround": {
         "scanned": 74,
-        "flagged": 43
+        "flagged": 42
       },
       "sweep": null,
       "lines": {
@@ -38,11 +38,11 @@
       "optimization": null,
       "error": null,
       "edgeScan": {
-        "at": 1786701207784,
+        "at": 1786704781487,
         "scanned": 3,
         "sports": [
           "mlb",
-          "wnba",
+          "nfl",
           "nba"
         ],
         "found": 0,
@@ -58,13 +58,13 @@
         "expired": 0
       },
       "autotrader": {
-        "evaluated": 189,
+        "evaluated": 216,
         "tradesOpened": 0,
         "tradesPaperTraded": 0,
         "tradesQueued": 0,
-        "skipped": 189,
+        "skipped": 216,
         "skipReasons": {
-          "Daily loss limit hit ($0 <= $100)": 189
+          "Daily loss limit hit ($0 <= $100)": 216
         },
         "exitChecks": 2,
         "positionsExited": 0,
@@ -73,7 +73,7 @@
         "dailyPnL": 0,
         "totalPnL": 3151.0649494949485
       },
-      "completedAt": "2026-08-14T09:53:57.893Z"
+      "completedAt": "2026-08-14T10:53:17.572Z"
     },
     "cronSchedule": "Every 5 minutes",
     "note": "Settlement runs automatically. Sports events settle ~12h after game ends."
@@ -482,12 +482,12 @@
     "topFactors": [
       {
         "name": "politicalMarket",
-        "wins": 8,
+        "wins": 9,
         "losses": 3,
-        "winRate": 73,
-        "weight": 1.595,
-        "lastUpdated": "2026-08-12T20:22:20.826Z",
-        "total": 11
+        "winRate": 75,
+        "weight": 1.625,
+        "lastUpdated": "2026-08-14T10:02:14.972Z",
+        "total": 12
       },
       {
         "name": "freshWallet",
@@ -591,6 +591,17 @@
     ],
     "bottomFactors": [
       {
+        "name": "eliteWallet",
+        "wins": 49,
+        "losses": 50,
+        "winRate": 49,
+        "weight": 1.16,
+        "lastUpdated": "2026-08-14T10:42:56.575Z",
+        "previousWeight": 1.2349999999999999,
+        "optimizedAt": "2026-08-14T10:43:35.068Z",
+        "total": 99
+      },
+      {
         "name": "cryptoMarket",
         "wins": 4,
         "losses": 4,
@@ -598,17 +609,6 @@
         "weight": 1.25,
         "lastUpdated": "2026-08-12T00:31:27.059Z",
         "total": 8
-      },
-      {
-        "name": "eliteWallet",
-        "wins": 49,
-        "losses": 49,
-        "winRate": 50,
-        "weight": 1.13,
-        "lastUpdated": "2026-08-14T03:42:58.528Z",
-        "previousWeight": 1.18,
-        "optimizedAt": "2026-08-14T03:58:06.491Z",
-        "total": 98
       },
       {
         "name": "lastMinute2h",
@@ -705,8 +705,8 @@
       "bestFactors": [
         {
           "name": "politicalMarket",
-          "winRate": 73,
-          "record": "8W-3L",
+          "winRate": 75,
+          "record": "9W-3L",
           "isDiscovered": false
         },
         {
@@ -724,15 +724,15 @@
       ],
       "worstFactors": [
         {
-          "name": "cryptoMarket",
-          "winRate": 50,
-          "record": "4W-4L",
+          "name": "eliteWallet",
+          "winRate": 49,
+          "record": "49W-50L",
           "isDiscovered": false
         },
         {
-          "name": "eliteWallet",
+          "name": "cryptoMarket",
           "winRate": 50,
-          "record": "49W-49L",
+          "record": "4W-4L",
           "isDiscovered": false
         },
         {
@@ -2146,9 +2146,9 @@
     "success": true,
     "overview": {
       "totalFactorsTracked": 13,
-      "totalSignalsProcessed": 2445,
+      "totalSignalsProcessed": 2447,
       "overallWinRate": 55,
-      "pendingSignals": 341
+      "pendingSignals": 349
     },
     "walletEdge": {
       "totalTracked": 500,
@@ -2182,12 +2182,12 @@
       "hasRecommendation": true,
       "factorsWithData": 12,
       "overallConfidence": 55,
-      "recommendation": "Favor signals showing politicalMarket (73%), freshWallet (65%).",
+      "recommendation": "Favor signals showing politicalMarket (75%), freshWallet (65%).",
       "bestFactors": [
         {
           "name": "politicalMarket",
-          "record": "8W-3L",
-          "winRate": 73
+          "record": "9W-3L",
+          "winRate": 75
         },
         {
           "name": "freshWallet",
@@ -2272,12 +2272,12 @@
       },
       "eliteWallet": {
         "wins": 49,
-        "losses": 49,
-        "winRate": 50,
-        "weight": 1.13,
-        "lastUpdated": "2026-08-14T03:42:58.528Z",
-        "previousWeight": 1.18,
-        "optimizedAt": "2026-08-14T03:58:06.491Z"
+        "losses": 50,
+        "winRate": 49,
+        "weight": 1.16,
+        "lastUpdated": "2026-08-14T10:42:56.575Z",
+        "previousWeight": 1.2349999999999999,
+        "optimizedAt": "2026-08-14T10:43:35.068Z"
       },
       "sportsMarket": {
         "wins": 22,
@@ -2296,11 +2296,11 @@
         "lastUpdated": "2026-08-12T00:31:27.059Z"
       },
       "politicalMarket": {
-        "wins": 8,
+        "wins": 9,
         "losses": 3,
-        "winRate": 73,
-        "weight": 1.595,
-        "lastUpdated": "2026-08-12T20:22:20.826Z"
+        "winRate": 75,
+        "weight": 1.625,
+        "lastUpdated": "2026-08-14T10:02:14.972Z"
       },
       "extremeOdds": {
         "wins": 1,
@@ -2356,20 +2356,20 @@
   "learningInsights": {
     "success": true,
     "systemPerformance": {
-      "totalSignalsProcessed": 2445,
-      "wins": 1352,
-      "losses": 1093,
+      "totalSignalsProcessed": 2447,
+      "wins": 1353,
+      "losses": 1094,
       "winRate": 55,
-      "pendingSignals": 341
+      "pendingSignals": 349
     },
     "insights": {
       "bestFactors": [
         {
           "factor": "politicalMarket",
-          "winRate": 73,
-          "wins": 8,
+          "winRate": 75,
+          "wins": 9,
           "losses": 3,
-          "weight": 1.595,
+          "weight": 1.625,
           "performance": "STRONG"
         },
         {
@@ -2387,10 +2387,10 @@
     "allFactors": [
       {
         "factor": "politicalMarket",
-        "winRate": 73,
-        "wins": 8,
+        "winRate": 75,
+        "wins": 9,
         "losses": 3,
-        "weight": 1.595,
+        "weight": 1.625,
         "performance": "STRONG"
       },
       {
@@ -2466,20 +2466,20 @@
         "performance": "AVERAGE"
       },
       {
-        "factor": "eliteWallet",
-        "winRate": 50,
-        "wins": 49,
-        "losses": 49,
-        "weight": 1.13,
-        "performance": "AVERAGE"
-      },
-      {
         "factor": "cryptoMarket",
         "winRate": 50,
         "wins": 4,
         "losses": 4,
         "weight": 1.25,
         "performance": "AVERAGE"
+      },
+      {
+        "factor": "eliteWallet",
+        "winRate": 49,
+        "wins": 49,
+        "losses": 50,
+        "weight": 1.16,
+        "performance": "WEAK"
       }
     ]
   },
@@ -2492,12 +2492,12 @@
         "key": "fade_favorites",
         "label": "Fade favorites (≥60¢)",
         "side": "fade",
-        "settled": 633,
+        "settled": 634,
         "wins": 201,
-        "losses": 432,
-        "staked": 63300,
-        "pnl": 2494.96,
-        "roi": 3.9,
+        "losses": 433,
+        "staked": 63400,
+        "pnl": 2394.96,
+        "roi": 3.8,
         "winRate": 32,
         "readyForAuto": true
       },
@@ -2531,12 +2531,12 @@
         "key": "all",
         "label": "Follow all signals",
         "side": "follow",
-        "settled": 1740,
-        "wins": 952,
-        "losses": 788,
-        "staked": 174000,
-        "pnl": -2639.43,
-        "roi": -1.5,
+        "settled": 1742,
+        "wins": 953,
+        "losses": 789,
+        "staked": 174200,
+        "pnl": -2717.48,
+        "roi": -1.6,
         "winRate": 55,
         "readyForAuto": false
       }
@@ -2549,11 +2549,11 @@
     "settledCount": 0,
     "winRate": null,
     "lastScan": {
-      "at": 1786701207784,
+      "at": 1786704781487,
       "scanned": 3,
       "sports": [
         "mlb",
-        "wnba",
+        "nfl",
         "nba"
       ],
       "found": 0,
