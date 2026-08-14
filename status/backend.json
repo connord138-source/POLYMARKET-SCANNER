@@ -1,33 +1,33 @@
 {
-  "fetchedAt": "2026-08-14T15:20:47Z",
+  "fetchedAt": "2026-08-14T16:21:55Z",
   "health": {
     "status": "ok",
-    "timestamp": "2026-08-14T15:20:48.909Z",
+    "timestamp": "2026-08-14T16:21:56.918Z",
     "version": "21.1.0 - Modularize: extract src/odds.js + src/gamma.js from index.js",
     "cache": {
-      "signalCount": 10848,
-      "oldestSignal": "2026-08-07T15:15:40.000Z",
-      "newestSignal": "2026-08-14T15:09:36.000Z"
+      "signalCount": 10869,
+      "oldestSignal": "2026-08-07T16:20:34.000Z",
+      "newestSignal": "2026-08-14T16:14:46.000Z"
     }
   },
   "cronStatus": {
     "success": true,
     "lastRun": {
-      "startedAt": "2026-08-14T15:15:07.631Z",
+      "startedAt": "2026-08-14T16:15:08.215Z",
       "scan": {
-        "signals": 311,
+        "signals": 331,
         "success": true
       },
       "settlement": {
-        "processed": 0,
+        "processed": 2,
         "wins": 0,
-        "losses": 0,
+        "losses": 2,
         "errors": 0
       },
       "investigations": null,
       "overround": {
         "scanned": 75,
-        "flagged": 41
+        "flagged": 42
       },
       "sweep": null,
       "lines": {
@@ -35,11 +35,25 @@
         "confirmed": 0,
         "total": 0
       },
-      "optimization": null,
+      "optimization": {
+        "optimized": true,
+        "totalFactors": 13,
+        "totalOptimized": 1,
+        "optimizations": [
+          {
+            "factor": "eliteWallet",
+            "winRate": 50,
+            "samples": 115,
+            "oldWeight": 1.25,
+            "newWeight": 1.18,
+            "change": -0.07
+          }
+        ]
+      },
       "error": null,
       "edgeScan": {
         "skipped": "throttled",
-        "nextInMin": 5
+        "nextInMin": 4
       },
       "edgeSettle": {
         "checked": 0,
@@ -51,13 +65,13 @@
         "expired": 0
       },
       "autotrader": {
-        "evaluated": 311,
+        "evaluated": 331,
         "tradesOpened": 0,
         "tradesPaperTraded": 0,
         "tradesQueued": 0,
-        "skipped": 311,
+        "skipped": 331,
         "skipReasons": {
-          "Daily loss limit hit ($0 <= $100)": 311
+          "Daily loss limit hit ($0 <= $100)": 331
         },
         "exitChecks": 2,
         "positionsExited": 0,
@@ -66,7 +80,7 @@
         "dailyPnL": 0,
         "totalPnL": 3151.0649494949485
       },
-      "completedAt": "2026-08-14T15:18:16.005Z"
+      "completedAt": "2026-08-14T16:18:20.883Z"
     },
     "cronSchedule": "Every 5 minutes",
     "note": "Settlement runs automatically. Sports events settle ~12h after game ends."
@@ -594,14 +608,14 @@
       },
       {
         "name": "eliteWallet",
-        "wins": 55,
-        "losses": 54,
+        "wins": 57,
+        "losses": 58,
         "winRate": 50,
         "weight": 1.18,
-        "lastUpdated": "2026-08-14T15:12:51.006Z",
+        "lastUpdated": "2026-08-14T16:17:41.282Z",
         "previousWeight": 1.25,
-        "optimizedAt": "2026-08-14T15:13:25.803Z",
-        "total": 109
+        "optimizedAt": "2026-08-14T16:18:20.517Z",
+        "total": 115
       },
       {
         "name": "lastMinute2h",
@@ -725,7 +739,7 @@
         {
           "name": "eliteWallet",
           "winRate": 50,
-          "record": "55W-54L",
+          "record": "57W-58L",
           "isDiscovered": false
         },
         {
@@ -2139,7 +2153,7 @@
     "success": true,
     "overview": {
       "totalFactorsTracked": 13,
-      "totalSignalsProcessed": 2473,
+      "totalSignalsProcessed": 2479,
       "overallWinRate": 55,
       "pendingSignals": 379
     },
@@ -2283,13 +2297,13 @@
         "optimizedAt": "2026-08-14T15:13:25.803Z"
       },
       "eliteWallet": {
-        "wins": 55,
-        "losses": 54,
+        "wins": 57,
+        "losses": 58,
         "winRate": 50,
         "weight": 1.18,
-        "lastUpdated": "2026-08-14T15:12:51.006Z",
+        "lastUpdated": "2026-08-14T16:17:41.282Z",
         "previousWeight": 1.25,
-        "optimizedAt": "2026-08-14T15:13:25.803Z"
+        "optimizedAt": "2026-08-14T16:18:20.517Z"
       },
       "sportsMarket": {
         "wins": 22,
@@ -2368,9 +2382,9 @@
   "learningInsights": {
     "success": true,
     "systemPerformance": {
-      "totalSignalsProcessed": 2473,
-      "wins": 1366,
-      "losses": 1107,
+      "totalSignalsProcessed": 2479,
+      "wins": 1368,
+      "losses": 1111,
       "winRate": 55,
       "pendingSignals": 379
     },
@@ -2480,8 +2494,8 @@
       {
         "factor": "eliteWallet",
         "winRate": 50,
-        "wins": 55,
-        "losses": 54,
+        "wins": 57,
+        "losses": 58,
         "weight": 1.18,
         "performance": "AVERAGE"
       },
@@ -2504,26 +2518,13 @@
         "key": "fade_favorites",
         "label": "Fade favorites (≥60¢)",
         "side": "fade",
-        "settled": 643,
-        "wins": 205,
+        "settled": 645,
+        "wins": 207,
         "losses": 438,
-        "staked": 64300,
-        "pnl": 2619.89,
-        "roi": 4.1,
+        "staked": 64500,
+        "pnl": 3225.45,
+        "roi": 5,
         "winRate": 32,
-        "readyForAuto": true
-      },
-      {
-        "key": "high_score",
-        "label": "High score (≥100)",
-        "side": "follow",
-        "settled": 414,
-        "wins": 234,
-        "losses": 180,
-        "staked": 41400,
-        "pnl": 1058.37,
-        "roi": 2.6,
-        "winRate": 57,
         "readyForAuto": true
       },
       {
@@ -2540,15 +2541,28 @@
         "readyForAuto": true
       },
       {
+        "key": "high_score",
+        "label": "High score (≥100)",
+        "side": "follow",
+        "settled": 415,
+        "wins": 234,
+        "losses": 181,
+        "staked": 41500,
+        "pnl": 958.37,
+        "roi": 2.3,
+        "winRate": 56,
+        "readyForAuto": true
+      },
+      {
         "key": "all",
         "label": "Follow all signals",
         "side": "follow",
-        "settled": 1760,
-        "wins": 962,
-        "losses": 798,
-        "staked": 176000,
-        "pnl": -2623.21,
-        "roi": -1.5,
+        "settled": 1766,
+        "wins": 964,
+        "losses": 802,
+        "staked": 176600,
+        "pnl": -2849.08,
+        "roi": -1.6,
         "winRate": 55,
         "readyForAuto": false
       }
@@ -2561,11 +2575,12 @@
     "settledCount": 0,
     "winRate": null,
     "lastScan": {
-      "at": 1786720102201,
-      "scanned": 2,
+      "at": 1786723682423,
+      "scanned": 3,
       "sports": [
         "mlb",
-        "wnba"
+        "wnba",
+        "nba"
       ],
       "found": 0,
       "newCount": 0
