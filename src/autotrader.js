@@ -910,8 +910,15 @@ function evaluateSignal(signal, config, dailyStats, openPositions, perf) {
   if (config.maxDailySpend > 0 && dailyStats.totalSpent >= config.maxDailySpend) {
     return { shouldTrade: false, reason: `Daily spend limit reached ($${config.maxDailySpend})` };
   }
-  if (config.dailyLossLimit && (dailyStats.realizedPnL || 0) <= config.dailyLossLimit) {
-    return { shouldTrade: false, reason: `Daily loss limit hit ($${dailyStats.realizedPnL} <= $${config.dailyLossLimit})` };
+  // dailyLossLimit is stored as -150 by the defaults but as a positive
+  // magnitude (e.g. 100) by the dashboard's input — normalize to a negative
+  // threshold. Comparing raw against a positive limit made 0 <= 100 true and
+  // froze all entries.
+  if (config.dailyLossLimit) {
+    const lossThreshold = -Math.abs(config.dailyLossLimit);
+    if ((dailyStats.realizedPnL || 0) <= lossThreshold) {
+      return { shouldTrade: false, reason: `Daily loss limit hit ($${dailyStats.realizedPnL} <= $${lossThreshold})` };
+    }
   }
   if (config.maxOpenPositions > 0 && openPositions.length >= config.maxOpenPositions) {
     return { shouldTrade: false, reason: `Max open positions reached (${config.maxOpenPositions})` };
