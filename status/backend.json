@@ -1,21 +1,21 @@
 {
-  "fetchedAt": "2026-08-17T16:22:13Z",
+  "fetchedAt": "2026-08-17T16:54:23Z",
   "health": {
     "status": "ok",
-    "timestamp": "2026-08-17T16:22:14.948Z",
+    "timestamp": "2026-08-17T16:54:24.726Z",
     "version": "21.1.0 - Modularize: extract src/odds.js + src/gamma.js from index.js",
     "cache": {
-      "signalCount": 10932,
-      "oldestSignal": "2026-08-10T16:20:36.000Z",
-      "newestSignal": "2026-08-17T16:16:30.000Z"
+      "signalCount": 10929,
+      "oldestSignal": "2026-08-10T16:50:24.000Z",
+      "newestSignal": "2026-08-17T16:46:42.000Z"
     }
   },
   "cronStatus": {
     "success": true,
     "lastRun": {
-      "startedAt": "2026-08-17T16:20:19.932Z",
+      "startedAt": "2026-08-17T16:50:19.962Z",
       "scan": {
-        "signals": 132,
+        "signals": 139,
         "success": true
       },
       "settlement": {
@@ -39,7 +39,7 @@
       "error": null,
       "edgeScan": {
         "skipped": "throttled",
-        "nextInMin": 10
+        "nextInMin": 9
       },
       "edgeSettle": {
         "checked": 0,
@@ -51,16 +51,16 @@
         "expired": 0
       },
       "autotrader": {
-        "evaluated": 132,
+        "evaluated": 139,
         "tradesOpened": 0,
         "tradesPaperTraded": 0,
         "tradesQueued": 0,
-        "skipped": 132,
+        "skipped": 139,
         "skipReasons": {
           "No proven edge for entry band 81-99 (-1pt)": 17,
-          "No proven edge for entry band 61-80 (-2pt)": 64,
+          "No proven edge for entry band 61-80 (-2pt)": 68,
           "No proven edge for entry band 21-40 (-2pt)": 14,
-          "No proven edge for entry band 41-60 (-3pt)": 34,
+          "No proven edge for entry band 41-60 (-3pt)": 37,
           "No proven edge for entry band 1-20 (-11pt)": 3
         },
         "exitChecks": 0,
@@ -70,7 +70,7 @@
         "dailyPnL": 0,
         "totalPnL": 3151.0649494949485
       },
-      "completedAt": "2026-08-17T16:21:02.955Z"
+      "completedAt": "2026-08-17T16:51:16.104Z"
     },
     "cronSchedule": "Every 5 minutes",
     "note": "Settlement runs automatically. Sports events settle ~12h after game ends."
@@ -788,14 +788,6 @@
   "tradeLog": [
     {
       "type": "SKIP",
-      "market": "Will CF Montréal win on 2026-08-15?",
-      "reason": "No proven edge for entry band 41-60 (-4pt)",
-      "walletTier": "STRONG",
-      "marketCategory": "sports_binary",
-      "timestamp": "2026-08-16T02:26:01.889Z"
-    },
-    {
-      "type": "SKIP",
       "market": "UFC 330: Mackenzie Dern vs. Gillian Robertson (Women's Strawweight, Main Card)",
       "reason": "No proven edge for entry band 61-80 (-3pt)",
       "walletTier": "ELITE",
@@ -1025,6 +1017,14 @@
       "walletTier": "STRONG",
       "marketCategory": "esports",
       "timestamp": "2026-08-17T15:51:04.500Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Will Team Falcons Win the CS2 EWC 2026?",
+      "reason": "No proven edge for entry band 81-99 (-1pt)",
+      "walletTier": "STRONG",
+      "marketCategory": "esports",
+      "timestamp": "2026-08-17T16:51:14.878Z"
     }
   ],
   "tradeHistory": [
@@ -2076,7 +2076,7 @@
       "totalFactorsTracked": 13,
       "totalSignalsProcessed": 3143,
       "overallWinRate": 55,
-      "pendingSignals": 380
+      "pendingSignals": 386
     },
     "walletEdge": {
       "totalTracked": 500,
@@ -2402,7 +2402,7 @@
       "wins": 1744,
       "losses": 1399,
       "winRate": 55,
-      "pendingSignals": 380
+      "pendingSignals": 386
     },
     "insights": {
       "bestFactors": [
@@ -2586,22 +2586,41 @@
   },
   "edgeOpportunities": {
     "success": true,
-    "count": 3,
-    "openCount": 3,
+    "count": 4,
+    "openCount": 4,
     "settledCount": 0,
     "winRate": null,
     "lastScan": {
-      "at": 1786983362960,
-      "scanned": 3,
+      "at": 1786985167552,
+      "scanned": 4,
       "sports": [
         "mlb",
-        "nfl",
-        "wnba"
+        "wnba",
+        "nhl",
+        "nfl"
       ],
-      "found": 0,
-      "newCount": 0
+      "found": 1,
+      "newCount": 1
     },
     "opportunities": [
+      {
+        "id": "nfl:2143ade9684fd876b68a4e8cbf451f05:home",
+        "sport": "nfl",
+        "game": "New Orleans Saints @ Baltimore Ravens",
+        "homeTeam": "Baltimore Ravens",
+        "awayTeam": "New Orleans Saints",
+        "commenceTime": "2026-09-20T17:00:00Z",
+        "side": "home",
+        "team": "Baltimore Ravens",
+        "vegasProb": 74,
+        "polyPrice": 20,
+        "edgeNet": 54,
+        "polySlug": "nfl-no-bal-2026-09-20",
+        "detectedAt": "2026-08-17T16:46:07.426Z",
+        "outcome": null,
+        "settledAt": null,
+        "pnl": null
+      },
       {
         "id": "nfl:95c01d1bb797d6df14824b106c5a9130:home",
         "sport": "nfl",
