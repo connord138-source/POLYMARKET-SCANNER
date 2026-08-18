@@ -1,21 +1,21 @@
 {
-  "fetchedAt": "2026-08-18T13:55:38Z",
+  "fetchedAt": "2026-08-18T14:29:12Z",
   "health": {
     "status": "ok",
-    "timestamp": "2026-08-18T13:55:39.386Z",
+    "timestamp": "2026-08-18T14:29:13.547Z",
     "version": "21.1.0 - Modularize: extract src/odds.js + src/gamma.js from index.js",
     "cache": {
-      "signalCount": 10550,
-      "oldestSignal": "2026-08-11T13:50:58.000Z",
-      "newestSignal": "2026-08-18T13:44:58.000Z"
+      "signalCount": 10544,
+      "oldestSignal": "2026-08-11T14:29:12.000Z",
+      "newestSignal": "2026-08-18T14:21:21.000Z"
     }
   },
   "cronStatus": {
     "success": true,
     "lastRun": {
-      "startedAt": "2026-08-18T13:50:46.232Z",
+      "startedAt": "2026-08-18T14:25:57.305Z",
       "scan": {
-        "signals": 137,
+        "signals": 140,
         "success": true
       },
       "settlement": {
@@ -39,7 +39,7 @@
       "error": null,
       "edgeScan": {
         "skipped": "throttled",
-        "nextInMin": 7
+        "nextInMin": 4
       },
       "edgeSettle": {
         "checked": 0,
@@ -51,28 +51,17 @@
         "expired": 0
       },
       "autotrader": {
-        "evaluated": 137,
+        "evaluated": 140,
         "tradesOpened": 0,
         "tradesPaperTraded": 0,
         "tradesQueued": 0,
-        "skipped": 137,
+        "skipped": 140,
         "skipReasons": {
-          "Entry price too high for other (83% > 40%)": 1,
-          "Event too far out (136d > 7d horizon)": 5,
-          "Event too far out (137d > 7d horizon)": 4,
-          "Entry price too high for other (74% > 40%)": 1,
-          "Entry price too high for sports_binary (67% > 40%)": 1,
-          "Event too far out (34d > 7d horizon)": 9,
-          "Entry price too high for other (61% > 40%)": 1,
-          "Entry price too high for sports_binary (42% > 40%)": 1,
-          "No winning wallet on signal": 99,
-          "Signal has no market slug — cannot price or settle": 3,
-          "Entry price too high for sports_binary (55% > 40%)": 1,
-          "Entry price too high for sports_binary (59% > 40%)": 1,
-          "Event too far out (35d > 7d horizon)": 4,
-          "Event too far out (33d > 7d horizon)": 2,
-          "Event too far out (44d > 7d horizon)": 3,
-          "Event too far out (317d > 7d horizon)": 1
+          "No proven edge for entry band 81-99 (-2pt)": 16,
+          "No proven edge for entry band 61-80 (-2pt)": 62,
+          "No proven edge for entry band 21-40 (-2pt)": 18,
+          "No proven edge for entry band 41-60 (-3pt)": 41,
+          "No proven edge for entry band 1-20 (-11pt)": 3
         },
         "exitChecks": 0,
         "positionsExited": 0,
@@ -81,7 +70,7 @@
         "dailyPnL": -15,
         "totalPnL": 3136.0649494949485
       },
-      "completedAt": "2026-08-18T13:54:51.275Z"
+      "completedAt": "2026-08-18T14:28:58.029Z"
     },
     "cronSchedule": "Every 5 minutes",
     "note": "Settlement runs automatically. Sports events settle ~12h after game ends."
@@ -129,7 +118,7 @@
     "minAiScore": 40,
     "maxEventHorizonHours": 168,
     "staleVoidGraceHours": 48,
-    "requireProvenEdge": false,
+    "requireProvenEdge": true,
     "onlyBuySignals": true,
     "maxEntrySlippage": 15,
     "entryCooldownSeconds": 120,
@@ -176,7 +165,7 @@
     "aiScoreOverrideTier": 80,
     "aiScoreOverrideMinWR": 55,
     "selfLearning": false,
-    "updatedAt": "2026-08-18T01:13:32.202Z",
+    "updatedAt": "2026-08-18T13:59:47.244Z",
     "_clearPositions": true,
     "_liveV2Tuned": true,
     "_v3ProfitOverhaul": true
@@ -537,10 +526,10 @@
         "wins": 278,
         "losses": 224,
         "winRate": 55,
-        "weight": 1.25,
+        "weight": 1.19,
         "lastUpdated": "2026-08-18T13:32:04.559Z",
-        "previousWeight": 1.3250000000000002,
-        "optimizedAt": "2026-08-18T13:32:16.425Z",
+        "previousWeight": 1.25,
+        "optimizedAt": "2026-08-18T14:09:02.596Z",
         "total": 502
       }
     ],
@@ -572,10 +561,10 @@
         "wins": 278,
         "losses": 224,
         "winRate": 55,
-        "weight": 1.25,
+        "weight": 1.19,
         "lastUpdated": "2026-08-18T13:32:04.559Z",
-        "previousWeight": 1.3250000000000002,
-        "optimizedAt": "2026-08-18T13:32:16.425Z",
+        "previousWeight": 1.25,
+        "optimizedAt": "2026-08-18T14:09:02.596Z",
         "total": 502
       },
       {
@@ -797,14 +786,6 @@
     "totalFactors": 12
   },
   "tradeLog": [
-    {
-      "type": "SKIP",
-      "market": "Will Team Falcons Win the CS2 EWC 2026?",
-      "reason": "No proven edge for entry band 81-99 (-1pt)",
-      "walletTier": "STRONG",
-      "marketCategory": "esports",
-      "timestamp": "2026-08-17T14:51:03.176Z"
-    },
     {
       "type": "SKIP",
       "market": "Will Team Falcons Win the CS2 EWC 2026?",
@@ -1050,6 +1031,14 @@
       "walletTier": "STRONG",
       "marketCategory": "esports",
       "timestamp": "2026-08-18T12:57:06.688Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Will Team Falcons Win the CS2 EWC 2026?",
+      "reason": "No proven edge for entry band 81-99 (-2pt)",
+      "walletTier": "STRONG",
+      "marketCategory": "esports",
+      "timestamp": "2026-08-18T14:02:16.870Z"
     }
   ],
   "tradeHistory": [
@@ -2106,7 +2095,7 @@
       "totalFactorsTracked": 13,
       "totalSignalsProcessed": 3258,
       "overallWinRate": 55,
-      "pendingSignals": 376
+      "pendingSignals": 378
     },
     "walletEdge": {
       "totalTracked": 500,
@@ -2262,10 +2251,10 @@
         "wins": 278,
         "losses": 224,
         "winRate": 55,
-        "weight": 1.25,
+        "weight": 1.19,
         "lastUpdated": "2026-08-18T13:32:04.559Z",
-        "previousWeight": 1.3250000000000002,
-        "optimizedAt": "2026-08-18T13:32:16.425Z"
+        "previousWeight": 1.25,
+        "optimizedAt": "2026-08-18T14:09:02.596Z"
       },
       "freshWallet": {
         "wins": 37,
@@ -2375,7 +2364,7 @@
       "wins": 1807,
       "losses": 1451,
       "winRate": 55,
-      "pendingSignals": 376
+      "pendingSignals": 378
     },
     "insights": {
       "bestFactors": [
@@ -2477,7 +2466,7 @@
         "winRate": 55,
         "wins": 278,
         "losses": 224,
-        "weight": 1.25,
+        "weight": 1.19,
         "performance": "AVERAGE"
       },
       {
@@ -2533,11 +2522,11 @@
         "key": "all",
         "label": "Follow all signals",
         "side": "follow",
-        "settled": 2318,
-        "wins": 1270,
+        "settled": 2319,
+        "wins": 1271,
         "losses": 1048,
-        "staked": 231800,
-        "pnl": -3518.98,
+        "staked": 231900,
+        "pnl": -3449.49,
         "roi": -1.5,
         "winRate": 55,
         "readyForAuto": false
@@ -2564,11 +2553,13 @@
     "settledCount": 0,
     "winRate": null,
     "lastScan": {
-      "at": 1787060828831,
-      "scanned": 3,
+      "at": 1787062723760,
+      "scanned": 5,
       "sports": [
+        "nhl",
         "mlb",
         "wnba",
+        "nfl",
         "nba"
       ],
       "found": 0,
