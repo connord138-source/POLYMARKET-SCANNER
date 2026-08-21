@@ -414,6 +414,19 @@ const DEFAULT_CONFIG = {
   maxEventHorizonHours: 168,      // Skip markets resolving further out than this (0 = disabled)
   staleVoidGraceHours: 48,        // Extra hours past maxHoldHours to wait for resolution before voiding a no-price position
   requireProvenEdge: true,        // Only trade signals whose entry band has a proven positive historical edge (signal.hasPositiveEdge)
+  // v21.3.0 EXPLORATION FLOOR. Even with the 14d rolling edge window
+  // (edge_profile_v2), a strict edgeNet>0 gate can deadlock: when every band
+  // reads slightly negative, nothing trades and the operator sees "Scanning
+  // for signals..." indefinitely (Aug 13-19: 266/266 signals skipped on
+  // "No proven edge" for six straight days). The floor lets a small daily
+  // quota of entries through UNPROVEN or MILDLY negative bands at reduced
+  // size, so the ledger keeps learning and a recovering edge can requalify
+  // itself even while the window reads cold. Decisively negative bands
+  // (edgeNet <= edgeHardNegativePts) stay blocked outright. Set
+  // edgeExplorationTradesPerDay: 0 to restore the old hard lockout behavior.
+  edgeExplorationTradesPerDay: 5,     // Daily quota of exploration entries through the edge gate
+  edgeExplorationSizeMultiplier: 0.5, // Position-size haircut for exploration entries
+  edgeHardNegativePts: -5,            // Bands at or below this net edge are never explored
   onlyBuySignals: false,          // If true, ignore SELL signals (safer for start)
   maxEntrySlippage: 15,           // Max % price can move from whale entry before we skip
   entryCooldownSeconds: 120,      // Minimum seconds between new entries
@@ -608,10 +621,11 @@ async function getDailyStats(env) {
       realizedPnL: 0,
       wins: 0,
       losses: 0,
+      explorationTradesOpened: 0,
       skippedReasons: {},
     };
   } catch (e) {
-    return { date: today, tradesOpened: 0, tradesClosed: 0, totalSpent: 0, totalReturned: 0, realizedPnL: 0, wins: 0, losses: 0, skippedReasons: {} };
+    return { date: today, tradesOpened: 0, tradesClosed: 0, totalSpent: 0, totalReturned: 0, realizedPnL: 0, wins: 0, losses: 0, explorationTradesOpened: 0, skippedReasons: {} };
   }
 }
 
@@ -937,9 +951,25 @@ function evaluateSignal(signal, config, dailyStats, openPositions, perf) {
   // edge (win rate - price - spread, >= 5 settled samples). This is the
   // "nothing reaches the bot until it's proven profitable" safety, tied to the
   // same edge profile the Scanner filters on. Disable with requireProvenEdge:false.
+  //
+  // v21.3.0: exploration floor (see DEFAULT_CONFIG). Full-size entries still
+  // require proof; a capped daily quota of half-size entries may pass through
+  // unproven / mildly-negative bands so the gate can never deadlock the bot.
+  // The quota is only consumed when a trade actually OPENS (processSignals
+  // increments explorationTradesOpened), not when a later gate rejects it.
+  let isExploration = false;
   if (config.requireProvenEdge !== false && signal.hasPositiveEdge !== true) {
     const en = (signal.historicalEdgeNet === null || signal.historicalEdgeNet === undefined) ? "no history" : `${signal.historicalEdgeNet}pt`;
-    return { shouldTrade: false, reason: `No proven edge for entry band ${signal.edgeBand || "?"} (${en})` };
+    const exploreCap = config.edgeExplorationTradesPerDay ?? 5;
+    const explored = dailyStats.explorationTradesOpened || 0;
+    const hardNegative = config.edgeHardNegativePts ?? -5;
+    const edgeNet = (typeof signal.historicalEdgeNet === 'number') ? signal.historicalEdgeNet : null;
+    const bandExplorable = edgeNet === null || edgeNet > hardNegative;
+    if (!(exploreCap > 0 && bandExplorable && explored < exploreCap)) {
+      return { shouldTrade: false, reason: `No proven edge for entry band ${signal.edgeBand || "?"} (${en})` };
+    }
+    isExploration = true;
+    reasons.push(`🧪 Exploration entry ${explored + 1}/${exploreCap}: band ${signal.edgeBand || "?"} (${en})`);
   }
 
   // ========== GATE 2: Is this a new market? ==========
@@ -1086,6 +1116,12 @@ function evaluateSignal(signal, config, dailyStats, openPositions, perf) {
     reasons.push(`HC size: $${positionSize}`);
   }
 
+  if (isExploration) {
+    const exMultiplier = config.edgeExplorationSizeMultiplier ?? 0.5;
+    positionSize = Math.max(config.minPositionSize, Math.round(positionSize * exMultiplier));
+    reasons.push(`Exploration size: $${positionSize}`);
+  }
+
   positionSize = Math.min(positionSize, config.maxPositionSize || 30);
 
   if (positionSize < (config.minPositionSize || 2)) {
@@ -1105,6 +1141,7 @@ function evaluateSignal(signal, config, dailyStats, openPositions, perf) {
     walletBets: walletInfo.totalBets,
     whaleAction: signal.whaleAction || 'BUY',
     isHighConviction,
+    isExploration,
     reasons,
     aiConfidence: null,
     aiComponents: null,
@@ -1864,6 +1901,7 @@ export async function processSignals(env, signals) {
       aiConfidence: evaluation.aiConfidence || null,
       strongCombo: evaluation.strongCombo || null,
       isHighConviction: evaluation.isHighConviction || false,
+      isExploration: evaluation.isExploration || false,
       // For P&L calculation
       shares: evaluation.positionSize / (evaluation.entryPrice / 100), // shares = USDC / price
     };
@@ -1875,7 +1913,10 @@ export async function processSignals(env, signals) {
     // Update daily stats
     dailyStats.tradesOpened++;
     dailyStats.totalSpent += evaluation.positionSize;
-    
+    if (evaluation.isExploration) {
+      dailyStats.explorationTradesOpened = (dailyStats.explorationTradesOpened || 0) + 1;
+    }
+
     if (config.paperTradeMode) {
       // PAPER MODE — record immediately as before
       stillOpen.push(position);
@@ -1889,6 +1930,7 @@ export async function processSignals(env, signals) {
         walletWR: evaluation.walletWinRate,
         betSummary: signal.betSummary || null,
         whaleAction: evaluation.whaleAction,
+        exploration: evaluation.isExploration || undefined,
         marketCategory: categorizeMarket(signal.marketTitle || signal.title || ''),
       });
     } else {
