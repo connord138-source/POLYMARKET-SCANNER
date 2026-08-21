@@ -935,14 +935,22 @@ var D1_DEDUP_CTE =
 
 // ============================================================
 // EDGE PROFILE
-// Net historical edge (win rate - entry price - spread) per entry-price band,
-// computed from the deduped, settled D1 rows and cached in KV. Used to (a)
-// annotate live scan signals with their band's proven edge so the Scanner can
-// filter to positive-edge signals, and (b) surfaced via /signals/edge-profile.
-// This is the bridge from "measured edge" (Analytics) to "acted-on edge".
+// Net edge (win rate - entry price - spread) per entry-price band, computed
+// from the deduped, settled D1 rows over a ROLLING WINDOW and cached in KV.
+// Used to (a) annotate live scan signals with their band's proven edge so the
+// Scanner can filter to positive-edge signals, and (b) surfaced via
+// /signals/edge-profile. This is the bridge from "measured edge" (Analytics,
+// which stays lifetime) to "acted-on edge".
+//
+// The window matters: an all-time average is dominated by history — after a
+// deep drawdown a band can stay negative for months even if recent signals
+// are winning, which parks the auto-trader indefinitely. A rolling window
+// makes the gate answer "is this band working NOW": it benches fast in cold
+// streaks and re-engages within days of a genuine recovery.
 // ============================================================
 var EDGE_SPREAD_POINTS = 2;   // assumed round-trip cost, matches /signals/analytics
 var EDGE_MIN_SAMPLE = 5;      // below this a band's edge is noise, not a signal
+var EDGE_WINDOW_DAYS = 14;    // rolling window of settled signals the edge is measured over
 
 function edgeBandKey(entry) {
   if (entry == null || isNaN(entry)) return "unknown";
@@ -955,10 +963,11 @@ function edgeBandKey(entry) {
 
 async function getEdgeProfile(env) {
   if (!env.SIGNALS_CACHE) return null;
-  var cached = await env.SIGNALS_CACHE.get("edge_profile", { type: "json" });
+  var cached = await env.SIGNALS_CACHE.get("edge_profile_v2", { type: "json" });
   if (cached && cached.expires && cached.expires > Date.now()) return cached;
   if (!env.DB) return cached || null;
   try {
+    var cutoff = new Date(Date.now() - EDGE_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
     var rows = await env.DB.prepare(
       D1_DEDUP_CTE +
       "SELECT CASE WHEN avg_entry_price IS NULL THEN 'unknown' " +
@@ -967,8 +976,8 @@ async function getEdgeProfile(env) {
       "ELSE '81-99' END AS band, " +
       "SUM(outcome='WIN') AS wins, SUM(outcome='LOSS') AS losses, " +
       "AVG(CASE WHEN outcome IN ('WIN','LOSS') THEN avg_entry_price END) AS avg_entry " +
-      "FROM dedup WHERE rn = 1 GROUP BY band"
-    ).all();
+      "FROM dedup WHERE rn = 1 AND settled_at >= ? GROUP BY band"
+    ).bind(cutoff).all();
     var bands = {};
     for (var i = 0; i < (rows.results || []).length; i++) {
       var r = rows.results[i];
@@ -987,10 +996,11 @@ async function getEdgeProfile(env) {
       bands: bands,
       spreadPoints: EDGE_SPREAD_POINTS,
       minSample: EDGE_MIN_SAMPLE,
+      windowDays: EDGE_WINDOW_DAYS,
       updatedAt: new Date().toISOString(),
       expires: Date.now() + 60 * 60 * 1000   // 1h
     };
-    await env.SIGNALS_CACHE.put("edge_profile", JSON.stringify(profile), { expirationTtl: 2 * 60 * 60 });
+    await env.SIGNALS_CACHE.put("edge_profile_v2", JSON.stringify(profile), { expirationTtl: 2 * 60 * 60 });
     return profile;
   } catch (e) {
     console.error("Edge profile error:", e.message);
