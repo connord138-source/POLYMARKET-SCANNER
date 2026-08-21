@@ -36,6 +36,12 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   `autotrader_config`), entry gates, AI-learning gate (`useLearningData`),
   exit engine (stop-loss / trailing / take-profit / max-hold /
   whale-exit mirroring via `detectWhaleExits`), performance tracking.
+  The proven-edge gate (gate 1b) carries a daily exploration floor
+  (v21.3.0, `edgeExplorationTradesPerDay`): a strict edgeNet>0 requirement
+  deadlocked the bot for six days in Aug 2026 when every entry band read
+  mildly negative — a capped quota of half-size entries keeps the ledger
+  learning even while the 14d rolling edge window (`EDGE_WINDOW_DAYS`,
+  `edge_profile_v2`) reads cold, so a recovering band can requalify.
 - `src/at-learning.js` — confidence scoring (`calculateConfidence`),
   factor stats, combos, pattern discovery.
 - `src/odds.js` — The Odds API client (KV-cached; `ODDS_API_KEY` secret).
