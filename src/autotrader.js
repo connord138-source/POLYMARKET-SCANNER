@@ -32,6 +32,7 @@ const AT_KEYS = {
   TRADE_LOG: 'autotrader_trade_log',        // Detailed log of all decisions
   LEARNING: 'autotrader_learning',          // Bot-specific factor performance
   RECENT_MARKETS: 'autotrader_recent_markets', // Cross-cycle duplicate tracking
+  SKIP_LOG_MEMORY: 'autotrader_skip_log_memory', // Cross-cycle skip-log dedupe
   TOKEN_CACHE: 'autotrader_token_cache',    // slug → tokenId mapping cache
   EXEC_QUEUE: 'autotrader_exec_queue',      // Pending trades for executor to place
 };
@@ -1271,6 +1272,26 @@ export async function processSignals(env, signals) {
   };
   const skippedMarketsThisCycle = new Set();
 
+  // Cross-cycle skip-log dedupe. A persistent signal re-evaluates every
+  // cycle and used to re-log the same skip for hours ("No proven edge" on
+  // the same match 20+ times a day), burying the trade log. Only log a
+  // market's skip when its reason CHANGES or 6h have passed; skipReasons
+  // counters still count every occurrence.
+  let skipLogMemory = {};
+  try {
+    skipLogMemory = await env.SIGNALS_CACHE.get(AT_KEYS.SKIP_LOG_MEMORY, { type: 'json' }) || {};
+  } catch (e) {}
+  const skipLogNow = Date.now();
+  for (const key of Object.keys(skipLogMemory)) {
+    if (skipLogNow - (skipLogMemory[key].ts || 0) > 24 * 60 * 60 * 1000) delete skipLogMemory[key];
+  }
+  const shouldLogSkip = (skipKey, reason) => {
+    const prev = skipLogMemory[skipKey];
+    if (prev && prev.reason === reason && skipLogNow - prev.ts < 6 * 60 * 60 * 1000) return false;
+    skipLogMemory[skipKey] = { reason, ts: skipLogNow };
+    return true;
+  };
+
   // Clean up stale queue entries (stuck PENDING for >10 min)
   const execQueueForCleanup = await getExecQueue(env);
   const now = Date.now();
@@ -1641,7 +1662,7 @@ export async function processSignals(env, signals) {
       results.skipped++;
       results.skipReasons[`Category "${signalCategory}" is blocked`] = (results.skipReasons[`Category "${signalCategory}" is blocked`] || 0) + 1;
       const skipKey = signal.marketSlug || signal.marketTitle || signal.title;
-      if (!config.deduplicateSkipLogs || !skippedMarketsThisCycle.has(skipKey)) {
+      if ((!config.deduplicateSkipLogs || !skippedMarketsThisCycle.has(skipKey)) && shouldLogSkip(skipKey, `Category "${signalCategory}" is blocked`)) {
         skippedMarketsThisCycle.add(skipKey);
         await logDecision(env, {
           type: 'SKIP',
@@ -1662,7 +1683,7 @@ export async function processSignals(env, signals) {
       
       // Log skips for learning (dedupe: only first SKIP per market per cycle)
       const skipKey = signal.marketSlug || signal.marketTitle || signal.title;
-      if (signal.hasWinningWallet && (!config.deduplicateSkipLogs || !skippedMarketsThisCycle.has(skipKey))) {
+      if (signal.hasWinningWallet && (!config.deduplicateSkipLogs || !skippedMarketsThisCycle.has(skipKey)) && shouldLogSkip(skipKey, evaluation.reason)) {
         skippedMarketsThisCycle.add(skipKey);
         await logDecision(env, {
           type: 'SKIP',
@@ -1704,7 +1725,7 @@ export async function processSignals(env, signals) {
         results.skipped++;
         results.skipReasons[skipReason] = (results.skipReasons[skipReason] || 0) + 1;
         const skipKey = signal.marketSlug || signal.marketTitle || signal.title;
-        if (!config.deduplicateSkipLogs || !skippedMarketsThisCycle.has(skipKey)) {
+        if ((!config.deduplicateSkipLogs || !skippedMarketsThisCycle.has(skipKey)) && shouldLogSkip(skipKey, skipReason)) {
           skippedMarketsThisCycle.add(skipKey);
           await logDecision(env, {
             type: 'SKIP',
@@ -2002,7 +2023,10 @@ export async function processSignals(env, signals) {
   // Save updated state
   await savePositions(env, stillOpen);
   await saveDailyStats(env, dailyStats);
-  
+  try {
+    await env.SIGNALS_CACHE.put(AT_KEYS.SKIP_LOG_MEMORY, JSON.stringify(skipLogMemory), { expirationTtl: 48 * 60 * 60 });
+  } catch (e) {}
+
   return {
     ...results,
     openPositions: stillOpen.length,
