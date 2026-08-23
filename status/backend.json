@@ -1,21 +1,21 @@
 {
-  "fetchedAt": "2026-08-23T10:49:16Z",
+  "fetchedAt": "2026-08-23T11:17:10Z",
   "health": {
     "status": "ok",
-    "timestamp": "2026-08-23T10:49:17.478Z",
+    "timestamp": "2026-08-23T11:17:10.851Z",
     "version": "21.1.0 - Modularize: extract src/odds.js + src/gamma.js from index.js",
     "cache": {
-      "signalCount": 8942,
-      "oldestSignal": "2026-08-16T10:46:43.000Z",
-      "newestSignal": "2026-08-23T10:42:00.000Z"
+      "signalCount": 8994,
+      "oldestSignal": "2026-08-16T11:10:37.000Z",
+      "newestSignal": "2026-08-23T11:07:01.000Z"
     }
   },
   "cronStatus": {
     "success": true,
     "lastRun": {
-      "startedAt": "2026-08-23T10:45:02.490Z",
+      "startedAt": "2026-08-23T11:10:02.490Z",
       "scan": {
-        "signals": 252,
+        "signals": 258,
         "success": true
       },
       "settlement": {
@@ -38,8 +38,14 @@
       "optimization": null,
       "error": null,
       "edgeScan": {
-        "skipped": "throttled",
-        "nextInMin": 10
+        "at": 1787483680747,
+        "scanned": 2,
+        "sports": [
+          "wnba",
+          "mlb"
+        ],
+        "found": 0,
+        "newCount": 0
       },
       "edgeSettle": {
         "checked": 0,
@@ -51,11 +57,11 @@
         "expired": 0
       },
       "autotrader": {
-        "evaluated": 252,
+        "evaluated": 258,
         "tradesOpened": 0,
         "tradesPaperTraded": 0,
         "tradesQueued": 0,
-        "skipped": 252,
+        "skipped": 258,
         "skipReasons": {
           "Entry price too high for other (43% > 40%)": 2,
           "Entry price too high for sports_binary (71% > 40%)": 1,
@@ -65,20 +71,22 @@
           "Entry price too high for sports_binary (75% > 40%)": 2,
           "Entry price too high for sports_binary (57% > 40%)": 3,
           "Event too far out (29d > 7d horizon)": 2,
-          "Entry price too high for sports_binary (44% > 40%)": 4,
+          "Entry price too high for sports_binary (44% > 40%)": 5,
           "Entry price too high for sports_binary (76% > 40%)": 1,
           "Entry price too high for sports_binary (45% > 40%)": 1,
           "Entry price too high for sports_binary (48% > 40%)": 1,
           "Entry price too high for sports_binary (63% > 40%)": 1,
           "Entry price too high for sports_binary (50% > 40%)": 1,
-          "No winning wallet on signal": 183,
+          "No winning wallet on signal": 185,
           "Entry price too high for sports_binary (73% > 40%)": 1,
           "Entry price too high for sports_binary (51% > 40%)": 2,
           "Event too far out (30d > 7d horizon)": 11,
           "Entry price too high for sports_binary (54% > 40%)": 1,
           "Entry price too high for other (84% > 40%)": 1,
+          "Duplicate market (already traded)": 2,
           "Entry price too high for sports_binary (55% > 40%)": 2,
           "Entry price too high for other (41% > 40%)": 1,
+          "Entry price too high for sports_binary (41% > 40%)": 1,
           "Event too far out (131d > 7d horizon)": 8,
           "Entry price too high for sports_other (45% > 40%)": 1,
           "Entry price too high for sports_binary (61% > 40%)": 1,
@@ -88,14 +96,14 @@
           "No proven edge for entry band 1-20 (-5pt)": 2,
           "Event too far out (71d > 7d horizon)": 1
         },
-        "exitChecks": 0,
+        "exitChecks": 1,
         "positionsExited": 0,
         "errors": [],
-        "openPositions": 0,
+        "openPositions": 1,
         "dailyPnL": 0,
         "totalPnL": 3136.0649494949485
       },
-      "completedAt": "2026-08-23T10:49:13.374Z"
+      "completedAt": "2026-08-23T11:14:58.905Z"
     },
     "cronSchedule": "Every 5 minutes",
     "note": "Settlement runs automatically. Sports events settle ~12h after game ends."
@@ -283,14 +291,14 @@
   },
   "daily": {
     "date": "2026-08-23",
-    "tradesOpened": 0,
+    "tradesOpened": 1,
     "tradesClosed": 0,
-    "totalSpent": 0,
+    "totalSpent": 3,
     "totalReturned": 0,
     "realizedPnL": 0,
     "wins": 0,
     "losses": 0,
-    "explorationTradesOpened": 0,
+    "explorationTradesOpened": 1,
     "skippedReasons": {}
   },
   "dailyRange": {
@@ -298,14 +306,14 @@
     "days": [
       {
         "date": "2026-08-23",
-        "tradesOpened": 0,
+        "tradesOpened": 1,
         "tradesClosed": 0,
-        "totalSpent": 0,
+        "totalSpent": 3,
         "totalReturned": 0,
         "realizedPnL": 0,
         "wins": 0,
         "losses": 0,
-        "explorationTradesOpened": 0,
+        "explorationTradesOpened": 1,
         "skippedReasons": {}
       },
       {
@@ -454,7 +462,35 @@
       }
     ]
   },
-  "positions": [],
+  "positions": [
+    {
+      "id": "at_1787482991494_0s7gfg",
+      "marketSlug": "cs2-fut-ts7-2026-08-23",
+      "marketTitle": "Counter-Strike: FUT Esports vs Spirit (BO5) - Esports World Cup Playoffs",
+      "marketType": "sports",
+      "signalSubType": "moneyline",
+      "direction": "FUT Esports",
+      "directionRaw": "FUT Esports",
+      "whaleAction": "BUY",
+      "entryPrice": 25,
+      "size": 3,
+      "walletTier": "HIGH_CONVICTION",
+      "walletWinRate": 0,
+      "walletBets": 0,
+      "score": 98,
+      "confidence": 56,
+      "hoursUntilEvent": 13,
+      "openedAt": "2026-08-23T11:03:11.494Z",
+      "paperTrade": true,
+      "marketCategory": "esports",
+      "aiConfidence": null,
+      "strongCombo": null,
+      "isHighConviction": true,
+      "isExploration": true,
+      "shares": 12,
+      "peakPctGain": 0
+    }
+  ],
   "aiIntelligence": {
     "topFactors": [
       {
@@ -821,38 +857,6 @@
   "tradeLog": [
     {
       "type": "SKIP",
-      "market": "UFC Fight Night: Anthony Hernandez vs. Gregory Rodrigues (Middleweight, Main Card)",
-      "reason": "Event day passed (2h ago)",
-      "walletTier": "ELITE",
-      "marketCategory": "other",
-      "timestamp": "2026-08-23T02:23:38.841Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "O/U 3.5 Rounds",
-      "reason": "No proven edge for entry band 21-40 (-6pt)",
-      "walletTier": "ELITE",
-      "marketCategory": "other",
-      "timestamp": "2026-08-23T02:23:40.831Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "Detroit Tigers vs. Kansas City Royals: O/U 8.5",
-      "reason": "Event day passed (3h ago)",
-      "walletTier": "ELITE",
-      "marketCategory": "other",
-      "timestamp": "2026-08-23T02:33:05.650Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "Toronto Blue Jays vs. New York Yankees: O/U 6.5",
-      "reason": "Event day passed (3h ago)",
-      "walletTier": "ELITE",
-      "marketCategory": "other",
-      "timestamp": "2026-08-23T02:33:06.417Z"
-    },
-    {
-      "type": "SKIP",
       "market": "Dota 2: BoomBoys vs Team Spirit (BO3) - The International Playoffs",
       "reason": "Event day passed (3h ago)",
       "walletTier": "STRONG",
@@ -1057,6 +1061,43 @@
       "walletTier": "STRONG",
       "marketCategory": "sports_binary",
       "timestamp": "2026-08-23T10:02:51.089Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Will TEAM VISION Win The International 2026?",
+      "reason": "Entry price too high for other (43% > 40%)",
+      "walletTier": "STRONG",
+      "marketCategory": "other",
+      "timestamp": "2026-08-23T10:53:37.280Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Will Team Spirit Win The International 2026?",
+      "reason": "Entry price too high for other (43% > 40%)",
+      "walletTier": "STRONG",
+      "marketCategory": "other",
+      "timestamp": "2026-08-23T10:53:39.507Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Dota 2: TEAM VISION vs Team Spirit - Game 1 Winner",
+      "reason": "Entry price too high for sports_binary (44% > 40%)",
+      "walletTier": "STRONG",
+      "marketCategory": "esports",
+      "timestamp": "2026-08-23T10:53:41.466Z"
+    },
+    {
+      "type": "PAPER_TRADE",
+      "market": "Counter-Strike: FUT Esports vs Spirit (BO5) - Esports World Cup Playoffs",
+      "size": 3,
+      "entryPrice": 25,
+      "walletTier": "HIGH_CONVICTION",
+      "walletWR": 0,
+      "betSummary": null,
+      "whaleAction": "BUY",
+      "exploration": true,
+      "marketCategory": "esports",
+      "timestamp": "2026-08-23T11:03:12.353Z"
     }
   ],
   "tradeHistory": [
@@ -2113,7 +2154,7 @@
       "totalFactorsTracked": 13,
       "totalSignalsProcessed": 4284,
       "overallWinRate": 55,
-      "pendingSignals": 305
+      "pendingSignals": 311
     },
     "walletEdge": {
       "totalTracked": 500,
@@ -2330,7 +2371,7 @@
       "wins": 2351,
       "losses": 1933,
       "winRate": 55,
-      "pendingSignals": 305
+      "pendingSignals": 311
     },
     "insights": {
       "bestFactors": [
@@ -2527,13 +2568,11 @@
     "settledCount": 0,
     "winRate": null,
     "lastScan": {
-      "at": 1787481845906,
-      "scanned": 4,
+      "at": 1787483680747,
+      "scanned": 2,
       "sports": [
-        "nfl",
         "wnba",
-        "mlb",
-        "nba"
+        "mlb"
       ],
       "found": 0,
       "newCount": 0
