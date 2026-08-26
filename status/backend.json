@@ -1,21 +1,21 @@
 {
-  "fetchedAt": "2026-08-26T01:04:22Z",
+  "fetchedAt": "2026-08-26T01:08:18Z",
   "health": {
     "status": "ok",
-    "timestamp": "2026-08-26T01:04:23.263Z",
+    "timestamp": "2026-08-26T01:08:19.089Z",
     "version": "21.1.0 - Modularize: extract src/odds.js + src/gamma.js from index.js",
     "cache": {
-      "signalCount": 9958,
-      "oldestSignal": "2026-08-19T01:00:31.000Z",
-      "newestSignal": "2026-08-26T00:50:00.000Z"
+      "signalCount": 9951,
+      "oldestSignal": "2026-08-19T01:06:15.000Z",
+      "newestSignal": "2026-08-26T00:55:31.000Z"
     }
   },
   "cronStatus": {
     "success": true,
     "lastRun": {
-      "startedAt": "2026-08-26T01:00:03.812Z",
+      "startedAt": "2026-08-26T01:05:03.806Z",
       "scan": {
-        "signals": 363,
+        "signals": 366,
         "success": true
       },
       "settlement": {
@@ -38,14 +38,8 @@
       "optimization": null,
       "error": null,
       "edgeScan": {
-        "at": 1787706043302,
-        "scanned": 2,
-        "sports": [
-          "mlb",
-          "wnba"
-        ],
-        "found": 0,
-        "newCount": 0
+        "skipped": "throttled",
+        "nextInMin": 10
       },
       "edgeSettle": {
         "checked": 0,
@@ -57,26 +51,26 @@
         "expired": 0
       },
       "autotrader": {
-        "evaluated": 363,
+        "evaluated": 366,
         "tradesOpened": 0,
         "tradesPaperTraded": 0,
         "tradesQueued": 0,
-        "skipped": 363,
+        "skipped": 366,
         "skipReasons": {
           "Entry price too high for sports_binary (71% > 40%)": 5,
           "Entry price too high for sports_binary (65% > 40%)": 4,
           "Entry price too high for sports_binary (46% > 40%)": 4,
           "Entry price too high for sports_binary (67% > 40%)": 2,
-          "No winning wallet on signal": 218,
+          "No winning wallet on signal": 246,
           "Entry price too high for other (49% > 40%)": 1,
           "Entry price too high for sports_binary (58% > 40%)": 3,
           "Entry price too high for sports_binary (55% > 40%)": 3,
-          "Entry price too high for sports_binary (52% > 40%)": 1,
+          "Entry price too high for sports_binary (52% > 40%)": 2,
           "Entry price too high for sports_other (55% > 40%)": 2,
           "Entry price too high for other (78% > 40%)": 1,
           "No proven edge for entry band 81-99 (-6pt)": 22,
           "Entry price too high for other (57% > 40%)": 1,
-          "No proven edge for entry band 21-40 (-5pt)": 39,
+          "Market already closed/resolved on Gamma": 4,
           "Entry price too high for sports_binary (45% > 40%)": 1,
           "Entry price too high for sports_binary (50% > 40%)": 1,
           "Entry price too high for sports_binary (61% > 40%)": 2,
@@ -90,8 +84,8 @@
           "Entry price too high for sports_binary (66% > 40%)": 2,
           "Entry price too high for sports_other (53% > 40%)": 1,
           "Entry price too high for sports_binary (51% > 40%)": 1,
-          "Event too far out (27d > 7d horizon)": 3,
-          "Event too far out (129d > 7d horizon)": 4,
+          "Event too far out (27d > 7d horizon)": 7,
+          "Event too far out (129d > 7d horizon)": 5,
           "Entry price too high for sports_binary (60% > 40%)": 2,
           "Entry price too high for sports_binary (47% > 40%)": 1,
           "Entry price too high for sports_binary (54% > 40%)": 1,
@@ -102,13 +96,13 @@
           "Event too far out (128d > 7d horizon)": 2,
           "Entry price too high for other (65% > 40%)": 1,
           "Entry price too high for sports_other (52% > 40%)": 2,
-          "Event too far out (26d > 7d horizon)": 4,
+          "Event too far out (26d > 7d horizon)": 5,
           "Entry price too high for other (66% > 40%)": 1,
           "Entry price too high for sports_binary (53% > 40%)": 1,
           "Entry price too high for sports_binary (57% > 40%)": 1,
           "Entry price too high for sports_binary (48% > 40%)": 2,
           "Event too far out (8d > 7d horizon)": 1,
-          "Signal has no market slug — cannot price or settle": 1,
+          "Signal has no market slug — cannot price or settle": 4,
           "Event too far out (23d > 7d horizon)": 1,
           "Event too far out (7d > 7d horizon)": 1,
           "Event too far out (36d > 7d horizon)": 1,
@@ -121,7 +115,7 @@
         "dailyPnL": 0,
         "totalPnL": 3147.5449494949485
       },
-      "completedAt": "2026-08-26T01:00:45.418Z"
+      "completedAt": "2026-08-26T01:05:43.967Z"
     },
     "cronSchedule": "Every 5 minutes",
     "note": "Settlement runs automatically. Sports events settle ~12h after game ends."
@@ -849,40 +843,6 @@
   },
   "tradeLog": [
     {
-      "type": "SKIP",
-      "market": "Will TEAM VISION Win The International 2026?",
-      "reason": "No proven edge for entry band 41-60 (-2pt)",
-      "walletTier": "STRONG",
-      "marketCategory": "other",
-      "timestamp": "2026-08-24T23:26:12.530Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "Philadelphia Phillies vs. Seattle Mariners: O/U 6.5",
-      "reason": "No proven edge for entry band 41-60 (-2pt)",
-      "walletTier": "STRONG",
-      "marketCategory": "other",
-      "timestamp": "2026-08-24T23:31:12.707Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "Philadelphia Phillies vs. Seattle Mariners",
-      "reason": "No proven edge for entry band 41-60 (-2pt)",
-      "walletTier": "STRONG",
-      "marketCategory": "other",
-      "timestamp": "2026-08-24T23:31:12.769Z"
-    },
-    {
-      "type": "EXIT",
-      "market": "Colorado Rockies vs. Washington Nationals",
-      "shouldExit": true,
-      "reason": "Take profit hit (+103.0%)",
-      "exitType": "take_profit",
-      "pnl": 3.09,
-      "paperTrade": true,
-      "timestamp": "2026-08-24T23:41:10.122Z"
-    },
-    {
       "type": "EXIT",
       "market": "US Open, Qualification ATP: Pol Martin Tiffon vs Tom Gentzsch",
       "reason": "Market resolved (gamma_resolved). Final price: 0%",
@@ -1093,6 +1053,34 @@
       "walletTier": "STRONG",
       "marketCategory": "tennis",
       "timestamp": "2026-08-25T20:17:54.097Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Will Real Betis Balompié win on 2026-08-25?",
+      "reason": "Market already closed/resolved on Gamma",
+      "marketCategory": "sports_binary",
+      "timestamp": "2026-08-26T01:05:41.991Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Will Valencia CF win on 2026-08-25?",
+      "reason": "Market already closed/resolved on Gamma",
+      "marketCategory": "sports_binary",
+      "timestamp": "2026-08-26T01:05:42.225Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "US Open, Qualification WTA: Janae Preston vs Nao Hibino",
+      "reason": "Market already closed/resolved on Gamma",
+      "marketCategory": "tennis",
+      "timestamp": "2026-08-26T01:05:42.433Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "US Open, Qualification ATP: Gauthier Onclin vs Vitaliy Sachko",
+      "reason": "Market already closed/resolved on Gamma",
+      "marketCategory": "tennis",
+      "timestamp": "2026-08-26T01:05:42.653Z"
     }
   ],
   "tradeHistory": [
@@ -2176,7 +2164,7 @@
       "totalFactorsTracked": 13,
       "totalSignalsProcessed": 4809,
       "overallWinRate": 55,
-      "pendingSignals": 330
+      "pendingSignals": 333
     },
     "walletEdge": {
       "totalTracked": 500,
@@ -2431,7 +2419,7 @@
       "wins": 2657,
       "losses": 2152,
       "winRate": 55,
-      "pendingSignals": 330
+      "pendingSignals": 333
     },
     "insights": {
       "bestFactors": [
