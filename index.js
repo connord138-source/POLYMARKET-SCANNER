@@ -1477,6 +1477,22 @@ async function investigationCountToday(env) {
 // price from Gamma, get an independent agent probability, store the verdict.
 // Idempotent by stable key; failure-typed so it isn't retried forever.
 // opts.force re-runs even a completed investigation.
+// Markets NOT worth spending Anthropic calls on: sports/esports match
+// outcomes have no research edge for an investigator (the game decides
+// itself, often before the investigation even runs) and their near-certain
+// prices pollute Brier calibration. The investigator's value is events —
+// politics, macro, crypto, business — where facts in public documents beat
+// crowd vibes.
+var INVESTIGATION_BLOCKLIST =
+  /\b(lol|league of legends|cs2|counter[- ]?strike|dota|valorant|esports?|starcraft|overwatch|rocket league|call of duty|wow|world of warcraft|lck|lpl|lec)\b|game \d+ winner|map handicap|game handicap|\bbo[35]\b|\bo\/u\b|spread:/i;
+function isInvestigableSignal(sig) {
+  var title = sig.marketTitle || "";
+  if (INVESTIGATION_BLOCKLIST.test(title)) return false;
+  if (/\d{4}-\d{2}-\d{2}/.test(sig.marketSlug || "")) return false; // event-day sports/esports slugs
+  if (isShortTermGamblingMarket(title)) return false;
+  return true;
+}
+
 async function investigateSignal(env, sig, opts) {
   opts = opts || {};
   if (!env.SIGNALS_CACHE) return { ok: false, error: "No cache configured" };
@@ -1548,6 +1564,22 @@ async function investigateSignal(env, sig, opts) {
       detectedAt: sig.detectedAt || null
     });
     return { ok: false, error: "No resolution description", investigation: recNoDesc };
+  }
+
+  // Foregone conclusion: the market has already decided. Researching a
+  // 99%-vs-100% question wastes tokens and produces confusing "findings"
+  // that just quote the outcome. Permanent skip — never retried.
+  if (!opts.force && typeof baseline.marketProb === "number" &&
+      (baseline.marketProb >= 0.93 || baseline.marketProb <= 0.07)) {
+    var recForegone = await writeInv({
+      status: "error_permanent",
+      attempts: attempts,
+      lastError: "Foregone conclusion (market at " + Math.round(baseline.marketProb * 100) + "%)",
+      marketTitle: sig.marketTitle || found.market.question || null,
+      marketProbAtInvestigation: baseline.marketProb,
+      detectedAt: sig.detectedAt || null
+    });
+    return { ok: false, skipped: "foregone_conclusion", investigation: recForegone };
   }
 
   var result = await callClaudeInvestigator(env, {
@@ -6149,7 +6181,7 @@ export default {
           const spentToday = await investigationCountToday(env);
           const budget = Math.max(0, Math.min(perRun, dailyCap - spentToday));
           const candidates = alertableSignals
-            .slice()
+            .filter(isInvestigableSignal)   // no Anthropic spend on sports/esports match outcomes
             .sort((a, b) => b.score - a.score)
             .slice(0, budget);
           let investigated = 0;
