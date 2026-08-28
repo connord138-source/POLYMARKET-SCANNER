@@ -1,0 +1,31 @@
+name: Push Anthropic Key
+
+# Activates the AI investigator: pushes the ANTHROPIC_API_KEY GitHub repo
+# secret into the worker as a wrangler secret. Same pattern as Rotate Admin
+# Token. Add the repo secret first (Settings > Secrets and variables >
+# Actions > ANTHROPIC_API_KEY = your Anthropic API key), then run this.
+# The investigator then starts on the next cron: it independently prices
+# top signals with web research, bounded by INVESTIGATION_PER_RUN and
+# INVESTIGATION_DAILY_CAP in wrangler.toml.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  push-key:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Push ANTHROPIC_API_KEY repo secret into the worker
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "::error::ANTHROPIC_API_KEY repo secret is not set. Add it under Settings > Secrets and variables > Actions (value = your Anthropic API key from console.anthropic.com), then re-run this workflow."
+            exit 1
+          fi
+          printf '%s' "$ANTHROPIC_API_KEY" | npx wrangler@4 secret put ANTHROPIC_API_KEY
+          echo "Key pushed. The investigator activates on the next cron tick; cronStatus.investigations in status/backend.json will show progress."
