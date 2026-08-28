@@ -26,3 +26,12 @@ database_id = "524fc0f8-e5dd-46d1-a93b-156857668363"
 
 [triggers]
 crons = ["*/5 * * * *"]
+
+[vars]
+# Agent investigation defaults. The ANTHROPIC_API_KEY secret activates the
+# investigator; these bound its cost. Sonnet is ~5x cheaper than Opus per
+# investigation — calibration (agent vs market Brier) will show whether the
+# cheaper model prices markets well enough before any scale-up.
+INVESTIGATION_MODEL = "claude-sonnet-5"
+INVESTIGATION_PER_RUN = "2"
+INVESTIGATION_DAILY_CAP = "20"

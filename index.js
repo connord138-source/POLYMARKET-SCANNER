@@ -3421,6 +3421,8 @@ function shapeEdgeDetection(sport, cmp) {
 // hunts edges continuously instead of only when someone opens the page.
 // ============================================================
 var EDGE_ALERT_MIN = 4;   // net devigged points to log as an opportunity
+var EDGE_ALERT_MAX = 15;  // above this the "edge" is almost always a market-matching or stale-book error, not free money
+var EDGE_BOOK_MAX_DAYS_OUT = 10; // don't book games further out — far-future Polymarket books are thin and unreliable
 // Team sports with the standard "<sport>-<away>-<home>-<date>" Polymarket slug
 // and a real Odds API league key. (Tennis/MMA use non-team slugs; excluded.)
 var EDGE_SCAN_SPORTS = ["mlb", "nba", "wnba", "nfl", "nhl", "ncaab", "ncaaf"];
@@ -3465,7 +3467,11 @@ async function scanEdges(env) {
         const edge = g.edge[side];
         const pm = g.polymarket && g.polymarket.moneyline ? g.polymarket.moneyline[side] : null;
         const vegProb = g.vegas && g.vegas.moneyline ? (g.vegas.moneyline[side] || {}).prob : null;
-        if (edge !== null && edge >= EDGE_ALERT_MIN && pm && pm.price) {
+        if (edge !== null && edge >= EDGE_ALERT_MIN && edge <= EDGE_ALERT_MAX && pm && pm.price) {
+          // Skip games too far out: their Polymarket books are thin, prices
+          // drift for weeks, and giant "edges" there are data errors.
+          const startMs = g.commenceTime ? new Date(g.commenceTime).getTime() : 0;
+          if (startMs && startMs - Date.now() > EDGE_BOOK_MAX_DAYS_OUT * 24 * 3600 * 1000) continue;
           found.push({
             id: `${sport}:${g.id}:${side}`,
             sport, game: `${g.awayTeam} @ ${g.homeTeam}`,
@@ -3518,6 +3524,7 @@ async function settleEdgeOpportunities(env) {
   let opps = await env.SIGNALS_CACHE.get("edge_opportunities", { type: "json" }) || [];
   let checked = 0, settledN = 0;
   const now = Date.now();
+  const newlySettled = [];
   for (const o of opps) {
     if (o.outcome) continue;
     const start = o.commenceTime ? new Date(o.commenceTime).getTime() : 0;
@@ -3532,11 +3539,31 @@ async function settleEdgeOpportunities(env) {
           ? Math.round(PAPER_STAKE * (100 - o.polyPrice) / o.polyPrice * 100) / 100
           : -PAPER_STAKE;
         settledN++;
+        newlySettled.push(o);
       }
     } catch (e) { /* leave open, retry next cycle */ }
   }
   if (settledN > 0) {
     await env.SIGNALS_CACHE.put("edge_opportunities", JSON.stringify(opps), { expirationTtl: 7 * 24 * 3600 });
+    // Accumulate into a PERSISTENT track record. The live opportunities list
+    // is capped at 200 entries, so settled rows eventually evict — this
+    // bucket is the lane's durable book, split by divergence size so the
+    // booking threshold can be tuned on evidence.
+    try {
+      const stats = await env.SIGNALS_CACHE.get("edge_lane_stats", { type: "json" }) ||
+        { overall: { wins: 0, losses: 0, staked: 0, pnl: 0 }, byBand: {}, createdAt: new Date().toISOString() };
+      for (const o of newlySettled) {
+        const band = o.edgeNet <= 5 ? "4-5" : o.edgeNet <= 9 ? "6-9" : "10-15";
+        if (!stats.byBand[band]) stats.byBand[band] = { wins: 0, losses: 0, staked: 0, pnl: 0 };
+        for (const b of [stats.overall, stats.byBand[band]]) {
+          if (o.outcome === "WIN") b.wins++; else b.losses++;
+          b.staked += PAPER_STAKE;
+          b.pnl = Math.round((b.pnl + o.pnl) * 100) / 100;
+        }
+      }
+      stats.updatedAt = new Date().toISOString();
+      await env.SIGNALS_CACHE.put("edge_lane_stats", JSON.stringify(stats));
+    } catch (e) { console.error("edge_lane_stats error:", e.message); }
   }
   return { checked, settled: settledN };
 }
@@ -4058,24 +4085,68 @@ export default {
         // proactive odds scanner (not whale signals), tracked through Gamma
         // settlement in edge_opportunities.
         try {
-          const opps = await env.SIGNALS_CACHE.get("edge_opportunities", { type: "json" }) || [];
-          const settled = opps.filter(o => o.outcome === "WIN" || o.outcome === "LOSS");
-          if (settled.length > 0) {
-            let wins = 0, losses = 0, pnl = 0, staked = 0;
-            for (const o of settled) {
+          // Prefer the persistent lane stats (survives the live list's 200-entry
+          // eviction); fall back to counting the live list before any settle.
+          let laneStats = await env.SIGNALS_CACHE.get("edge_lane_stats", { type: "json" });
+          let wins = 0, losses = 0, pnl = 0, staked = 0;
+          if (laneStats && laneStats.overall && (laneStats.overall.wins + laneStats.overall.losses) > 0) {
+            ({ wins, losses, staked, pnl } = laneStats.overall);
+          } else {
+            const opps = await env.SIGNALS_CACHE.get("edge_opportunities", { type: "json" }) || [];
+            for (const o of opps.filter(o => o.outcome === "WIN" || o.outcome === "LOSS")) {
               if (o.outcome === "WIN") wins++; else losses++;
               staked += PAPER_STAKE; pnl += (o.pnl || 0);
             }
+          }
+          const settledCount = wins + losses;
+          if (settledCount > 0) {
             pnl = Math.round(pnl * 100) / 100;
             const roi = staked > 0 ? Math.round((pnl / staked) * 1000) / 10 : null;
             strategies.push({
               key: "vegas_edge", label: "Vegas edge (Odds API)", side: "follow",
-              settled: settled.length, wins, losses, staked, pnl, roi,
-              winRate: settled.length ? Math.round((wins / settled.length) * 100) : null,
-              readyForAuto: settled.length >= PROVEN_MIN && (roi || 0) > 0
+              settled: settledCount, wins, losses, staked, pnl, roi,
+              winRate: settledCount ? Math.round((wins / settledCount) * 100) : null,
+              byBand: (laneStats && laneStats.byBand) || null,
+              readyForAuto: settledCount >= PROVEN_MIN && (roi || 0) > 0
             });
           }
         } catch (e) { /* leave strategies as-is */ }
+
+        // AI investigator: derived paper book over ground-truth-settled
+        // investigations — back the agent's side whenever it disagreed with
+        // the market by >= 12 points with non-LOW confidence, filled at the
+        // market price recorded at investigation time.
+        try {
+          if (env.DB) {
+            const invRows = await env.DB.prepare(
+              "SELECT market_prob, edge_pts, y FROM investigations " +
+              "WHERE y IN (0,1) AND market_prob IS NOT NULL AND edge_pts IS NOT NULL " +
+              "AND ABS(edge_pts) >= 12 AND confidence != 'LOW'"
+            ).all();
+            let iWins = 0, iLosses = 0, iPnl = 0, iStaked = 0;
+            for (const r of (invRows.results || [])) {
+              const mktPct = Math.round(r.market_prob * 100);
+              const backDirection = r.edge_pts > 0;
+              const entry = backDirection ? mktPct : 100 - mktPct;
+              if (entry < 3 || entry > 97) continue;
+              const won = backDirection ? r.y === 1 : r.y === 0;
+              iStaked += PAPER_STAKE;
+              iPnl += won ? PAPER_STAKE * (100 - entry) / entry : -PAPER_STAKE;
+              if (won) iWins++; else iLosses++;
+            }
+            const iSettled = iWins + iLosses;
+            if (iSettled > 0) {
+              iPnl = Math.round(iPnl * 100) / 100;
+              const iRoi = iStaked > 0 ? Math.round((iPnl / iStaked) * 1000) / 10 : null;
+              strategies.push({
+                key: "ai_investigator", label: "AI investigator (≥12pt disagreement)", side: "agent",
+                settled: iSettled, wins: iWins, losses: iLosses, staked: iStaked, pnl: iPnl,
+                roi: iRoi, winRate: Math.round((iWins / iSettled) * 100),
+                readyForAuto: iSettled >= PROVEN_MIN && (iRoi || 0) > 0
+              });
+            }
+          }
+        } catch (e) { console.error("ai_investigator lane error:", e.message); }
 
         strategies.sort((a, b) => (b.roi ?? -999) - (a.roi ?? -999));
         return atJson({ success: true, provenMinSample: PROVEN_MIN, stakePerTrade: PAPER_STAKE, strategies });
