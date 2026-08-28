@@ -1043,6 +1043,25 @@ async function d1UpsertInvestigation(env, inv) {
   } catch (e) { console.log("D1 upsert investigation error:", e.message); }
 }
 
+// Schema self-migration. The CI Cloudflare token lacks D1 permissions, but
+// the worker's own D1 BINDING has full access — so additive DDL ships here
+// and applies on the first cron after deploy. Each statement is idempotent by
+// failure: a duplicate-column error just means it already ran. Keep this list
+// append-only and additive-only (ALTER TABLE ADD COLUMN / CREATE IF NOT
+// EXISTS); anything destructive still deserves a human-run migration.
+var SCHEMA_MIGRATIONS = [
+  "ALTER TABLE investigations ADD COLUMN market_impact TEXT"   // migrations/0004_market_impact.sql
+];
+var schemaEnsured = false;
+async function ensureSchema(env) {
+  if (schemaEnsured || !env.DB) return;
+  for (var i = 0; i < SCHEMA_MIGRATIONS.length; i++) {
+    try { await env.DB.prepare(SCHEMA_MIGRATIONS[i]).run(); }
+    catch (e) { /* already applied or transient — never block the cron */ }
+  }
+  schemaEnsured = true;
+}
+
 async function d1SettleInvestigation(env, inv) {
   if (!env.DB || !inv || !inv.invKey) return;
   try {
@@ -6087,6 +6106,7 @@ export default {
   // Cron trigger handler - runs every 5 minutes
   async scheduled(event, env, ctx) {
     console.log("Cron triggered at:", new Date().toISOString());
+    await ensureSchema(env);
     const cronStatus = {
       startedAt: new Date().toISOString(),
       scan: null,
