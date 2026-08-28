@@ -1024,9 +1024,9 @@ async function d1UpsertInvestigation(env, inv) {
   try {
     await env.DB.prepare(
       "INSERT INTO investigations " +
-      "(inv_key, market_slug, direction_raw, market_title, source, status, agent_prob, confidence, reasoning, key_findings, market_impact, model, web_searches, market_prob, entry_price_pct, edge_pts, event_date, investigated_at, updated_at) " +
-      "VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?19,?11,?12,?13,?14,?15,?16,?17,?18) " +
-      "ON CONFLICT(inv_key) DO UPDATE SET status=excluded.status, source=excluded.source, agent_prob=excluded.agent_prob, confidence=excluded.confidence, reasoning=excluded.reasoning, key_findings=excluded.key_findings, market_impact=excluded.market_impact, model=excluded.model, web_searches=excluded.web_searches, market_prob=excluded.market_prob, entry_price_pct=excluded.entry_price_pct, edge_pts=excluded.edge_pts, event_date=excluded.event_date, investigated_at=excluded.investigated_at, updated_at=excluded.updated_at"
+      "(inv_key, market_slug, direction_raw, market_title, source, status, agent_prob, confidence, reasoning, key_findings, market_impact, last_error, model, web_searches, market_prob, entry_price_pct, edge_pts, event_date, investigated_at, updated_at) " +
+      "VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?19,?20,?11,?12,?13,?14,?15,?16,?17,?18) " +
+      "ON CONFLICT(inv_key) DO UPDATE SET status=excluded.status, source=excluded.source, agent_prob=excluded.agent_prob, confidence=excluded.confidence, reasoning=excluded.reasoning, key_findings=excluded.key_findings, market_impact=excluded.market_impact, last_error=excluded.last_error, model=excluded.model, web_searches=excluded.web_searches, market_prob=excluded.market_prob, entry_price_pct=excluded.entry_price_pct, edge_pts=excluded.edge_pts, event_date=excluded.event_date, investigated_at=excluded.investigated_at, updated_at=excluded.updated_at"
     ).bind(
       inv.invKey, inv.marketSlug || null, inv.directionRaw || null, inv.marketTitle || null,
       inv.source || "whale", inv.status || null,
@@ -1038,7 +1038,8 @@ async function d1UpsertInvestigation(env, inv) {
       (typeof inv.entryPricePct === "number" ? inv.entryPricePct : null),
       (typeof inv.edgePts === "number" ? inv.edgePts : null),
       inv.eventDate || null, inv.investigatedAt || null, inv.updatedAt || new Date().toISOString(),
-      (inv.marketImpact && inv.marketImpact.length) ? JSON.stringify(inv.marketImpact) : null
+      (inv.marketImpact && inv.marketImpact.length) ? JSON.stringify(inv.marketImpact) : null,
+      inv.lastError || null
     ).run();
   } catch (e) { console.log("D1 upsert investigation error:", e.message); }
 }
@@ -1050,7 +1051,8 @@ async function d1UpsertInvestigation(env, inv) {
 // append-only and additive-only (ALTER TABLE ADD COLUMN / CREATE IF NOT
 // EXISTS); anything destructive still deserves a human-run migration.
 var SCHEMA_MIGRATIONS = [
-  "ALTER TABLE investigations ADD COLUMN market_impact TEXT"   // migrations/0004_market_impact.sql
+  "ALTER TABLE investigations ADD COLUMN market_impact TEXT",  // migrations/0004_market_impact.sql
+  "ALTER TABLE investigations ADD COLUMN last_error TEXT"      // investigation failure visibility (half of day-1 runs were error_transient with no stored reason)
 ];
 var schemaEnsured = false;
 async function ensureSchema(env) {
@@ -1849,6 +1851,9 @@ async function pickSweepCandidates(env, limit) {
     var m = markets[i];
     if (!m.description || !m.slug) continue;
     if (isShortTermGamblingMarket(m.question || "")) continue;
+    // Same no-sports/esports rule as the whale path: match outcomes have no
+    // research edge, so the sweep budget goes to events too.
+    if (!isInvestigableSignal({ marketTitle: m.question || "", marketSlug: m.slug })) continue;
     var names = parseGammaArray(m.outcomes);
     var prices = parseGammaArray(m.outcomePrices);
     if (!names || !prices || names.length !== 2) continue;
