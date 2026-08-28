@@ -1024,9 +1024,9 @@ async function d1UpsertInvestigation(env, inv) {
   try {
     await env.DB.prepare(
       "INSERT INTO investigations " +
-      "(inv_key, market_slug, direction_raw, market_title, source, status, agent_prob, confidence, reasoning, key_findings, model, web_searches, market_prob, entry_price_pct, edge_pts, event_date, investigated_at, updated_at) " +
-      "VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18) " +
-      "ON CONFLICT(inv_key) DO UPDATE SET status=excluded.status, source=excluded.source, agent_prob=excluded.agent_prob, confidence=excluded.confidence, reasoning=excluded.reasoning, key_findings=excluded.key_findings, model=excluded.model, web_searches=excluded.web_searches, market_prob=excluded.market_prob, entry_price_pct=excluded.entry_price_pct, edge_pts=excluded.edge_pts, event_date=excluded.event_date, investigated_at=excluded.investigated_at, updated_at=excluded.updated_at"
+      "(inv_key, market_slug, direction_raw, market_title, source, status, agent_prob, confidence, reasoning, key_findings, market_impact, model, web_searches, market_prob, entry_price_pct, edge_pts, event_date, investigated_at, updated_at) " +
+      "VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?19,?11,?12,?13,?14,?15,?16,?17,?18) " +
+      "ON CONFLICT(inv_key) DO UPDATE SET status=excluded.status, source=excluded.source, agent_prob=excluded.agent_prob, confidence=excluded.confidence, reasoning=excluded.reasoning, key_findings=excluded.key_findings, market_impact=excluded.market_impact, model=excluded.model, web_searches=excluded.web_searches, market_prob=excluded.market_prob, entry_price_pct=excluded.entry_price_pct, edge_pts=excluded.edge_pts, event_date=excluded.event_date, investigated_at=excluded.investigated_at, updated_at=excluded.updated_at"
     ).bind(
       inv.invKey, inv.marketSlug || null, inv.directionRaw || null, inv.marketTitle || null,
       inv.source || "whale", inv.status || null,
@@ -1037,7 +1037,8 @@ async function d1UpsertInvestigation(env, inv) {
       (typeof inv.marketProbAtInvestigation === "number" ? inv.marketProbAtInvestigation : null),
       (typeof inv.entryPricePct === "number" ? inv.entryPricePct : null),
       (typeof inv.edgePts === "number" ? inv.edgePts : null),
-      inv.eventDate || null, inv.investigatedAt || null, inv.updatedAt || new Date().toISOString()
+      inv.eventDate || null, inv.investigatedAt || null, inv.updatedAt || new Date().toISOString(),
+      (inv.marketImpact && inv.marketImpact.length) ? JSON.stringify(inv.marketImpact) : null
     ).run();
   } catch (e) { console.log("D1 upsert investigation error:", e.message); }
 }
@@ -1188,9 +1189,25 @@ var INVESTIGATION_SCHEMA = {
       type: "array",
       items: { type: "string" },
       description: "Short bullet facts (with source names) that drove the estimate."
+    },
+    marketImpact: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          asset: { type: "string", description: "Ticker or common name, e.g. BTC, ETH, NVDA, COIN, 'Defense sector', 'Crude oil'." },
+          assetType: { type: "string", enum: ["crypto", "stock", "etf", "sector", "commodity", "fx"] },
+          direction: { type: "string", enum: ["UP", "DOWN", "VOLATILE"], description: "Expected move IF the event resolves YES for the stated direction." },
+          conviction: { type: "string", enum: ["LOW", "MEDIUM", "HIGH"] },
+          rationale: { type: "string", description: "1-2 sentences tracing the causal chain from this event to the asset. Name the mechanism (flows, rates, regulation, supply, sentiment)." }
+        },
+        required: ["asset", "assetType", "direction", "conviction", "rationale"],
+        additionalProperties: false
+      },
+      description: "Up to 4 tradeable assets (crypto, stocks, ETFs, sectors, commodities) this outcome would plausibly move, each with direction and WHY. Empty array when none plausibly moves (e.g. a routine sports match)."
     }
   },
-  required: ["probability", "confidence", "reasoning", "keyFindings"],
+  required: ["probability", "confidence", "reasoning", "keyFindings", "marketImpact"],
   additionalProperties: false
 };
 
@@ -1260,7 +1277,12 @@ async function callClaudeInvestigator(env, params) {
     "'obviously true' while the criteria make it false (wrong date window, wrong measure, technicality).\n" +
     "- Estimate the probability from evidence, NOT from the market's own price. Do not anchor to the crowd.\n" +
     "- If you cannot find decisive evidence, say so and return a probability near your genuine uncertainty with LOW confidence.\n" +
-    "- Today's date is provided; treat anything after it as not yet known.";
+    "- Today's date is provided; treat anything after it as not yet known.\n" +
+    "- MARKET IMPACT: after pricing the event, list up to 4 tradeable assets (crypto, stocks, ETFs, sectors, " +
+    "commodities) the outcome would plausibly move, with direction and a 1-2 sentence causal rationale naming the " +
+    "mechanism (flows, rates, regulation, supply, sentiment). Be selective: an empty list is the right answer for " +
+    "events with no plausible asset transmission (e.g. a routine sports match). Direction is conditional on the " +
+    "event resolving YES for the stated direction.";
 
   var userText =
     "Today's date: " + new Date().toISOString().slice(0, 10) + "\n\n" +
@@ -1363,6 +1385,7 @@ async function callClaudeInvestigator(env, params) {
         confidence: (parsed.confidence || "LOW").toUpperCase(),
         reasoning: parsed.reasoning || "",
         keyFindings: Array.isArray(parsed.keyFindings) ? parsed.keyFindings.slice(0, 8) : [],
+        marketImpact: Array.isArray(parsed.marketImpact) ? parsed.marketImpact.slice(0, 4) : [],
         model: data.model || model,
         webSearches: webSearches,
         stopReason: data.stop_reason
@@ -1545,6 +1568,7 @@ async function investigateSignal(env, sig, opts) {
     confidence: result.confidence,
     reasoning: result.reasoning,
     keyFindings: result.keyFindings,
+    marketImpact: result.marketImpact || [],  // agent's asset-impact analysis
     model: result.model,
     webSearches: result.webSearches,
     marketProbAtInvestigation: baseline.marketProb,  // honest Brier baseline (live Gamma mid)
