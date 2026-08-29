@@ -1343,12 +1343,17 @@ async function callClaudeInvestigator(env, params) {
   // against the subrequest cap.
   var MAX_TURNS = 8;
 
+  // Day-2 audit: at 100s roughly two thirds of calls died mid-research ("The
+  // operation was aborted") — a search-heavy request with adaptive thinking
+  // routinely needs 2-3 minutes. 210s keeps worst case per call bounded while
+  // the scheduled() wall-budget deadline bounds the phase as a whole.
+  var perFetchTimeoutMs = parseInt(env.INVESTIGATION_FETCH_TIMEOUT_MS || "210000", 10);
+  var timedOut = false;
+
   try {
-    var perFetchTimeoutMs = parseInt(env.INVESTIGATION_FETCH_TIMEOUT_MS || "100000", 10);
     for (var turn = 0; turn < MAX_TURNS; turn++) {
-      // Bound each call so a hung request can't eat the cron's 15-min wall budget.
       var controller = new AbortController();
-      var timer = setTimeout(function () { controller.abort(); }, perFetchTimeoutMs);
+      var timer = setTimeout(function () { timedOut = true; controller.abort(); }, perFetchTimeoutMs);
       var res;
       try {
         res = await fetch(ANTHROPIC_API, {
@@ -1415,6 +1420,13 @@ async function callClaudeInvestigator(env, params) {
 
     return { ok: false, error: "Investigation exceeded " + MAX_TURNS + " turns without finishing" };
   } catch (e) {
+    if (timedOut) {
+      return {
+        ok: false,
+        error: "Model call timed out after " + Math.round(perFetchTimeoutMs / 1000) +
+               "s (client abort; raise INVESTIGATION_FETCH_TIMEOUT_MS if this recurs)"
+      };
+    }
     return { ok: false, error: "Investigation exception: " + (e && e.message) };
   }
 }
@@ -1888,13 +1900,14 @@ async function pickSweepCandidates(env, limit) {
 
 // Run the agent sweep: investigate up to `budget` fresh candidates, record big
 // disagreements with the market as opportunities.
-async function runMispricingSweep(env, budget) {
+async function runMispricingSweep(env, budget, deadlineMs) {
   if (!env.ANTHROPIC_API_KEY || !env.SIGNALS_CACHE) return { attempted: 0, done: 0, opportunities: 0 };
   var edgeThreshold = parseFloat(env.SWEEP_EDGE_PTS || "12");
   var pool = await pickSweepCandidates(env, budget);
   var res = { attempted: 0, done: 0, opportunities: 0 };
   var opps = [];
   for (var i = 0; i < pool.length && res.done < budget; i++) {
+    if (deadlineMs && Date.now() > deadlineMs) break;
     var sig = pool[i];
     var invKey = investigationKeyFor(sig.marketSlug, sig.directionRaw);
     var existing = await env.SIGNALS_CACHE.get(invKey, { type: "json" });
@@ -6179,6 +6192,10 @@ export default {
 
       // AGENT INVESTIGATION: independently price the top alert-tier signals.
       // Runs after alerts (decoupled), bounded per run and per day for cost.
+      // Wall-budget deadline shared with the sweep phase: with the per-fetch
+      // timeout at 210s, up to 3 investigations/run could otherwise crowd the
+      // cron's 15-min wall — stop STARTING new ones past this deadline.
+      const invDeadline = Date.now() + parseInt(env.INVESTIGATION_WALL_BUDGET_MS || "480000", 10);
       if (env.ANTHROPIC_API_KEY && alertableSignals.length > 0) {
         try {
           const perRun = parseInt(env.INVESTIGATION_PER_RUN || "2", 10);
@@ -6191,6 +6208,7 @@ export default {
             .slice(0, budget);
           let investigated = 0;
           for (const sig of candidates) {
+            if (Date.now() > invDeadline) break;
             const r = await investigateSignal(env, sig);
             if (r.ok && !r.skipped) investigated++;
           }
@@ -6223,12 +6241,12 @@ export default {
           const sweepPerRun = parseInt(env.SWEEP_PER_RUN || "1", 10);
           const spent = await investigationCountToday(env);
           const sweepBudget = Math.max(0, Math.min(sweepPerRun, dailyCap - spent));
-          if (sweepBudget > 0) {
-            const sweep = await runMispricingSweep(env, sweepBudget);
+          if (sweepBudget > 0 && Date.now() <= invDeadline) {
+            const sweep = await runMispricingSweep(env, sweepBudget, invDeadline);
             cronStatus.sweep = sweep;
             console.log(`Sweep: ${sweep.done} investigated, ${sweep.opportunities} opportunities`);
           } else {
-            cronStatus.sweep = { skipped: "daily cap reached" };
+            cronStatus.sweep = { skipped: sweepBudget > 0 ? "wall budget exhausted" : "daily cap reached" };
           }
         } catch (e) {
           console.error("Mispricing sweep error:", e.message);
