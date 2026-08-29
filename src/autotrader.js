@@ -711,6 +711,43 @@ export async function getBotPerformance(env) {
   } catch (e) { return null; }
 }
 
+// ============================================================
+// AGENT SECOND OPINION (advisory — annotates, never gates)
+// ============================================================
+// When the AI investigator has already priced this market (whale-path
+// investigations cover the same alert-tier signals the bot trades), attach
+// its independent probability to the position. Advisory only: entries are
+// never blocked. The settled counterfactual ledger (agent_gate_stats)
+// accumulates how trades the agent liked/disliked actually performed — the
+// evidence required before any veto/boost is wired into the entry gates.
+async function lookupAgentOpinion(env, marketSlug, directionRaw, entryPrice) {
+  if (!env.SIGNALS_CACHE || !marketSlug) return null;
+  try {
+    const dir = directionRaw || '';
+    let inv = await env.SIGNALS_CACHE.get(`investigation:${marketSlug}::${dir}`, { type: 'json' });
+    let probForSide = (inv && inv.status === 'done' && typeof inv.agentProb === 'number')
+      ? inv.agentProb : null;
+    if (probForSide === null && !/^yes$/i.test(dir)) {
+      // Sweep investigations always price the "Yes" side; the complement is
+      // only safe when our side is literally the binary "No" outcome.
+      inv = await env.SIGNALS_CACHE.get(`investigation:${marketSlug}::Yes`, { type: 'json' });
+      if (inv && inv.status === 'done' && typeof inv.agentProb === 'number' && /^no$/i.test(dir)) {
+        probForSide = 1 - inv.agentProb;
+      }
+    }
+    if (typeof probForSide !== 'number') return null;
+    const edgePts = Math.round((probForSide * 100 - entryPrice) * 10) / 10;
+    return {
+      agentProb: Math.round(probForSide * 1000) / 1000,
+      agentEdgePts: edgePts,
+      agentConfidence: inv.confidence || null,
+      agentOpinion: edgePts >= 5 ? 'agrees' : edgePts <= -5 ? 'disagrees' : 'neutral',
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
 async function updatePerformance(env, closedTrade) {
   const perf = await getBotPerformance(env) || {};
   
@@ -773,6 +810,22 @@ async function updatePerformance(env, closedTrade) {
     oddsPerf[oddsRange].totalPnl = Math.round((oddsPerf[oddsRange].totalPnl + (closedTrade.pnl || 0)) * 100) / 100;
     await env.SIGNALS_CACHE.put('autotrader_odds_performance', JSON.stringify(oddsPerf));
   } catch (e) {}
+
+  // Agent counterfactual ledger: settle how trades the investigator agreed /
+  // disagreed with actually performed. This is the evidence base for ever
+  // promoting the agent's opinion from advisory into a real entry gate.
+  if (closedTrade.agentOpinion && !isBreakeven) {
+    try {
+      const gsRaw = await env.SIGNALS_CACHE.get('agent_gate_stats');
+      const gs = gsRaw ? JSON.parse(gsRaw) : {};
+      const bucket = gs[closedTrade.agentOpinion] || { trades: 0, wins: 0, losses: 0, pnl: 0 };
+      bucket.trades++;
+      if (pnl > 0) bucket.wins++; else bucket.losses++;
+      bucket.pnl = Math.round((bucket.pnl + pnl) * 100) / 100;
+      gs[closedTrade.agentOpinion] = bucket;
+      await env.SIGNALS_CACHE.put('agent_gate_stats', JSON.stringify(gs));
+    } catch (e) {}
+  }
   
   await env.SIGNALS_CACHE.put(AT_KEYS.PERFORMANCE, JSON.stringify(perf), {
     expirationTtl: 365 * 24 * 60 * 60
@@ -1874,6 +1927,18 @@ export async function processSignals(env, signals) {
       }
     }
 
+    // Agent second opinion (advisory — never blocks the entry): if the
+    // investigator has independently priced this market, record its view so
+    // the settled ledger can show how agent-liked vs -disliked trades do.
+    const agentView = await lookupAgentOpinion(
+      env, signal.marketSlug, signal.directionRaw || signal.direction, evaluation.entryPrice
+    );
+    if (agentView) {
+      evaluation.reasons.push(
+        `Agent ${agentView.agentOpinion}: prices this ${Math.round(agentView.agentProb * 100)}% vs ${evaluation.entryPrice}¢ entry`
+      );
+    }
+
     // --- CREATE POSITION ---
     const position = {
       id: `at_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
@@ -1902,6 +1967,10 @@ export async function processSignals(env, signals) {
       strongCombo: evaluation.strongCombo || null,
       isHighConviction: evaluation.isHighConviction || false,
       isExploration: evaluation.isExploration || false,
+      // Investigator's independent view of this entry (advisory)
+      agentProb: agentView ? agentView.agentProb : null,
+      agentEdgePts: agentView ? agentView.agentEdgePts : null,
+      agentOpinion: agentView ? agentView.agentOpinion : null,
       // For P&L calculation
       shares: evaluation.positionSize / (evaluation.entryPrice / 100), // shares = USDC / price
     };
@@ -1931,6 +2000,9 @@ export async function processSignals(env, signals) {
         betSummary: signal.betSummary || null,
         whaleAction: evaluation.whaleAction,
         exploration: evaluation.isExploration || undefined,
+        agentCheck: agentView
+          ? `${agentView.agentOpinion} (agent ${Math.round(agentView.agentProb * 100)}% vs ${evaluation.entryPrice}¢)`
+          : undefined,
         marketCategory: categorizeMarket(signal.marketTitle || signal.title || ''),
       });
     } else {
