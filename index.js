@@ -1515,6 +1515,58 @@ async function streamClaudeMessage(url, headers, body, signal) {
   return { ok: true, data: { content: content.filter(Boolean), stop_reason: stopReason, model: model } };
 }
 
+// Annotate open (done, unsettled) investigation rows with the market's live
+// Gamma price for the investigated direction: market_prob_now +
+// price_checked_at. KV-cached 5 minutes per slug::direction so page loads
+// don't hammer Gamma; entries older than an hour are pruned. Settled rows
+// keep their outcome stamps and are skipped. Best-effort: a Gamma miss just
+// leaves the row un-annotated.
+async function annotateLivePrices(env, rows) {
+  if (!env.SIGNALS_CACHE || !Array.isArray(rows) || rows.length === 0) return rows;
+  var CACHE_KEY = "intel_live_prices";
+  var TTL_MS = 5 * 60 * 1000;
+  var cache = {};
+  try { cache = await env.SIGNALS_CACHE.get(CACHE_KEY, { type: "json" }) || {}; } catch (e) {}
+  var now = Date.now();
+  var dirty = false;
+  var pending = [];
+  for (var i = 0; i < rows.length; i++) {
+    var row = rows[i];
+    if (!row || row.status !== "done" || !row.market_slug) continue;
+    if (row.settled_at || row.y === 0 || row.y === 1) continue;
+    var dir = row.direction_raw || "Yes";
+    var key = row.market_slug + "::" + dir;
+    var hit = cache[key];
+    if (hit && (now - hit.at) < TTL_MS) {
+      row.market_prob_now = hit.prob;
+      row.price_checked_at = new Date(hit.at).toISOString();
+      continue;
+    }
+    pending.push((function (r, d, k) {
+      return (async function () {
+        try {
+          var found = await findGammaMarket(r.market_slug, d);
+          var base = gammaBaselineForDirection(found, d);
+          if (typeof base.marketProb === "number") {
+            r.market_prob_now = base.marketProb;
+            r.price_checked_at = new Date(now).toISOString();
+            cache[k] = { prob: base.marketProb, at: now };
+            dirty = true;
+          }
+        } catch (e) {}
+      })();
+    })(row, dir, key));
+  }
+  if (pending.length > 0) await Promise.all(pending);
+  if (dirty) {
+    try {
+      for (var k in cache) { if (now - cache[k].at > 60 * 60 * 1000) delete cache[k]; }
+      await env.SIGNALS_CACHE.put(CACHE_KEY, JSON.stringify(cache), { expirationTtl: 3600 });
+    } catch (e) {}
+  }
+  return rows;
+}
+
 // Stable investigation identity. signal.id embeds the earliest trade time,
 // which churns as the scan window slides - keying on that would re-investigate
 // the same market every scan and pollute Brier with fake-independent samples.
@@ -6098,7 +6150,13 @@ export default {
             stmt = env.DB.prepare("SELECT * FROM investigations ORDER BY updated_at DESC LIMIT ?1").bind(limit);
           }
           const rows = await stmt.all();
-          return new Response(JSON.stringify({ enabled: true, results: rows.results || [] }), {
+          const results = rows.results || [];
+          // Findings are snapshots; markets keep moving (a golfer's 10¢ "Yes"
+          // is 2¢ once he falls off the leaderboard). Annotate open findings
+          // with the market's CURRENT price so the UI can re-price or expire
+          // the play instead of advertising a stale one.
+          await annotateLivePrices(env, results);
+          return new Response(JSON.stringify({ enabled: true, results }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" }
           });
         } catch (e) {
