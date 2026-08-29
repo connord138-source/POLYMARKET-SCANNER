@@ -4441,8 +4441,14 @@ export default {
       
       // Get bot performance (lifetime)
       if (path === "/autotrader/performance") {
-        const perf = await getBotPerformance(env);
-        return atJson(perf || {});
+        const perf = await getBotPerformance(env) || {};
+        // Agent counterfactual ledger: settled outcomes of trades the
+        // investigator agreed/disagreed with (advisory second opinion).
+        try {
+          const gsRaw = await env.SIGNALS_CACHE.get('agent_gate_stats');
+          perf.agentGate = gsRaw ? JSON.parse(gsRaw) : null;
+        } catch (e) { perf.agentGate = null; }
+        return atJson(perf);
       }
 
       if (path === "/autotrader/odds-performance" && request.method === "GET") {
