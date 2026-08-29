@@ -1343,35 +1343,21 @@ async function callClaudeInvestigator(env, params) {
   // against the subrequest cap.
   var MAX_TURNS = 8;
 
-  // Day-2 audit: at 100s roughly two thirds of calls died mid-research ("The
-  // operation was aborted") — a search-heavy request with adaptive thinking
-  // routinely needs 2-3 minutes. 210s keeps worst case per call bounded while
-  // the scheduled() wall-budget deadline bounds the phase as a whole.
-  var perFetchTimeoutMs = parseInt(env.INVESTIGATION_FETCH_TIMEOUT_MS || "210000", 10);
+  // Post-fix audit trail: our own 100s abort was killing 2/3 of runs; raising
+  // it just exposed Anthropic's edge 524ing non-streaming responses at ~100s.
+  // The cure is streaming (per API guidance for long requests): first bytes
+  // arrive immediately, the connection stays alive for the whole generation.
+  // The env var now bounds the WHOLE call (all resume turns), not one fetch.
+  var perCallTimeoutMs = parseInt(env.INVESTIGATION_FETCH_TIMEOUT_MS || "300000", 10);
   var timedOut = false;
+  var controller = new AbortController();
+  var timer = setTimeout(function () { timedOut = true; controller.abort(); }, perCallTimeoutMs);
 
   try {
     for (var turn = 0; turn < MAX_TURNS; turn++) {
-      var controller = new AbortController();
-      var timer = setTimeout(function () { timedOut = true; controller.abort(); }, perFetchTimeoutMs);
-      var res;
-      try {
-        res = await fetch(ANTHROPIC_API, {
-          method: "POST",
-          headers: headers,
-          body: JSON.stringify(body),
-          signal: controller.signal
-        });
-      } finally {
-        clearTimeout(timer);
-      }
-
-      if (!res.ok) {
-        var errText = await res.text();
-        return { ok: false, error: "Anthropic API " + res.status + ": " + errText.slice(0, 300) };
-      }
-
-      var data = await res.json();
+      var streamed = await streamClaudeMessage(ANTHROPIC_API, headers, body, controller.signal);
+      if (!streamed.ok) return { ok: false, error: streamed.error };
+      var data = streamed.data;
 
       // Count web searches for cost visibility
       for (var b = 0; b < (data.content || []).length; b++) {
@@ -1423,12 +1409,110 @@ async function callClaudeInvestigator(env, params) {
     if (timedOut) {
       return {
         ok: false,
-        error: "Model call timed out after " + Math.round(perFetchTimeoutMs / 1000) +
+        error: "Model call timed out after " + Math.round(perCallTimeoutMs / 1000) +
                "s (client abort; raise INVESTIGATION_FETCH_TIMEOUT_MS if this recurs)"
       };
     }
     return { ok: false, error: "Investigation exception: " + (e && e.message) };
+  } finally {
+    clearTimeout(timer);
   }
+}
+
+// One streamed Messages API call, reassembled into { content, stop_reason,
+// model }. Non-streaming responses to search-heavy requests take minutes to
+// materialize and get 524'd by the API's edge at ~100s; with SSE the headers
+// arrive immediately and events flow for the whole generation. Blocks are
+// reconstructed faithfully (thinking signatures, server-tool inputs, tool
+// results, citations) so a pause_turn assistant message can be echoed back
+// verbatim to resume the server-tool loop.
+async function streamClaudeMessage(url, headers, body, signal) {
+  var res = await fetch(url, {
+    method: "POST",
+    headers: headers,
+    body: JSON.stringify(Object.assign({}, body, { stream: true })),
+    signal: signal
+  });
+  if (!res.ok) {
+    var errText = await res.text();
+    return { ok: false, error: "Anthropic API " + res.status + ": " + errText.slice(0, 300) };
+  }
+
+  var content = [];
+  var jsonAcc = {};        // block index -> accumulated input_json_delta
+  var stopReason = null;
+  var model = null;
+  var streamError = null;
+  var sawStop = false;
+
+  var handleEvent = function (obj) {
+    var t = obj.type;
+    if (t === "message_start") {
+      model = (obj.message && obj.message.model) || null;
+    } else if (t === "content_block_start") {
+      content[obj.index] = obj.content_block || {};
+    } else if (t === "content_block_delta") {
+      var blk = content[obj.index];
+      if (!blk) return;
+      var d = obj.delta || {};
+      if (d.type === "text_delta") blk.text = (blk.text || "") + (d.text || "");
+      else if (d.type === "input_json_delta") jsonAcc[obj.index] = (jsonAcc[obj.index] || "") + (d.partial_json || "");
+      else if (d.type === "thinking_delta") blk.thinking = (blk.thinking || "") + (d.thinking || "");
+      else if (d.type === "signature_delta") blk.signature = d.signature;
+      else if (d.type === "citations_delta" && d.citation) {
+        blk.citations = blk.citations || [];
+        blk.citations.push(d.citation);
+      }
+    } else if (t === "content_block_stop") {
+      var done = content[obj.index];
+      if (done && Object.prototype.hasOwnProperty.call(jsonAcc, obj.index)) {
+        try { done.input = JSON.parse(jsonAcc[obj.index] || "{}"); } catch (e) {}
+        delete jsonAcc[obj.index];
+      }
+    } else if (t === "message_delta") {
+      if (obj.delta && obj.delta.stop_reason) stopReason = obj.delta.stop_reason;
+    } else if (t === "message_stop") {
+      sawStop = true;
+    } else if (t === "error") {
+      streamError = obj.error || { message: "unknown stream error" };
+    }
+    // ping / unknown event types: ignore
+  };
+
+  var reader = res.body.getReader();
+  var decoder = new TextDecoder();
+  var buf = "";
+  try {
+    while (!streamError) {
+      var chunk = await reader.read();
+      if (chunk.done) break;
+      buf += decoder.decode(chunk.value, { stream: true });
+      var nl;
+      while ((nl = buf.indexOf("\n")) >= 0) {
+        var line = buf.slice(0, nl).replace(/\r$/, "");
+        buf = buf.slice(nl + 1);
+        if (line.indexOf("data:") !== 0) continue;   // event:/blank/comment lines
+        var payload = line.slice(5).trim();
+        if (!payload) continue;
+        try { handleEvent(JSON.parse(payload)); } catch (e) {}
+        if (streamError) break;
+      }
+    }
+  } finally {
+    try { reader.releaseLock(); } catch (e) {}
+  }
+
+  if (streamError) {
+    return {
+      ok: false,
+      error: "Anthropic stream error: " + (streamError.type || "") + " " +
+             ((streamError.message || "") + "").slice(0, 200)
+    };
+  }
+  if (!sawStop && !stopReason) {
+    return { ok: false, error: "Anthropic stream ended prematurely (no message_stop)" };
+  }
+  return { ok: true, data: { content: content.filter(Boolean), stop_reason: stopReason, model: model } };
 }
 
 // Stable investigation identity. signal.id embeds the earliest trade time,
@@ -6192,10 +6276,11 @@ export default {
 
       // AGENT INVESTIGATION: independently price the top alert-tier signals.
       // Runs after alerts (decoupled), bounded per run and per day for cost.
-      // Wall-budget deadline shared with the sweep phase: with the per-fetch
-      // timeout at 210s, up to 3 investigations/run could otherwise crowd the
+      // Wall-budget deadline shared with the sweep phase: with the per-call
+      // cap at 300s, up to 3 investigations/run could otherwise crowd the
       // cron's 15-min wall — stop STARTING new ones past this deadline.
-      const invDeadline = Date.now() + parseInt(env.INVESTIGATION_WALL_BUDGET_MS || "480000", 10);
+      // Worst case = 7 min budget + one 5-min straggler = 12 min.
+      const invDeadline = Date.now() + parseInt(env.INVESTIGATION_WALL_BUDGET_MS || "420000", 10);
       if (env.ANTHROPIC_API_KEY && alertableSignals.length > 0) {
         try {
           const perRun = parseInt(env.INVESTIGATION_PER_RUN || "2", 10);
