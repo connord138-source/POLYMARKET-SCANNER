@@ -1804,16 +1804,7 @@ async function recordBrierOutcome(env, signalData, outcome, meta) {
     if (!inv || inv.status !== "done" || typeof inv.agentProb !== "number") return;
     if (inv.agentBrier !== null && inv.agentBrier !== undefined) return; // already scored
 
-    var y = outcome === "WIN" ? 1 : 0;
-    inv.outcome = outcome;
-    inv.y = y;
-    inv.agentBrier = Math.round(Math.pow(inv.agentProb - y, 2) * 10000) / 10000;
-    inv.marketBrier = (typeof inv.marketProbAtInvestigation === "number")
-      ? Math.round(Math.pow(inv.marketProbAtInvestigation - y, 2) * 10000) / 10000
-      : null;
-    inv.settledBy = "gamma";
-    inv.settledAt = new Date().toISOString();
-    inv.updatedAt = inv.settledAt;
+    applyBrierScore(inv, outcome === "WIN" ? 1 : 0);
 
     await env.SIGNALS_CACHE.put(invKey, JSON.stringify(inv), { expirationTtl: 45 * 24 * 60 * 60 });
     await d1SettleInvestigation(env, inv);  // guarded
@@ -1821,6 +1812,71 @@ async function recordBrierOutcome(env, signalData, outcome, meta) {
   } catch (e) {
     console.error("Error recording Brier outcome:", e.message);
   }
+}
+
+// Shared ground-truth scorer: stamp an investigation with its resolved
+// outcome and Brier scores (agent vs the market baseline at research time).
+function applyBrierScore(inv, y) {
+  inv.outcome = y === 1 ? "WIN" : "LOSS";
+  inv.y = y;
+  inv.agentBrier = Math.round(Math.pow(inv.agentProb - y, 2) * 10000) / 10000;
+  inv.marketBrier = (typeof inv.marketProbAtInvestigation === "number")
+    ? Math.round(Math.pow(inv.marketProbAtInvestigation - y, 2) * 10000) / 10000
+    : null;
+  inv.settledBy = "gamma";
+  inv.settledAt = new Date().toISOString();
+  inv.updatedAt = inv.settledAt;
+  return inv;
+}
+
+// Settle open investigations directly against Gamma. recordBrierOutcome only
+// fires from the WHALE signal settlement pipeline — sweep-path investigations
+// (weather, elections, view counts: markets no whale traded) never pass
+// through it, so without this step they would never be Brier-scored and the
+// calibration report would sit at zero forever. Bounded per cron: at most
+// MAX_READS index entries examined (rotating cursor) and MAX_GAMMA lookups.
+async function settleOpenInvestigations(env) {
+  if (!env.SIGNALS_CACHE) return { checked: 0, scored: 0 };
+  var idx = await env.SIGNALS_CACHE.get("investigation_index", { type: "json" }) || [];
+  if (idx.length === 0) return { checked: 0, scored: 0 };
+  var MAX_READS = 60, MAX_GAMMA = 10;
+  var cur = 0;
+  try {
+    var c = await env.SIGNALS_CACHE.get("inv_settle_cursor", { type: "json" });
+    cur = (c && typeof c.n === "number") ? c.n : 0;
+  } catch (e) {}
+  var res = { checked: 0, scored: 0 };
+  var reads = Math.min(idx.length, MAX_READS);
+  var i = 0;
+  for (; i < reads && res.checked < MAX_GAMMA; i++) {
+    var key = idx[(cur + i) % idx.length];
+    var inv;
+    try { inv = await env.SIGNALS_CACHE.get(key, { type: "json" }); } catch (e) { continue; }
+    if (!inv || inv.status !== "done" || typeof inv.agentProb !== "number") continue;
+    if (inv.agentBrier !== null && inv.agentBrier !== undefined) continue;  // already scored
+    res.checked++;
+    try {
+      var found = await findGammaMarket(inv.marketSlug, inv.directionRaw);
+      if (!found || !found.market) continue;
+      var m = found.market;
+      if (!(m.closed === true || m.closed === "true")) continue;
+      var base = gammaBaselineForDirection(found, inv.directionRaw);
+      if (typeof base.marketProb !== "number") continue;
+      // Resolved prices pin to ~1/~0; anything in between (50/50 refunds,
+      // half-resolved books) is not a clean ground truth — skip it.
+      var y = base.marketProb >= 0.95 ? 1 : (base.marketProb <= 0.05 ? 0 : null);
+      if (y === null) continue;
+      applyBrierScore(inv, y);
+      await env.SIGNALS_CACHE.put(key, JSON.stringify(inv), { expirationTtl: 45 * 24 * 60 * 60 });
+      await d1SettleInvestigation(env, inv);  // guarded
+      res.scored++;
+      console.log("Brier scored (direct) " + key + ": agent=" + inv.agentBrier + " market=" + inv.marketBrier);
+    } catch (e) {}
+  }
+  try {
+    await env.SIGNALS_CACHE.put("inv_settle_cursor", JSON.stringify({ n: (cur + i) % idx.length }));
+  } catch (e) {}
+  return res;
 }
 
 // Aggregate the calibration report from the immutable per-investigation records
@@ -6423,6 +6479,15 @@ export default {
       } catch (e) {
         console.error("Edge settle error:", e.message);
         cronStatus.edgeSettle = { error: e.message };
+      }
+      // Ground-truth-settle investigations whose markets have resolved, so
+      // sweep-path findings (no whale signal, no signals-pipeline settlement)
+      // still earn Brier scores and the ai_investigator lane a track record.
+      try {
+        cronStatus.invSettle = await settleOpenInvestigations(env);
+      } catch (e) {
+        console.error("Investigation settle error:", e.message);
+        cronStatus.invSettle = { error: e.message };
       }
 
       // Mirror any KV-settled outcomes into D1 that the hot-path missed
