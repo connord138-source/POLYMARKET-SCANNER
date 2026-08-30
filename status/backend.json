@@ -1,38 +1,38 @@
 {
-  "fetchedAt": "2026-08-30T05:00:53Z",
+  "fetchedAt": "2026-08-30T06:11:43Z",
   "health": {
     "status": "ok",
-    "timestamp": "2026-08-30T05:00:54.245Z",
+    "timestamp": "2026-08-30T06:11:44.608Z",
     "version": "21.1.0 - Modularize: extract src/odds.js + src/gamma.js from index.js",
     "cache": {
-      "signalCount": 10776,
-      "oldestSignal": "2026-08-23T04:58:39.000Z",
-      "newestSignal": "2026-08-30T04:49:18.000Z"
+      "signalCount": 10744,
+      "oldestSignal": "2026-08-23T06:12:34.000Z",
+      "newestSignal": "2026-08-30T06:05:10.000Z"
     }
   },
   "cronStatus": {
     "success": true,
     "lastRun": {
-      "startedAt": "2026-08-30T04:55:40.655Z",
+      "startedAt": "2026-08-30T06:10:23.430Z",
       "scan": {
-        "signals": 166,
+        "signals": 174,
         "success": true
       },
       "settlement": {
-        "processed": 3,
-        "wins": 3,
-        "losses": 0,
+        "processed": 2,
+        "wins": 0,
+        "losses": 2,
         "errors": 0
       },
       "investigations": {
         "attempted": 2,
         "completed": 0,
-        "spentToday": 11,
+        "spentToday": 12,
         "dailyCap": 20
       },
       "overround": {
         "scanned": 76,
-        "flagged": 44
+        "flagged": 45
       },
       "sweep": {
         "attempted": 0,
@@ -47,26 +47,45 @@
       "optimization": {
         "optimized": true,
         "totalFactors": 13,
-        "totalOptimized": 1,
+        "totalOptimized": 2,
         "optimizations": [
           {
-            "factor": "eliteWallet",
-            "winRate": 57,
-            "samples": 337,
-            "oldWeight": 1.355,
-            "newWeight": 1.27,
+            "factor": "concentrated",
+            "winRate": 54,
+            "samples": 1162,
+            "oldWeight": 1.31,
+            "newWeight": 1.23,
+            "change": -0.08
+          },
+          {
+            "factor": "whaleSize15k",
+            "winRate": 54,
+            "samples": 854,
+            "oldWeight": 1.31,
+            "newWeight": 1.23,
             "change": -0.08
           }
         ]
       },
       "error": null,
       "edgeScan": {
-        "skipped": "throttled",
-        "nextInMin": 9
+        "at": 1788070263983,
+        "scanned": 3,
+        "sports": [
+          "wnba",
+          "mlb",
+          "nfl"
+        ],
+        "found": 0,
+        "newCount": 0
       },
       "edgeSettle": {
         "checked": 0,
         "settled": 0
+      },
+      "invSettle": {
+        "checked": 10,
+        "scored": 0
       },
       "signalBackfill": {
         "checked": 25,
@@ -74,42 +93,27 @@
         "expired": 0
       },
       "autotrader": {
-        "evaluated": 166,
+        "evaluated": 174,
         "tradesOpened": 0,
         "tradesPaperTraded": 0,
         "tradesQueued": 0,
-        "skipped": 166,
+        "skipped": 174,
         "skipReasons": {
-          "Event too far out (24d > 7d horizon)": 6,
-          "Entry price too high for sports_binary (77% > 40%)": 1,
-          "Event too far out (23d > 7d horizon)": 70,
-          "No winning wallet on signal": 54,
-          "Entry price too high for other (75% > 40%)": 2,
-          "Entry price too high for other (76% > 40%)": 2,
-          "Event too far out (22d > 7d horizon)": 13,
-          "Entry price too high for sports_binary (80% > 40%)": 1,
-          "Entry price too high for sports_binary (62% > 40%)": 1,
-          "Entry price too high for sports_other (51% > 40%)": 1,
-          "Entry price too high for sports_binary (47% > 40%)": 1,
-          "Entry price too high for other (50% > 40%)": 1,
-          "Entry price too high for other (57% > 40%)": 1,
-          "Event too far out (125d > 7d horizon)": 1,
-          "Event too far out (64d > 7d horizon)": 1,
-          "Signal has no market slug — cannot price or settle": 2,
-          "Duplicate market (already traded)": 2,
-          "Event too far out (124d > 7d horizon)": 2,
-          "Event too far out (65d > 7d horizon)": 1,
-          "Event too far out (33d > 7d horizon)": 1,
-          "Event too far out (32d > 7d horizon)": 2
+          "No proven edge for entry band 61-80 (0pt)": 38,
+          "No proven edge for entry band 41-60 (-3pt)": 103,
+          "Duplicate market (already traded)": 10,
+          "No proven edge for entry band 81-99 (-1pt)": 12,
+          "No proven edge for entry band 21-40 (-2pt)": 10,
+          "No winning wallet on signal": 1
         },
         "exitChecks": 1,
         "positionsExited": 0,
         "errors": [],
         "openPositions": 1,
-        "dailyPnL": -9,
-        "totalPnL": 3132.2649494949483
+        "dailyPnL": -5.140000000000001,
+        "totalPnL": 3136.1249494949484
       },
-      "completedAt": "2026-08-30T04:58:24.552Z"
+      "completedAt": "2026-08-30T06:11:07.236Z"
     },
     "cronSchedule": "Every 5 minutes",
     "note": "Settlement runs automatically. Sports events settle ~12h after game ends."
@@ -213,12 +217,12 @@
     "_v3ProfitOverhaul": true
   },
   "performance": {
-    "totalTrades": 251,
-    "wins": 102,
+    "totalTrades": 252,
+    "wins": 103,
     "losses": 149,
     "pushes": 285,
     "winRate": 41,
-    "totalPnL": 3132.2649494949483,
+    "totalPnL": 3136.1249494949484,
     "bestTrade": {
       "market": "Will Bitcoin dip to $55,000 in February?",
       "pnl": 1228.57,
@@ -229,15 +233,15 @@
       "pnl": -170.11,
       "date": "2026-02-15T00:20:13.015Z"
     },
-    "avgReturn": 12.48,
-    "currentStreak": -3,
+    "avgReturn": 12.44,
+    "currentStreak": 1,
     "longestWinStreak": 23,
     "longestLoseStreak": 32,
     "byMarketType": {
       "other": {
-        "wins": 71,
+        "wins": 72,
         "losses": 79,
-        "pnl": 1292.6899999999998
+        "pnl": 1296.5499999999997
       },
       "sports-other": {
         "wins": 17,
@@ -287,9 +291,9 @@
         "pnl": -27.317272727272726
       },
       "HIGH_CONVICTION": {
-        "wins": 60,
+        "wins": 61,
         "losses": 93,
-        "pnl": 17.599999999999994
+        "pnl": 21.459999999999994
       }
     },
     "bySport": {},
@@ -298,14 +302,14 @@
   },
   "daily": {
     "date": "2026-08-30",
-    "tradesOpened": 4,
-    "tradesClosed": 3,
-    "totalSpent": 12,
-    "totalReturned": 0,
-    "realizedPnL": -9,
-    "wins": 0,
+    "tradesOpened": 5,
+    "tradesClosed": 4,
+    "totalSpent": 15,
+    "totalReturned": 6.859999999999999,
+    "realizedPnL": -5.140000000000001,
+    "wins": 1,
     "losses": 3,
-    "explorationTradesOpened": 4,
+    "explorationTradesOpened": 5,
     "skippedReasons": {}
   },
   "dailyRange": {
@@ -313,14 +317,14 @@
     "days": [
       {
         "date": "2026-08-30",
-        "tradesOpened": 4,
-        "tradesClosed": 3,
-        "totalSpent": 12,
-        "totalReturned": 0,
-        "realizedPnL": -9,
-        "wins": 0,
+        "tradesOpened": 5,
+        "tradesClosed": 4,
+        "totalSpent": 15,
+        "totalReturned": 6.859999999999999,
+        "realizedPnL": -5.140000000000001,
+        "wins": 1,
         "losses": 3,
-        "explorationTradesOpened": 4,
+        "explorationTradesOpened": 5,
         "skippedReasons": {}
       },
       {
@@ -546,23 +550,23 @@
       {
         "name": "strongWallet",
         "wins": 609,
-        "losses": 444,
+        "losses": 446,
         "winRate": 58,
         "weight": 1.23,
-        "lastUpdated": "2026-08-30T03:07:55.447Z",
+        "lastUpdated": "2026-08-30T06:01:06.198Z",
         "previousWeight": 1.29,
-        "optimizedAt": "2026-08-30T03:23:31.955Z",
-        "total": 1053
+        "optimizedAt": "2026-08-30T06:05:55.975Z",
+        "total": 1055
       },
       {
         "name": "eliteWallet",
         "wins": 193,
         "losses": 144,
         "winRate": 57,
-        "weight": 1.27,
+        "weight": 1.21,
         "lastUpdated": "2026-08-30T04:57:58.002Z",
-        "previousWeight": 1.355,
-        "optimizedAt": "2026-08-30T04:58:24.190Z",
+        "previousWeight": 1.27,
+        "optimizedAt": "2026-08-30T05:15:58.339Z",
         "total": 337
       },
       {
@@ -589,49 +593,49 @@
       },
       {
         "name": "whaleSize25k",
-        "wins": 265,
-        "losses": 225,
+        "wins": 266,
+        "losses": 227,
         "winRate": 54,
         "weight": 1.18,
-        "lastUpdated": "2026-08-30T03:22:53.281Z",
+        "lastUpdated": "2026-08-30T05:30:58.737Z",
         "previousWeight": 1.23,
-        "optimizedAt": "2026-08-30T03:28:27.080Z",
-        "total": 490
+        "optimizedAt": "2026-08-30T05:37:28.617Z",
+        "total": 493
       },
       {
         "name": "concentrated",
-        "wins": 622,
-        "losses": 536,
+        "wins": 623,
+        "losses": 539,
         "winRate": 54,
-        "weight": 1.18,
-        "lastUpdated": "2026-08-30T03:32:45.482Z",
-        "previousWeight": 1.23,
-        "optimizedAt": "2026-08-30T04:33:26.871Z",
-        "total": 1158
+        "weight": 1.23,
+        "lastUpdated": "2026-08-30T06:11:01.621Z",
+        "previousWeight": 1.31,
+        "optimizedAt": "2026-08-30T06:11:07.185Z",
+        "total": 1162
       },
       {
         "name": "whaleSize15k",
         "wins": 460,
-        "losses": 391,
+        "losses": 394,
         "winRate": 54,
-        "weight": 1.18,
-        "lastUpdated": "2026-08-30T02:57:59.444Z",
-        "previousWeight": 1.23,
-        "optimizedAt": "2026-08-30T03:04:37.445Z",
-        "total": 851
+        "weight": 1.23,
+        "lastUpdated": "2026-08-30T06:11:01.621Z",
+        "previousWeight": 1.31,
+        "optimizedAt": "2026-08-30T06:11:07.185Z",
+        "total": 854
       }
     ],
     "bottomFactors": [
       {
         "name": "lastMinute2h",
         "wins": 259,
-        "losses": 264,
-        "winRate": 50,
-        "weight": 1.13,
-        "lastUpdated": "2026-08-30T03:27:57.508Z",
-        "previousWeight": 1.18,
-        "optimizedAt": "2026-08-30T03:33:14.801Z",
-        "total": 523
+        "losses": 265,
+        "winRate": 49,
+        "weight": 1.16,
+        "lastUpdated": "2026-08-30T05:20:52.870Z",
+        "previousWeight": 1.2349999999999999,
+        "optimizedAt": "2026-08-30T05:20:58.344Z",
+        "total": 524
       },
       {
         "name": "whaleSize50k",
@@ -647,35 +651,35 @@
       {
         "name": "whaleSize15k",
         "wins": 460,
-        "losses": 391,
+        "losses": 394,
         "winRate": 54,
-        "weight": 1.18,
-        "lastUpdated": "2026-08-30T02:57:59.444Z",
-        "previousWeight": 1.23,
-        "optimizedAt": "2026-08-30T03:04:37.445Z",
-        "total": 851
+        "weight": 1.23,
+        "lastUpdated": "2026-08-30T06:11:01.621Z",
+        "previousWeight": 1.31,
+        "optimizedAt": "2026-08-30T06:11:07.185Z",
+        "total": 854
       },
       {
         "name": "concentrated",
-        "wins": 622,
-        "losses": 536,
+        "wins": 623,
+        "losses": 539,
         "winRate": 54,
-        "weight": 1.18,
-        "lastUpdated": "2026-08-30T03:32:45.482Z",
-        "previousWeight": 1.23,
-        "optimizedAt": "2026-08-30T04:33:26.871Z",
-        "total": 1158
+        "weight": 1.23,
+        "lastUpdated": "2026-08-30T06:11:01.621Z",
+        "previousWeight": 1.31,
+        "optimizedAt": "2026-08-30T06:11:07.185Z",
+        "total": 1162
       },
       {
         "name": "whaleSize25k",
-        "wins": 265,
-        "losses": 225,
+        "wins": 266,
+        "losses": 227,
         "winRate": 54,
         "weight": 1.18,
-        "lastUpdated": "2026-08-30T03:22:53.281Z",
+        "lastUpdated": "2026-08-30T05:30:58.737Z",
         "previousWeight": 1.23,
-        "optimizedAt": "2026-08-30T03:28:27.080Z",
-        "total": 490
+        "optimizedAt": "2026-08-30T05:37:28.617Z",
+        "total": 493
       },
       {
         "name": "sportsMarket",
@@ -704,22 +708,22 @@
         "wins": 193,
         "losses": 144,
         "winRate": 57,
-        "weight": 1.27,
+        "weight": 1.21,
         "lastUpdated": "2026-08-30T04:57:58.002Z",
-        "previousWeight": 1.355,
-        "optimizedAt": "2026-08-30T04:58:24.190Z",
+        "previousWeight": 1.27,
+        "optimizedAt": "2026-08-30T05:15:58.339Z",
         "total": 337
       },
       {
         "name": "strongWallet",
         "wins": 609,
-        "losses": 444,
+        "losses": 446,
         "winRate": 58,
         "weight": 1.23,
-        "lastUpdated": "2026-08-30T03:07:55.447Z",
+        "lastUpdated": "2026-08-30T06:01:06.198Z",
         "previousWeight": 1.29,
-        "optimizedAt": "2026-08-30T03:23:31.955Z",
-        "total": 1053
+        "optimizedAt": "2026-08-30T06:05:55.975Z",
+        "total": 1055
       },
       {
         "name": "cryptoMarket",
@@ -759,8 +763,8 @@
       "worstFactors": [
         {
           "name": "lastMinute2h",
-          "winRate": 50,
-          "record": "259W-264L",
+          "winRate": 49,
+          "record": "259W-265L",
           "isDiscovered": false
         },
         {
@@ -772,7 +776,7 @@
         {
           "name": "whaleSize15k",
           "winRate": 54,
-          "record": "460W-391L",
+          "record": "460W-394L",
           "isDiscovered": false
         }
       ],
@@ -876,36 +880,6 @@
     "totalFactors": 12
   },
   "tradeLog": [
-    {
-      "type": "SKIP",
-      "market": "Will Liverpool FC vs. Nottingham Forest FC end in a draw?",
-      "reason": "Market already closed/resolved on Gamma",
-      "marketCategory": "other",
-      "timestamp": "2026-08-30T00:04:11.231Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "Winston-Salem Open: Arthur Fery vs Ignacio Buse",
-      "reason": "Market already closed/resolved on Gamma",
-      "marketCategory": "tennis",
-      "timestamp": "2026-08-30T00:04:11.893Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "Fed rate hike in 2026?",
-      "reason": "Entry price too high for other (57% > 40%)",
-      "walletTier": "STRONG",
-      "marketCategory": "politics",
-      "timestamp": "2026-08-30T00:04:12.611Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "LoL: T1 vs BNK FEARX - Game 2 Winner",
-      "reason": "Entry price too high for sports_binary (46% > 40%)",
-      "walletTier": "ELITE",
-      "marketCategory": "other",
-      "timestamp": "2026-08-30T00:04:13.057Z"
-    },
     {
       "type": "SKIP",
       "market": "Counter-Strike: Legacy vs Team Falcons (BO3) - BLAST Open Porto Group B",
@@ -1121,44 +1095,48 @@
       "exploration": true,
       "marketCategory": "sports_binary",
       "timestamp": "2026-08-30T03:37:54.677Z"
+    },
+    {
+      "type": "PAPER_TRADE",
+      "market": "Memphis vs. UNLV Runnin'",
+      "size": 3,
+      "entryPrice": 35,
+      "walletTier": "HIGH_CONVICTION",
+      "walletWR": 0,
+      "betSummary": null,
+      "whaleAction": "BUY",
+      "exploration": true,
+      "marketCategory": "other",
+      "timestamp": "2026-08-30T05:10:57.836Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Fed rate hike in 2026?",
+      "reason": "No proven edge for entry band 41-60 (-3pt)",
+      "walletTier": "STRONG",
+      "marketCategory": "politics",
+      "timestamp": "2026-08-30T05:10:57.913Z"
+    },
+    {
+      "type": "EXIT",
+      "market": "Memphis vs. UNLV Runnin'",
+      "shouldExit": true,
+      "reason": "Take profit hit (+128.6%)",
+      "exitType": "take_profit",
+      "pnl": 3.86,
+      "paperTrade": true,
+      "timestamp": "2026-08-30T05:15:57.269Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Will there be no change in Fed interest rates after the September 2026 meeting?",
+      "reason": "No proven edge for entry band 61-80 (0pt)",
+      "walletTier": "STRONG",
+      "marketCategory": "politics",
+      "timestamp": "2026-08-30T05:15:57.411Z"
     }
   ],
   "tradeHistory": [
-    {
-      "id": "at_1786632809477_06lhma",
-      "marketSlug": "mlb-cin-cws-2026-08-13",
-      "marketTitle": "Cincinnati Reds vs. Chicago White Sox",
-      "marketType": "other",
-      "signalSubType": "moneyline",
-      "direction": "Cincinnati Reds",
-      "directionRaw": "Cincinnati Reds",
-      "whaleAction": "BUY",
-      "entryPrice": 44,
-      "size": 3,
-      "walletTier": "HIGH_CONVICTION",
-      "walletWinRate": 0,
-      "walletBets": 0,
-      "score": 80,
-      "confidence": 56,
-      "hoursUntilEvent": 9.1,
-      "openedAt": "2026-08-13T14:53:29.477Z",
-      "paperTrade": true,
-      "marketCategory": "other",
-      "aiConfidence": null,
-      "strongCombo": null,
-      "isHighConviction": true,
-      "shares": 6.818181818181818,
-      "peakPctGain": 4.545454545454546,
-      "closedAt": "2026-08-13T21:12:47.825Z",
-      "exitPrice": 100,
-      "exitType": "market_resolved",
-      "exitReason": "Market resolved (gamma_resolved). Final price: 100%",
-      "pnl": 3.82,
-      "pnlPercent": 127.3,
-      "outcome": "win",
-      "entryHourUTC": 14,
-      "exitHourUTC": 21
-    },
     {
       "id": "at_1786609349549_sbsfzx",
       "marketSlug": "val-gx-fnc1-2026-08-13-map-handicap-home-1pt5",
@@ -2217,15 +2195,56 @@
       "outcome": "loss",
       "entryHourUTC": 0,
       "exitHourUTC": 2
+    },
+    {
+      "id": "at_1788066657753_xtsh7w",
+      "marketSlug": "cfb-mphs-unlv-2026-08-30",
+      "marketTitle": "Memphis vs. UNLV Runnin'",
+      "marketType": "other",
+      "signalSubType": "moneyline",
+      "direction": "UNLV Runnin",
+      "directionRaw": "UNLV Runnin",
+      "whaleAction": "BUY",
+      "entryPrice": 35,
+      "size": 3,
+      "walletTier": "HIGH_CONVICTION",
+      "walletWinRate": 0,
+      "walletBets": 0,
+      "score": 88,
+      "confidence": 62,
+      "hoursUntilEvent": 18.8,
+      "openedAt": "2026-08-30T05:10:57.753Z",
+      "paperTrade": true,
+      "marketCategory": "other",
+      "aiConfidence": null,
+      "strongCombo": null,
+      "isHighConviction": true,
+      "isExploration": true,
+      "agentProb": null,
+      "agentEdgePts": null,
+      "agentOpinion": null,
+      "shares": 8.571428571428571,
+      "peakPctGain": 128.57142857142858,
+      "trailingStopActive": true,
+      "trailingStopLevel": 108.57142857142858,
+      "closedAt": "2026-08-30T05:15:56.953Z",
+      "exitPrice": 80,
+      "exitType": "take_profit",
+      "exitReason": "Take profit hit (+128.6%)",
+      "pnl": 3.86,
+      "pnlPercent": 128.6,
+      "outcome": "win",
+      "entryHourUTC": 5,
+      "exitHourUTC": 5
     }
   ],
   "learningStats": {
     "success": true,
     "overview": {
       "totalFactorsTracked": 13,
-      "totalSignalsProcessed": 5724,
+      "totalSignalsProcessed": 5737,
       "overallWinRate": 55,
-      "pendingSignals": 334
+      "pendingSignals": 317
     },
     "walletEdge": {
       "totalTracked": 500,
@@ -2280,39 +2299,39 @@
       },
       "lastMinute2h": {
         "wins": 259,
-        "losses": 264,
-        "winRate": 50,
-        "weight": 1.13,
-        "lastUpdated": "2026-08-30T03:27:57.508Z",
-        "previousWeight": 1.18,
-        "optimizedAt": "2026-08-30T03:33:14.801Z"
+        "losses": 265,
+        "winRate": 49,
+        "weight": 1.16,
+        "lastUpdated": "2026-08-30T05:20:52.870Z",
+        "previousWeight": 1.2349999999999999,
+        "optimizedAt": "2026-08-30T05:20:58.344Z"
       },
       "whaleSize25k": {
-        "wins": 265,
-        "losses": 225,
+        "wins": 266,
+        "losses": 227,
         "winRate": 54,
         "weight": 1.18,
-        "lastUpdated": "2026-08-30T03:22:53.281Z",
+        "lastUpdated": "2026-08-30T05:30:58.737Z",
         "previousWeight": 1.23,
-        "optimizedAt": "2026-08-30T03:28:27.080Z"
+        "optimizedAt": "2026-08-30T05:37:28.617Z"
       },
       "concentrated": {
-        "wins": 622,
-        "losses": 536,
+        "wins": 623,
+        "losses": 539,
         "winRate": 54,
-        "weight": 1.18,
-        "lastUpdated": "2026-08-30T03:32:45.482Z",
-        "previousWeight": 1.23,
-        "optimizedAt": "2026-08-30T04:33:26.871Z"
+        "weight": 1.23,
+        "lastUpdated": "2026-08-30T06:11:01.621Z",
+        "previousWeight": 1.31,
+        "optimizedAt": "2026-08-30T06:11:07.185Z"
       },
       "whaleSize15k": {
         "wins": 460,
-        "losses": 391,
+        "losses": 394,
         "winRate": 54,
-        "weight": 1.18,
-        "lastUpdated": "2026-08-30T02:57:59.444Z",
-        "previousWeight": 1.23,
-        "optimizedAt": "2026-08-30T03:04:37.445Z"
+        "weight": 1.23,
+        "lastUpdated": "2026-08-30T06:11:01.621Z",
+        "previousWeight": 1.31,
+        "optimizedAt": "2026-08-30T06:11:07.185Z"
       },
       "freshWallet": {
         "wins": 65,
@@ -2325,21 +2344,21 @@
       },
       "strongWallet": {
         "wins": 609,
-        "losses": 444,
+        "losses": 446,
         "winRate": 58,
         "weight": 1.23,
-        "lastUpdated": "2026-08-30T03:07:55.447Z",
+        "lastUpdated": "2026-08-30T06:01:06.198Z",
         "previousWeight": 1.29,
-        "optimizedAt": "2026-08-30T03:23:31.955Z"
+        "optimizedAt": "2026-08-30T06:05:55.975Z"
       },
       "eliteWallet": {
         "wins": 193,
         "losses": 144,
         "winRate": 57,
-        "weight": 1.27,
+        "weight": 1.21,
         "lastUpdated": "2026-08-30T04:57:58.002Z",
-        "previousWeight": 1.355,
-        "optimizedAt": "2026-08-30T04:58:24.190Z"
+        "previousWeight": 1.27,
+        "optimizedAt": "2026-08-30T05:15:58.339Z"
       },
       "sportsMarket": {
         "wins": 61,
@@ -2422,11 +2441,11 @@
   "learningInsights": {
     "success": true,
     "systemPerformance": {
-      "totalSignalsProcessed": 5724,
-      "wins": 3149,
-      "losses": 2575,
+      "totalSignalsProcessed": 5737,
+      "wins": 3151,
+      "losses": 2586,
       "winRate": 55,
-      "pendingSignals": 334
+      "pendingSignals": 317
     },
     "insights": {
       "bestFactors": [
@@ -2487,7 +2506,7 @@
         "factor": "strongWallet",
         "winRate": 58,
         "wins": 609,
-        "losses": 444,
+        "losses": 446,
         "weight": 1.23,
         "performance": "AVERAGE"
       },
@@ -2496,7 +2515,7 @@
         "winRate": 57,
         "wins": 193,
         "losses": 144,
-        "weight": 1.27,
+        "weight": 1.21,
         "performance": "AVERAGE"
       },
       {
@@ -2518,25 +2537,25 @@
       {
         "factor": "whaleSize25k",
         "winRate": 54,
-        "wins": 265,
-        "losses": 225,
+        "wins": 266,
+        "losses": 227,
         "weight": 1.18,
         "performance": "AVERAGE"
       },
       {
         "factor": "concentrated",
         "winRate": 54,
-        "wins": 622,
-        "losses": 536,
-        "weight": 1.18,
+        "wins": 623,
+        "losses": 539,
+        "weight": 1.23,
         "performance": "AVERAGE"
       },
       {
         "factor": "whaleSize15k",
         "winRate": 54,
         "wins": 460,
-        "losses": 391,
-        "weight": 1.18,
+        "losses": 394,
+        "weight": 1.23,
         "performance": "AVERAGE"
       },
       {
@@ -2549,11 +2568,11 @@
       },
       {
         "factor": "lastMinute2h",
-        "winRate": 50,
+        "winRate": 49,
         "wins": 259,
-        "losses": 264,
-        "weight": 1.13,
-        "performance": "AVERAGE"
+        "losses": 265,
+        "weight": 1.16,
+        "performance": "WEAK"
       }
     ]
   },
@@ -2566,12 +2585,12 @@
         "key": "underdog",
         "label": "Underdog entries (≤40¢)",
         "side": "follow",
-        "settled": 481,
+        "settled": 482,
         "wins": 162,
-        "losses": 319,
-        "staked": 48100,
-        "pnl": 740.29,
-        "roi": 1.5,
+        "losses": 320,
+        "staked": 48200,
+        "pnl": 640.29,
+        "roi": 1.3,
         "winRate": 34,
         "readyForAuto": true
       },
@@ -2579,25 +2598,25 @@
         "key": "fade_favorites",
         "label": "Fade favorites (≥60¢)",
         "side": "fade",
-        "settled": 1431,
-        "wins": 437,
-        "losses": 994,
-        "staked": 143100,
-        "pnl": -240.5,
-        "roi": -0.2,
+        "settled": 1434,
+        "wins": 439,
+        "losses": 995,
+        "staked": 143400,
+        "pnl": 253.62,
+        "roi": 0.2,
         "winRate": 31,
-        "readyForAuto": false
+        "readyForAuto": true
       },
       {
         "key": "all",
         "label": "Follow all signals",
         "side": "follow",
-        "settled": 3888,
-        "wins": 2142,
-        "losses": 1746,
-        "staked": 388800,
-        "pnl": -2089.03,
-        "roi": -0.5,
+        "settled": 3896,
+        "wins": 2143,
+        "losses": 1753,
+        "staked": 389600,
+        "pnl": -2744.1,
+        "roi": -0.7,
         "winRate": 55,
         "readyForAuto": false
       },
@@ -2605,13 +2624,26 @@
         "key": "high_score",
         "label": "High score (≥100)",
         "side": "follow",
-        "settled": 1002,
-        "wins": 553,
-        "losses": 449,
-        "staked": 100200,
-        "pnl": -634.22,
-        "roi": -0.6,
+        "settled": 1004,
+        "wins": 554,
+        "losses": 450,
+        "staked": 100400,
+        "pnl": -689.29,
+        "roi": -0.7,
         "winRate": 55,
+        "readyForAuto": false
+      },
+      {
+        "key": "ai_investigator",
+        "label": "AI investigator (≥12pt disagreement)",
+        "side": "agent",
+        "settled": 1,
+        "wins": 0,
+        "losses": 1,
+        "staked": 100,
+        "pnl": -100,
+        "roi": -100,
+        "winRate": 0,
         "readyForAuto": false
       }
     ]
@@ -2623,9 +2655,10 @@
     "settledCount": 0,
     "winRate": null,
     "lastScan": {
-      "at": 1788065581278,
-      "scanned": 2,
+      "at": 1788070263983,
+      "scanned": 3,
       "sports": [
+        "wnba",
         "mlb",
         "nfl"
       ],
@@ -2999,6 +3032,204 @@
     "enabled": true,
     "results": [
       {
+        "inv_key": "investigation:will-the-ornn-h100-index-be-between-2pt75-and-3pt00-on-august-31-2026-1785423806195::Yes",
+        "market_slug": "will-the-ornn-h100-index-be-between-2pt75-and-3pt00-on-august-31-2026-1785423806195",
+        "direction_raw": "Yes",
+        "market_title": "Will the Ornn H100 Index be between $2.75 and $3.00 on August 31, 2026?",
+        "source": "sweep",
+        "status": "done",
+        "agent_prob": 0.42,
+        "confidence": "MEDIUM",
+        "reasoning": "The most recent finalized Ornn H100 Index value found (settled Aug 28, 2026) was $2.93/hr, which sits inside the $2.75–$3.00 bracket, but other recent reporting shows the index has been volatile, with mentions of a corridor around $2.60–$2.80 and a dip to roughly $2.63 earlier in the period, plus a broader ~30% pullback from its May 2026 peak. With only ~3 days between the last known data point and the Aug 31 resolution date, and daily swings of several cents to tens of cents observed, there is meaningful risk the final value drifts below $2.75 into the next-lower bracket, while some chance it stays put or even rises modestly.",
+        "key_findings": "[\"Ornn Data preview page: H100 SXM settled at $2.93/hr on August 28, 2026 (data.ornn.com)\",\"Industry blog (exponentialindustry.com) referenced a $2.60-$2.80 'corridor' with a $2.74 clearing price in August 2026, suggesting recent choppiness\",\"A LinkedIn/SemiAnalysis post referenced an Ornn H100 Index drop to about $2.63, though called potentially misleading due to limited data\",\"Global Markets Investor noted the OCPI has fallen roughly 30% from its May 2026 peak, indicating a broader downtrend in H100 rental pricing thisic period, though month-to-month values have been choppy\",\"Prior monthly resolutions (June 30, 2026) settled in the $2.30-$2.60 bracket, showing the index has moved up since then into the high-$2s by late August\"]",
+        "model": "claude-sonnet-5",
+        "web_searches": 5,
+        "market_prob": 0.455,
+        "entry_price_pct": 46,
+        "edge_pts": -3.5,
+        "event_date": "2026-08-31T23:59:00Z",
+        "investigated_at": "2026-08-30T05:37:06.540Z",
+        "outcome": null,
+        "y": null,
+        "agent_brier": null,
+        "market_brier": null,
+        "settled_by": null,
+        "settled_at": null,
+        "updated_at": "2026-08-30T05:37:06.540Z",
+        "market_impact": "[{\"asset\":\"COIN\",\"assetType\":\"stock\",\"direction\":\"UP\",\"conviction\":\"LOW\",\"rationale\":\"Not directly relevant; included as placeholder is inappropriate, no strong causal link to crypto/GPU pricing market outcome.\"}]",
+        "last_error": null,
+        "market_prob_now": 0.41,
+        "price_checked_at": "2026-08-30T06:11:52.402Z"
+      },
+      {
+        "inv_key": "investigation:lowest-temperature-in-london-on-august-29-2026-18c::Yes",
+        "market_slug": "lowest-temperature-in-london-on-august-29-2026-18c",
+        "direction_raw": "Yes",
+        "market_title": "Will the lowest temperature in London be 18°C on August 29?",
+        "source": "sweep",
+        "status": "done",
+        "agent_prob": 0.68,
+        "confidence": "MEDIUM",
+        "reasoning": "Met Office forecasts for London City Airport around this date show overnight/nighttime minimum temperatures clustering in the 16-18°C range during a mild/warm spell in late August 2026, with one forecast snippet explicitly showing an 18°C minimum nighttime temperature. Since resolution requires the whole-degree minimum reading for the specific calendar day (Aug 29) at London City Airport per NOAA, and forecasts this close to the event date are generally reliable, 18°C is a plausible and likely modal outcome, but station-specific measurement differences (NOAA vs Met Office) and the precise timing of the daily low (which may fall on either side of midnight) introduce meaningful uncertainty for hitting the exact single-degree bin.",
+        "key_findings": "[\"Met Office forecast snippet for London City Airport showed a sequence including 'Minimum nighttime temperature: 18 degrees Celsius' for one of the near-term days (source: weather.metoffice.gov.uk)\",\"Subsequent nights in the same Met Office sequence showed minimums of 16°C and 17°C, indicating lows in London are clustering in the mid-to-high teens Celsius during this period\",\"AccuWeather's August 2026 monthly outlook for London listed overnight lows generally between roughly 13-17°C (55-63°F), consistent with mid-teens lows being common but slightly below 18°C on average\",\"Could not directly access the NOAA EGLC timeseries page or confirm live/actual observations for Aug 29 due to search tool limits, adding uncertainty to the exact whole-degree resolution value\"]",
+        "model": "claude-sonnet-5",
+        "web_searches": 5,
+        "market_prob": 0.82,
+        "entry_price_pct": 82,
+        "edge_pts": -14,
+        "event_date": "2026-08-29T12:00:00Z",
+        "investigated_at": "2026-08-29T07:28:50.213Z",
+        "outcome": "WIN",
+        "y": 1,
+        "agent_brier": 0.1024,
+        "market_brier": 0.0324,
+        "settled_by": "gamma",
+        "settled_at": "2026-08-30T05:10:56.143Z",
+        "updated_at": "2026-08-30T05:10:56.143Z",
+        "market_impact": null,
+        "last_error": null
+      },
+      {
+        "inv_key": "investigation:highest-temperature-in-wuhan-on-august-29-2026-31c::Yes",
+        "market_slug": "highest-temperature-in-wuhan-on-august-29-2026-31c",
+        "direction_raw": "Yes",
+        "market_title": "Will the highest temperature in Wuhan be 31°C on August 29?",
+        "source": "sweep",
+        "status": "done",
+        "agent_prob": 0.2,
+        "confidence": "MEDIUM",
+        "reasoning": "Multiple forecast sources (Ventusky, AQI.in, AccuWeather, Met Office) for Wuhan on Aug 29, 2026 cluster in the 30-33°C range, with individual site estimates of 30°C, 32°C, and ~33°C (91°F). Since 31°C sits within this plausible range but is not the modal forecast across sources, and daily highs can vary by a degree or two from forecasts once actual NOAA/METAR readings at Tianhe airport come in, a bucket resolution of exactly 31°C has moderate but not high likelihood.",
+        "key_findings": "[\"Ventusky 8-day forecast shows Aug 29, 2026 high of 32°C for Wuhan\",\"AQI.in forecast lists Saturday Aug 29 temp as 30°C, partly cloudy\",\"AccuWeather (via Chinese site) shows Aug 29 high ~91°F (~32.8°C, i.e. ~33°C)\",\"UK Met Office forecast for Wuhan International shows daytime highs around 29-31°C across the surrounding days\",\"No confirmed actual/observed NOAA Tianhe airport reading for Aug 29 was found via search (data limit reached)\"]",
+        "model": "claude-sonnet-5",
+        "web_searches": 5,
+        "market_prob": 0.225,
+        "entry_price_pct": 23,
+        "edge_pts": -2.5,
+        "event_date": "2026-08-29T12:00:00Z",
+        "investigated_at": "2026-08-29T02:36:33.423Z",
+        "outcome": "LOSS",
+        "y": 0,
+        "agent_brier": 0.04,
+        "market_brier": 0.0506,
+        "settled_by": "gamma",
+        "settled_at": "2026-08-30T05:10:55.406Z",
+        "updated_at": "2026-08-30T05:10:55.406Z",
+        "market_impact": null,
+        "last_error": null
+      },
+      {
+        "inv_key": "investigation:elc-car-she-2026-08-29-btts::Yes",
+        "market_slug": "elc-car-she-2026-08-29-btts",
+        "direction_raw": "Yes",
+        "market_title": "Cardiff City FC vs. Sheffield United FC: Both Teams to Score",
+        "source": "sweep",
+        "status": "done",
+        "agent_prob": 0.53,
+        "confidence": "MEDIUM",
+        "reasoning": "Cardiff have scored in both league games so far (1 vs Wrexham, 2 vs Derby) but their defense is leaky, having conceded in every match amid an injury crisis. Sheffield United, however, are goalless in their opening two Championship fixtures (0-0 vs Birmingham, 0-0 vs Swansea) despite decent underlying chances, suggesting their attack has been below its normal level and could regress toward scoring soon, but there's real uncertainty whether that happens this match. Historical head-to-head favors Sheffield United defensively (6 of last 7 meetings won by Blades), and their defense has yet to concede this season, slightly offsetting Cardiff's attacking output.",
+        "key_findings": "[\"Sheffield United have played back-to-back 0-0 draws to open the 2026-27 Championship season (vs Birmingham and Swansea) - The72/Sky Sports/Yardbarker\",\"Cardiff City drew 1-1 with Wrexham and 2-2 with Derby, scoring in both league games but also conceding in both - Sports Mole/betting preview\",\"Cardiff have a defensive injury crisis (Chambers, Osho, Fish, Lawlor all missing) contributing to goals conceded\",\"Sheffield United's attack has generated chances (hit woodwork vs Swansea) but lacked a 'finishing touch' - Yardbarker\",\"H2H trend heavily favors Sheffield United (6 of last 7 meetings won by Blades), including a 2-0 win at Bramall Lane last season\"]",
+        "model": "claude-sonnet-5",
+        "web_searches": 4,
+        "market_prob": 0.6,
+        "entry_price_pct": 60,
+        "edge_pts": -7,
+        "event_date": "2026-08-29T14:00:00Z",
+        "investigated_at": "2026-08-28T18:53:27.039Z",
+        "outcome": "WIN",
+        "y": 1,
+        "agent_brier": 0.2209,
+        "market_brier": 0.16,
+        "settled_by": "gamma",
+        "settled_at": "2026-08-30T05:08:03.499Z",
+        "updated_at": "2026-08-30T05:08:03.499Z",
+        "market_impact": null,
+        "last_error": null
+      },
+      {
+        "inv_key": "investigation:elc-bri-por-2026-08-29-bri::Yes",
+        "market_slug": "elc-bri-por-2026-08-29-bri",
+        "direction_raw": "Yes",
+        "market_title": "Will Bristol City FC win on 2026-08-29?",
+        "source": "sweep",
+        "status": "done",
+        "agent_prob": 0.42,
+        "confidence": "MEDIUM",
+        "reasoning": "Bristol City are winless in their first three matches this season (League Cup loss to Walsall, 2-0 home loss to Millwall, 1-1 draw at Birmingham with a very late equalizer), while Portsmouth arrive off a confidence-boosting 3-1 away win at Lincoln. Bristol City do have home advantage at Ashton Gate, which offsets some of Portsmouth's momentum, but their poor early form and defensive issues create real uncertainty for a home win.",
+        "key_findings": "[\"Bristol City vs Portsmouth, Championship, Ashton Gate, Sat Aug 29 2026 15:00 BST (14:00 UTC) - bcfc.co.uk\",\"Bristol City winless in first 3 games: lost 1-0 (EFL Cup) to Walsall, lost 0-2 to Millwall at home, drew at Birmingham via 85th-min equalizer - LiveScore/The72\",\"Portsmouth got their first Championship win of the season, beating Lincoln City 3-1 away on Aug 22 - Sky Sports\",\"Preview headlines describe Bristol City as 'set for first win' but note lingering form concerns; Portsmouth described as having a 'confidence-boosting' result - LiveScore, The72\"]",
+        "model": "claude-sonnet-5",
+        "web_searches": 4,
+        "market_prob": 0.435,
+        "entry_price_pct": 44,
+        "edge_pts": -1.5,
+        "event_date": "2026-08-29T14:00:00Z",
+        "investigated_at": "2026-08-28T18:40:45.939Z",
+        "outcome": "WIN",
+        "y": 1,
+        "agent_brier": 0.3364,
+        "market_brier": 0.3192,
+        "settled_by": "gamma",
+        "settled_at": "2026-08-30T05:08:01.250Z",
+        "updated_at": "2026-08-30T05:08:01.250Z",
+        "market_impact": null,
+        "last_error": null
+      },
+      {
+        "inv_key": "investigation:lol-bro2-fox1-2026-08-28-game1::BNK FEARX",
+        "market_slug": "lol-bro2-fox1-2026-08-28-game1",
+        "direction_raw": "BNK FEARX",
+        "market_title": "LoL: HANJIN BRION vs BNK FEARX - Game 1 Winner",
+        "source": "whale",
+        "status": "done",
+        "agent_prob": 0.99,
+        "confidence": "HIGH",
+        "reasoning": "Multiple reputable esports news sources (Inven Global) confirm that in the August 28, 2026 LCK Play-In match between Hanjin BRION and BNK FEARX, BNK FEARX won Game 1 by taking the Hextech Soul and closing out a teamfight around the 31-minute mark. BNK FEARX went on to win the full series 3-1, but Game 1 specifically was clearly won by BNK FEARX.",
+        "key_findings": "[\"Inven Global: 'Marching down the mid lane with the Hextech Soul, BNK FEARX swept up kills in another fight to take Game 1.'\",\"Inven Global (second article): 'The winner of game 1 was BNK FEARX.'\",\"BNK FEARX ultimately won the full series 3-1 to claim the final playoff spot, per Inven Global reporting.\"]",
+        "model": "claude-sonnet-5",
+        "web_searches": 4,
+        "market_prob": 1,
+        "entry_price_pct": 54,
+        "edge_pts": -1,
+        "event_date": "2026-08-28T23:59:00.000Z",
+        "investigated_at": "2026-08-28T18:43:29.730Z",
+        "outcome": "WIN",
+        "y": 1,
+        "agent_brier": 0.0001,
+        "market_brier": 0,
+        "settled_by": "gamma",
+        "settled_at": "2026-08-30T05:07:59.691Z",
+        "updated_at": "2026-08-30T05:07:59.691Z",
+        "market_impact": null,
+        "last_error": null
+      },
+      {
+        "inv_key": "investigation:cs2-navi-pain-2026-08-28::paiN",
+        "market_slug": "cs2-navi-pain-2026-08-28",
+        "direction_raw": "paiN",
+        "market_title": "Counter-Strike: Natus Vincere vs paiN (BO3) - BLAST Open Porto Group A",
+        "source": "whale",
+        "status": "done",
+        "agent_prob": 0.13,
+        "confidence": "MEDIUM",
+        "reasoning": "NaVi is currently ranked #2-6 in the world and heavily favored over paiN Gaming, a South American team of much lower caliber, in this BLAST Open Porto Group A lower bracket match. Market odds (e.g., Polymarket showing NaVi ~88% / paiN ~13%) and bookmaker lines consistent with NaVi being roughly a 1.15-1.20 favorite corroborate a strong NaVi favorite. While paiN has occasionally upset NaVi before (Jan 2025 BLAST Bounty), NaVi's 2026 roster and ranking make them clear favorites here.",
+        "key_findings": "[\"HLTV lists NaVi as top-6 world ranked team in August 2026 vs paiN Gaming, a lower-tier South American squad\",\"Polymarket-style odds show NaVi ~88% implied win probability vs paiN ~13%\",\"Historical precedent: paiN beat NaVi 2-1 at BLAST Bounty 2025 Season 1 Finals, showing paiN can compete\",\"Match appears not yet played as of search, scheduled for August 28, 2026 per BLAST Open Porto Group A bracket\"]",
+        "model": "claude-sonnet-5",
+        "web_searches": 5,
+        "market_prob": 0,
+        "entry_price_pct": 18,
+        "edge_pts": 13,
+        "event_date": "2026-08-28T23:59:00.000Z",
+        "investigated_at": "2026-08-28T18:42:54.347Z",
+        "outcome": "LOSS",
+        "y": 0,
+        "agent_brier": 0.0169,
+        "market_brier": 0,
+        "settled_by": "gamma",
+        "settled_at": "2026-08-30T05:07:58.407Z",
+        "updated_at": "2026-08-30T05:07:58.407Z",
+        "market_impact": null,
+        "last_error": null
+      },
+      {
         "inv_key": "investigation:highest-temperature-in-qingdao-on-august-31-2026-31c::Yes",
         "market_slug": "highest-temperature-in-qingdao-on-august-31-2026-31c",
         "direction_raw": "Yes",
@@ -3025,8 +3256,8 @@
         "updated_at": "2026-08-30T03:58:11.618Z",
         "market_impact": null,
         "last_error": null,
-        "market_prob_now": 0.355,
-        "price_checked_at": "2026-08-30T05:01:00.376Z"
+        "market_prob_now": 0.465,
+        "price_checked_at": "2026-08-30T06:11:52.402Z"
       },
       {
         "inv_key": "investigation:elon-musk-of-tweets-august-28-september-4-2026-140-159::Yes",
@@ -3056,7 +3287,7 @@
         "market_impact": null,
         "last_error": null,
         "market_prob_now": 0.105,
-        "price_checked_at": "2026-08-30T05:01:00.376Z"
+        "price_checked_at": "2026-08-30T06:11:52.402Z"
       },
       {
         "inv_key": "investigation:will-swedish-social-democratic-party-s-win-at-least-33-of-all-valid-votes-20260812172636414::Yes",
@@ -3085,8 +3316,8 @@
         "updated_at": "2026-08-30T01:47:05.935Z",
         "market_impact": null,
         "last_error": null,
-        "market_prob_now": 0.19,
-        "price_checked_at": "2026-08-30T05:01:00.376Z"
+        "market_prob_now": 0.185,
+        "price_checked_at": "2026-08-30T06:11:52.402Z"
       },
       {
         "inv_key": "investigation:highest-temperature-in-wellington-on-august-30-2026-18c::Yes",
@@ -3143,8 +3374,8 @@
         "updated_at": "2026-08-30T01:37:50.021Z",
         "market_impact": null,
         "last_error": null,
-        "market_prob_now": 0.515,
-        "price_checked_at": "2026-08-30T05:01:00.376Z"
+        "market_prob_now": 0.415,
+        "price_checked_at": "2026-08-30T06:11:52.402Z"
       },
       {
         "inv_key": "investigation:will-anthropic-have-the-best-ai-model-on-livebench-overall-at-the-end-of-september-2026-20260728164124637::Yes",
@@ -3173,8 +3404,8 @@
         "updated_at": "2026-08-30T00:27:09.426Z",
         "market_impact": "[{\"asset\":\"Defense/enterprise AI exposure via MSFT\",\"assetType\":\"stock\",\"direction\":\"VOLATILE\",\"conviction\":\"LOW\",\"rationale\":\"Microsoft has heavy exposure to both OpenAI (via investment) and enterprise AI demand broadly; a continued Anthropic benchmark lead could marginally pressure sentiment on OpenAI-linked narratives but effect is diffuse and low-conviction.\"},{\"asset\":\"Alphabet/GOOGL\",\"assetType\":\"stock\",\"direction\":\"DOWN\",\"conviction\":\"LOW\",\"rationale\":\"If Anthropic retains the top LiveBench spot over Google's Gemini line, it reinforces a narrative that Google has not achieved outright model-quality leadership, a mild sentiment headwind for AI-model competitive positioning.\"},{\"asset\":\"AI/Cloud infrastructure sector (Anthropic ecosystem: AWS, Google Cloud partners)\",\"assetType\":\"sector\",\"direction\":\"UP\",\"conviction\":\"LOW\",\"rationale\":\"Continued benchmark leadership strengthens Anthropic's enterprise sales narrative, indirectly benefiting cloud partners (AWS, Google Cloud via TPU deal) that host and monetize Claude usage through increased enterprise adoption flows.\"}]",
         "last_error": null,
-        "market_prob_now": 0.69,
-        "price_checked_at": "2026-08-30T05:01:00.376Z"
+        "market_prob_now": 0.71,
+        "price_checked_at": "2026-08-30T06:11:52.402Z"
       },
       {
         "inv_key": "investigation:highest-temperature-in-busan-on-august-31-2026-32c::Yes",
@@ -3203,8 +3434,8 @@
         "updated_at": "2026-08-30T00:22:27.296Z",
         "market_impact": null,
         "last_error": null,
-        "market_prob_now": 0.505,
-        "price_checked_at": "2026-08-30T05:01:00.376Z"
+        "market_prob_now": 0.5,
+        "price_checked_at": "2026-08-30T06:11:52.402Z"
       },
       {
         "inv_key": "investigation:will-the-price-of-bitcoin-be-between-78000-80000-on-august-30-2026::Yes",
@@ -3233,8 +3464,8 @@
         "updated_at": "2026-08-30T00:12:21.266Z",
         "market_impact": null,
         "last_error": null,
-        "market_prob_now": 0.555,
-        "price_checked_at": "2026-08-30T05:01:00.376Z"
+        "market_prob_now": 0.605,
+        "price_checked_at": "2026-08-30T06:11:52.402Z"
       },
       {
         "inv_key": "investigation:kristi-noem-divorce-by-august-31::Yes",
@@ -3264,7 +3495,7 @@
         "market_impact": null,
         "last_error": null,
         "market_prob_now": 0.105,
-        "price_checked_at": "2026-08-30T05:01:00.376Z"
+        "price_checked_at": "2026-08-30T06:11:52.402Z"
       },
       {
         "inv_key": "investigation:will-carlos-alcaraz-win-the-2026-mens-us-open::Yes",
@@ -3322,7 +3553,7 @@
         "market_impact": "[{\"asset\":\"MSFT\",\"assetType\":\"stock\",\"direction\":\"UP\",\"conviction\":\"LOW\",\"rationale\":\"A high-scoring, clearly SOTA Astra debut would reinforce Microsoft's OpenAI partnership narrative and Azure AI demand, though this is a minor, sentiment-driven effect rather than a fundamental catalyst.\"},{\"asset\":\"NVDA\",\"assetType\":\"stock\",\"direction\":\"UP\",\"conviction\":\"LOW\",\"rationale\":\"Confirmation of a frontier-leading OpenAI model reinforces continued compute demand narratives, supporting AI-infrastructure sentiment, though this is an indirect and modest effect.\"},{\"asset\":\"AI sector / AI-themed ETFs\",\"assetType\":\"sector\",\"direction\":\"UP\",\"conviction\":\"LOW\",\"rationale\":\"A decisive Astra leaderboard win would be read as evidence AI capability progress continues unabated (countering 'AI plateau' fears), lifting broad AI equity sentiment modestly.\"}]",
         "last_error": null,
         "market_prob_now": 0.095,
-        "price_checked_at": "2026-08-30T05:01:00.376Z"
+        "price_checked_at": "2026-08-30T06:11:52.402Z"
       },
       {
         "inv_key": "investigation:will-silvia-cristina-win-the-second-most-votes-in-the-2026-rondonia-senate-election::Yes",
@@ -3353,36 +3584,6 @@
         "last_error": "Anthropic API 503: credential validation failed"
       },
       {
-        "inv_key": "investigation:lowest-temperature-in-london-on-august-29-2026-18c::Yes",
-        "market_slug": "lowest-temperature-in-london-on-august-29-2026-18c",
-        "direction_raw": "Yes",
-        "market_title": "Will the lowest temperature in London be 18°C on August 29?",
-        "source": "sweep",
-        "status": "done",
-        "agent_prob": 0.68,
-        "confidence": "MEDIUM",
-        "reasoning": "Met Office forecasts for London City Airport around this date show overnight/nighttime minimum temperatures clustering in the 16-18°C range during a mild/warm spell in late August 2026, with one forecast snippet explicitly showing an 18°C minimum nighttime temperature. Since resolution requires the whole-degree minimum reading for the specific calendar day (Aug 29) at London City Airport per NOAA, and forecasts this close to the event date are generally reliable, 18°C is a plausible and likely modal outcome, but station-specific measurement differences (NOAA vs Met Office) and the precise timing of the daily low (which may fall on either side of midnight) introduce meaningful uncertainty for hitting the exact single-degree bin.",
-        "key_findings": "[\"Met Office forecast snippet for London City Airport showed a sequence including 'Minimum nighttime temperature: 18 degrees Celsius' for one of the near-term days (source: weather.metoffice.gov.uk)\",\"Subsequent nights in the same Met Office sequence showed minimums of 16°C and 17°C, indicating lows in London are clustering in the mid-to-high teens Celsius during this period\",\"AccuWeather's August 2026 monthly outlook for London listed overnight lows generally between roughly 13-17°C (55-63°F), consistent with mid-teens lows being common but slightly below 18°C on average\",\"Could not directly access the NOAA EGLC timeseries page or confirm live/actual observations for Aug 29 due to search tool limits, adding uncertainty to the exact whole-degree resolution value\"]",
-        "model": "claude-sonnet-5",
-        "web_searches": 5,
-        "market_prob": 0.82,
-        "entry_price_pct": 82,
-        "edge_pts": -14,
-        "event_date": "2026-08-29T12:00:00Z",
-        "investigated_at": "2026-08-29T07:28:50.213Z",
-        "outcome": null,
-        "y": null,
-        "agent_brier": null,
-        "market_brier": null,
-        "settled_by": null,
-        "settled_at": null,
-        "updated_at": "2026-08-29T07:28:50.213Z",
-        "market_impact": null,
-        "last_error": null,
-        "market_prob_now": 1,
-        "price_checked_at": "2026-08-30T05:01:00.376Z"
-      },
-      {
         "inv_key": "investigation:highest-temperature-in-paris-on-august-31-2026-24c::Yes",
         "market_slug": "highest-temperature-in-paris-on-august-31-2026-24c",
         "direction_raw": "Yes",
@@ -3409,198 +3610,53 @@
         "updated_at": "2026-08-29T07:27:27.406Z",
         "market_impact": null,
         "last_error": "Anthropic API 524: error code: 524\n"
-      },
-      {
-        "inv_key": "investigation:highest-temperature-in-london-on-august-30-2026-22c::Yes",
-        "market_slug": "highest-temperature-in-london-on-august-30-2026-22c",
-        "direction_raw": "Yes",
-        "market_title": "Will the highest temperature in London be 22°C on August 30?",
-        "source": "sweep",
-        "status": "done",
-        "agent_prob": 0.18,
-        "confidence": "LOW",
-        "reasoning": "Multiple forecast sources point to a London high around 21-26°C on Aug 30, 2026, with AccuWeather implying ~21-22°C (70-72°F), Met Office London City Airport showing daily highs in the 22-25°C range for the surrounding days, and meteoblue suggesting ~25-26°C. Given the wide dispersion across sources and the whole-degree bucket requirement, 22°C is a plausible but not most-likely single value; the mode of forecasts leans slightly warmer (23-25°C), making 22°C one of several competing outcomes rather than the clear favorite.",
-        "key_findings": "[\"AccuWeather forecast for Aug 30 implied ~21-22°C (70-72°F) high\",\"Met Office London City Airport near-term forecast shows daily highs cycling between 21°C and 25°C across nearby days\",\"meteoblue forecast for London City Airport on the relevant Sunday implied ~25-26°C (78°F) peak\",\"Weather-forecast.com suggested unusually warm conditions (up to 35°C) later in the week, indicating a warming trend into early September which could push Aug 30 toward the higher end\",\"Forecasts this close to the date (1 day out) are generally reliable but show some spread across providers, suggesting genuine uncertainty in the exact whole-degree bucket\"]",
-        "model": "claude-sonnet-5",
-        "web_searches": 5,
-        "market_prob": 0.335,
-        "entry_price_pct": 34,
-        "edge_pts": -15.5,
-        "event_date": "2026-08-30T12:00:00Z",
-        "investigated_at": "2026-08-29T06:16:18.312Z",
-        "outcome": null,
-        "y": null,
-        "agent_brier": null,
-        "market_brier": null,
-        "settled_by": null,
-        "settled_at": null,
-        "updated_at": "2026-08-29T06:16:18.312Z",
-        "market_impact": null,
-        "last_error": null,
-        "market_prob_now": 0.495,
-        "price_checked_at": "2026-08-30T05:01:00.376Z"
-      },
-      {
-        "inv_key": "investigation:highest-temperature-in-munich-on-august-30-2026-28c::Yes",
-        "market_slug": "highest-temperature-in-munich-on-august-30-2026-28c",
-        "direction_raw": "Yes",
-        "market_title": "Will the highest temperature in Munich be 28°C on August 30?",
-        "source": "sweep",
-        "status": "done",
-        "agent_prob": 0.08,
-        "confidence": "MEDIUM",
-        "reasoning": "Multiple forecast sources (AccuWeather, WeatherBug, climate averages) point to a high temperature in Munich on Aug 30, 2026 in the 23-26°C range, with climate-average highs for late August around 23°C. 28°C would require the actual high to run 2-5°C above the day-ahead forecast consensus, which is possible but not the most likely single-degree outcome given forecasts this close to the event date tend to be fairly accurate.",
-        "key_findings": "[\"AccuWeather 15-day forecast showed Aug 30 high of ~74-79°F (23-26°C) depending on query snapshot\",\"Climate-data.org notes Munich's typical high in the third week of August is ~23.2°C (73.8°F)\",\"WeatherBug 10-day forecast for Munich showed highs around 73°F (23°C) for nearby days\",\"No source found forecasting a high as warm as 28°C for Aug 30, 2026 in Munich\",\"Forecast is only ~1 day out from the observation date (today is Aug 29), so short-range forecast accuracy should be relatively high\"]",
-        "model": "claude-sonnet-5",
-        "web_searches": 5,
-        "market_prob": 0.205,
-        "entry_price_pct": 21,
-        "edge_pts": -12.5,
-        "event_date": "2026-08-30T12:00:00Z",
-        "investigated_at": "2026-08-29T05:56:29.145Z",
-        "outcome": null,
-        "y": null,
-        "agent_brier": null,
-        "market_brier": null,
-        "settled_by": null,
-        "settled_at": null,
-        "updated_at": "2026-08-29T05:56:29.145Z",
-        "market_impact": null,
-        "last_error": null,
-        "market_prob_now": 0.17,
-        "price_checked_at": "2026-08-30T05:01:00.376Z"
-      },
-      {
-        "inv_key": "investigation:highest-temperature-in-shanghai-on-august-29-2026-32c::Yes",
-        "market_slug": "highest-temperature-in-shanghai-on-august-29-2026-32c",
-        "direction_raw": "Yes",
-        "market_title": "Will the highest temperature in Shanghai be 32°C on August 29?",
-        "source": "whale",
-        "status": "error_transient",
-        "agent_prob": null,
-        "confidence": null,
-        "reasoning": null,
-        "key_findings": null,
-        "model": null,
-        "web_searches": null,
-        "market_prob": 0.605,
-        "entry_price_pct": null,
-        "edge_pts": null,
-        "event_date": null,
-        "investigated_at": null,
-        "outcome": null,
-        "y": null,
-        "agent_brier": null,
-        "market_brier": null,
-        "settled_by": null,
-        "settled_at": null,
-        "updated_at": "2026-08-29T04:57:24.235Z",
-        "market_impact": null,
-        "last_error": "Anthropic API 524: error code: 524\n"
-      },
-      {
-        "inv_key": "investigation:will-there-be-exactly-1-north-korea-test-in-september-2026::Yes",
-        "market_slug": "will-there-be-exactly-1-north-korea-test-in-september-2026",
-        "direction_raw": "Yes",
-        "market_title": "Will there be exactly 1 North Korea test in September 2026?",
-        "source": "whale",
-        "status": "error_transient",
-        "agent_prob": null,
-        "confidence": null,
-        "reasoning": null,
-        "key_findings": null,
-        "model": null,
-        "web_searches": null,
-        "market_prob": 0.305,
-        "entry_price_pct": null,
-        "edge_pts": null,
-        "event_date": null,
-        "investigated_at": null,
-        "outcome": null,
-        "y": null,
-        "agent_brier": null,
-        "market_brier": null,
-        "settled_by": null,
-        "settled_at": null,
-        "updated_at": "2026-08-29T04:02:01.897Z",
-        "market_impact": null,
-        "last_error": "Investigation exception: The operation was aborted"
-      },
-      {
-        "inv_key": "investigation:will-finding-emily-score-at-least-86-on-the-rotten-tomatoes-tomatometer::Yes",
-        "market_slug": "will-finding-emily-score-at-least-86-on-the-rotten-tomatoes-tomatometer",
-        "direction_raw": "Yes",
-        "market_title": "Will \"Finding Emily\" score at least 86 on the Rotten Tomatoes Tomatometer?",
-        "source": "sweep",
-        "status": "done",
-        "agent_prob": 0.62,
-        "confidence": "MEDIUM",
-        "reasoning": "Multiple recent Rotten Tomatoes browse pages (as of Aug 28-29, 2026) show 'Finding Emily' with a Tomatometer score of 87%, just above the 86% threshold. Scores for freshly released films can fluctuate slightly as more reviews are added before the Aug 31 measurement date, but the current 87% reading is close enough that it could dip below 86% with a few additional negative reviews, or stay/rise above.",
-        "key_findings": "[\"RT 'New Movies Out Now' browse page lists 'Finding Emily · Opened Aug 28, 2026' at 87% Tomatometer\",\"Cinemablend article (published around Aug 28-29, 2026) states RT has the rom-com 'premiering at 87%'\",\"Critics quotes found are largely positive (3/4, 3.5/5, 10/10) but include some more mixed notices, consistent with an 87% score that could shift with more reviews\",\"Film is very newly released (opened Aug 28, 2026), so the review count is still growing ahead of the Aug 31 resolution date, adding some volatility risk to the score\"]",
-        "model": "claude-sonnet-5",
-        "web_searches": 5,
-        "market_prob": 0.64,
-        "entry_price_pct": 64,
-        "edge_pts": -2,
-        "event_date": "2026-08-31T23:59:00Z",
-        "investigated_at": "2026-08-29T03:20:58.408Z",
-        "outcome": null,
-        "y": null,
-        "agent_brier": null,
-        "market_brier": null,
-        "settled_by": null,
-        "settled_at": null,
-        "updated_at": "2026-08-29T03:20:58.408Z",
-        "market_impact": null,
-        "last_error": null,
-        "market_prob_now": 0.325,
-        "price_checked_at": "2026-08-30T05:01:00.376Z"
-      },
-      {
-        "inv_key": "investigation:highest-temperature-in-wuhan-on-august-29-2026-31c::Yes",
-        "market_slug": "highest-temperature-in-wuhan-on-august-29-2026-31c",
-        "direction_raw": "Yes",
-        "market_title": "Will the highest temperature in Wuhan be 31°C on August 29?",
-        "source": "sweep",
-        "status": "done",
-        "agent_prob": 0.2,
-        "confidence": "MEDIUM",
-        "reasoning": "Multiple forecast sources (Ventusky, AQI.in, AccuWeather, Met Office) for Wuhan on Aug 29, 2026 cluster in the 30-33°C range, with individual site estimates of 30°C, 32°C, and ~33°C (91°F). Since 31°C sits within this plausible range but is not the modal forecast across sources, and daily highs can vary by a degree or two from forecasts once actual NOAA/METAR readings at Tianhe airport come in, a bucket resolution of exactly 31°C has moderate but not high likelihood.",
-        "key_findings": "[\"Ventusky 8-day forecast shows Aug 29, 2026 high of 32°C for Wuhan\",\"AQI.in forecast lists Saturday Aug 29 temp as 30°C, partly cloudy\",\"AccuWeather (via Chinese site) shows Aug 29 high ~91°F (~32.8°C, i.e. ~33°C)\",\"UK Met Office forecast for Wuhan International shows daytime highs around 29-31°C across the surrounding days\",\"No confirmed actual/observed NOAA Tianhe airport reading for Aug 29 was found via search (data limit reached)\"]",
-        "model": "claude-sonnet-5",
-        "web_searches": 5,
-        "market_prob": 0.225,
-        "entry_price_pct": 23,
-        "edge_pts": -2.5,
-        "event_date": "2026-08-29T12:00:00Z",
-        "investigated_at": "2026-08-29T02:36:33.423Z",
-        "outcome": null,
-        "y": null,
-        "agent_brier": null,
-        "market_brier": null,
-        "settled_by": null,
-        "settled_at": null,
-        "updated_at": "2026-08-29T02:36:33.423Z",
-        "market_impact": null,
-        "last_error": null,
-        "market_prob_now": 0,
-        "price_checked_at": "2026-08-30T05:01:00.376Z"
       }
     ]
   },
   "brier": {
     "success": true,
     "report": {
-      "note": "No ground-truth-settled investigations yet. The agent must call markets that later resolve via Gamma before calibration can be measured.",
+      "note": "Brier score (lower is better). agentBeatsMarket / edgeDirection are honest but small-sample: this is a survivorship-biased set of markets that happened to resolve, self-reported confidence is uncalibrated (shown for description, not weighting), and N is small. Treat as directional until N is large.",
       "counts": {
-        "total": 46,
-        "done": 26,
+        "total": 47,
+        "done": 27,
         "pending": 0,
         "error": 20,
-        "scored": 0
+        "scored": 7
       },
-      "overall": null,
-      "byConfidence": null
+      "overall": {
+        "n": 7,
+        "meanAgentBrier": 0.1024,
+        "meanMarketBrier": 0.0817,
+        "meanPairedDiff": -0.0207,
+        "agentBeatsMarketRate": 29,
+        "edgeDirectionHitRate": 29,
+        "edgeDirectionN": 7
+      },
+      "byConfidence": {
+        "MEDIUM": {
+          "n": 6,
+          "meanAgentBrier": 0.1194,
+          "meanMarketBrier": 0.0953
+        },
+        "HIGH": {
+          "n": 1,
+          "meanAgentBrier": 0.0001,
+          "meanMarketBrier": 0
+        }
+      },
+      "bySource": {
+        "whale": {
+          "n": 2,
+          "meanAgentBrier": 0.0085,
+          "meanMarketBrier": 0
+        },
+        "sweep": {
+          "n": 5,
+          "meanAgentBrier": 0.1399,
+          "meanMarketBrier": 0.1144
+        }
+      }
     },
     "records": null
   }
