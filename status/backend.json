@@ -1,21 +1,21 @@
 {
-  "fetchedAt": "2026-08-30T08:06:39Z",
+  "fetchedAt": "2026-08-30T12:06:53Z",
   "health": {
     "status": "ok",
-    "timestamp": "2026-08-30T08:06:40.371Z",
+    "timestamp": "2026-08-30T12:06:54.010Z",
     "version": "21.1.0 - Modularize: extract src/odds.js + src/gamma.js from index.js",
     "cache": {
-      "signalCount": 10697,
-      "oldestSignal": "2026-08-23T08:05:24.000Z",
-      "newestSignal": "2026-08-30T08:00:54.000Z"
+      "signalCount": 10378,
+      "oldestSignal": "2026-08-23T12:05:34.000Z",
+      "newestSignal": "2026-08-30T11:59:04.000Z"
     }
   },
   "cronStatus": {
     "success": true,
     "lastRun": {
-      "startedAt": "2026-08-30T08:05:23.430Z",
+      "startedAt": "2026-08-30T12:05:23.431Z",
       "scan": {
-        "signals": 200,
+        "signals": 346,
         "success": true
       },
       "settlement": {
@@ -25,9 +25,9 @@
         "errors": 0
       },
       "investigations": {
-        "attempted": 2,
+        "attempted": 0,
         "completed": 0,
-        "spentToday": 17,
+        "spentToday": 20,
         "dailyCap": 20
       },
       "overround": {
@@ -35,9 +35,7 @@
         "flagged": 44
       },
       "sweep": {
-        "attempted": 0,
-        "done": 0,
-        "opportunities": 0
+        "skipped": "daily cap reached"
       },
       "lines": {
         "updated": 0,
@@ -47,16 +45,8 @@
       "optimization": null,
       "error": null,
       "edgeScan": {
-        "at": 1788077160120,
-        "scanned": 4,
-        "sports": [
-          "mlb",
-          "wnba",
-          "nhl",
-          "nfl"
-        ],
-        "found": 0,
-        "newCount": 0
+        "skipped": "throttled",
+        "nextInMin": 4
       },
       "edgeSettle": {
         "checked": 0,
@@ -72,17 +62,17 @@
         "expired": 0
       },
       "autotrader": {
-        "evaluated": 200,
+        "evaluated": 346,
         "tradesOpened": 0,
         "tradesPaperTraded": 0,
         "tradesQueued": 0,
-        "skipped": 200,
+        "skipped": 346,
         "skipReasons": {
-          "No proven edge for entry band 61-80 (0pt)": 57,
-          "No proven edge for entry band 41-60 (-3pt)": 107,
-          "No proven edge for entry band 81-99 (-1pt)": 13,
-          "Duplicate market (already traded)": 11,
-          "No proven edge for entry band 21-40 (-2pt)": 11,
+          "No proven edge for entry band 61-80 (0pt)": 98,
+          "No proven edge for entry band 41-60 (-3pt)": 181,
+          "No proven edge for entry band 21-40 (-2pt)": 38,
+          "No proven edge for entry band 81-99 (-1pt)": 24,
+          "Duplicate market (already traded)": 4,
           "No winning wallet on signal": 1
         },
         "exitChecks": 1,
@@ -92,7 +82,7 @@
         "dailyPnL": -5.140000000000001,
         "totalPnL": 3136.1249494949484
       },
-      "completedAt": "2026-08-30T08:06:03.819Z"
+      "completedAt": "2026-08-30T12:06:25.550Z"
     },
     "cronSchedule": "Every 5 minutes",
     "note": "Settlement runs automatically. Sports events settle ~12h after game ends."
@@ -530,25 +520,25 @@
       },
       {
         "name": "strongWallet",
-        "wins": 609,
-        "losses": 446,
+        "wins": 611,
+        "losses": 450,
         "winRate": 58,
-        "weight": 1.23,
-        "lastUpdated": "2026-08-30T06:01:06.198Z",
-        "previousWeight": 1.29,
-        "optimizedAt": "2026-08-30T06:05:55.975Z",
-        "total": 1055
+        "weight": 1.29,
+        "lastUpdated": "2026-08-30T12:01:36.339Z",
+        "previousWeight": 1.3699999999999999,
+        "optimizedAt": "2026-08-30T12:01:48.013Z",
+        "total": 1061
       },
       {
         "name": "eliteWallet",
-        "wins": 193,
+        "wins": 195,
         "losses": 144,
-        "winRate": 57,
-        "weight": 1.21,
-        "lastUpdated": "2026-08-30T04:57:58.002Z",
-        "previousWeight": 1.27,
-        "optimizedAt": "2026-08-30T05:15:58.339Z",
-        "total": 337
+        "winRate": 58,
+        "weight": 1.23,
+        "lastUpdated": "2026-08-30T11:26:07.211Z",
+        "previousWeight": 1.29,
+        "optimizedAt": "2026-08-30T11:56:19.115Z",
+        "total": 339
       },
       {
         "name": "lastMinute6h",
@@ -563,47 +553,47 @@
       },
       {
         "name": "sportsMarket",
-        "wins": 61,
-        "losses": 50,
+        "wins": 62,
+        "losses": 51,
         "winRate": 55,
-        "weight": 1.19,
-        "lastUpdated": "2026-08-29T20:42:53.516Z",
-        "previousWeight": 1.25,
-        "optimizedAt": "2026-08-29T20:59:11.854Z",
-        "total": 111
+        "weight": 1.25,
+        "lastUpdated": "2026-08-30T12:01:36.339Z",
+        "previousWeight": 1.3250000000000002,
+        "optimizedAt": "2026-08-30T12:01:48.013Z",
+        "total": 113
       },
       {
         "name": "whaleSize25k",
         "wins": 266,
-        "losses": 227,
+        "losses": 228,
         "winRate": 54,
         "weight": 1.18,
-        "lastUpdated": "2026-08-30T05:30:58.737Z",
+        "lastUpdated": "2026-08-30T11:26:05.055Z",
         "previousWeight": 1.23,
-        "optimizedAt": "2026-08-30T05:37:28.617Z",
-        "total": 493
+        "optimizedAt": "2026-08-30T11:56:19.115Z",
+        "total": 494
       },
       {
         "name": "concentrated",
         "wins": 623,
-        "losses": 540,
+        "losses": 541,
         "winRate": 54,
-        "weight": 1.23,
-        "lastUpdated": "2026-08-30T07:41:01.435Z",
-        "previousWeight": 1.31,
-        "optimizedAt": "2026-08-30T07:41:06.957Z",
-        "total": 1163
+        "weight": 1.18,
+        "lastUpdated": "2026-08-30T09:06:05.744Z",
+        "previousWeight": 1.23,
+        "optimizedAt": "2026-08-30T10:41:30.940Z",
+        "total": 1164
       },
       {
         "name": "whaleSize15k",
-        "wins": 460,
-        "losses": 394,
+        "wins": 462,
+        "losses": 396,
         "winRate": 54,
-        "weight": 1.18,
-        "lastUpdated": "2026-08-30T06:11:01.621Z",
-        "previousWeight": 1.23,
-        "optimizedAt": "2026-08-30T07:41:06.957Z",
-        "total": 854
+        "weight": 1.23,
+        "lastUpdated": "2026-08-30T12:01:34.156Z",
+        "previousWeight": 1.31,
+        "optimizedAt": "2026-08-30T12:01:48.013Z",
+        "total": 858
       }
     ],
     "bottomFactors": [
@@ -631,47 +621,47 @@
       },
       {
         "name": "whaleSize15k",
-        "wins": 460,
-        "losses": 394,
+        "wins": 462,
+        "losses": 396,
         "winRate": 54,
-        "weight": 1.18,
-        "lastUpdated": "2026-08-30T06:11:01.621Z",
-        "previousWeight": 1.23,
-        "optimizedAt": "2026-08-30T07:41:06.957Z",
-        "total": 854
+        "weight": 1.23,
+        "lastUpdated": "2026-08-30T12:01:34.156Z",
+        "previousWeight": 1.31,
+        "optimizedAt": "2026-08-30T12:01:48.013Z",
+        "total": 858
       },
       {
         "name": "concentrated",
         "wins": 623,
-        "losses": 540,
+        "losses": 541,
         "winRate": 54,
-        "weight": 1.23,
-        "lastUpdated": "2026-08-30T07:41:01.435Z",
-        "previousWeight": 1.31,
-        "optimizedAt": "2026-08-30T07:41:06.957Z",
-        "total": 1163
+        "weight": 1.18,
+        "lastUpdated": "2026-08-30T09:06:05.744Z",
+        "previousWeight": 1.23,
+        "optimizedAt": "2026-08-30T10:41:30.940Z",
+        "total": 1164
       },
       {
         "name": "whaleSize25k",
         "wins": 266,
-        "losses": 227,
+        "losses": 228,
         "winRate": 54,
         "weight": 1.18,
-        "lastUpdated": "2026-08-30T05:30:58.737Z",
+        "lastUpdated": "2026-08-30T11:26:05.055Z",
         "previousWeight": 1.23,
-        "optimizedAt": "2026-08-30T05:37:28.617Z",
-        "total": 493
+        "optimizedAt": "2026-08-30T11:56:19.115Z",
+        "total": 494
       },
       {
         "name": "sportsMarket",
-        "wins": 61,
-        "losses": 50,
+        "wins": 62,
+        "losses": 51,
         "winRate": 55,
-        "weight": 1.19,
-        "lastUpdated": "2026-08-29T20:42:53.516Z",
-        "previousWeight": 1.25,
-        "optimizedAt": "2026-08-29T20:59:11.854Z",
-        "total": 111
+        "weight": 1.25,
+        "lastUpdated": "2026-08-30T12:01:36.339Z",
+        "previousWeight": 1.3250000000000002,
+        "optimizedAt": "2026-08-30T12:01:48.013Z",
+        "total": 113
       },
       {
         "name": "lastMinute6h",
@@ -686,25 +676,25 @@
       },
       {
         "name": "eliteWallet",
-        "wins": 193,
+        "wins": 195,
         "losses": 144,
-        "winRate": 57,
-        "weight": 1.21,
-        "lastUpdated": "2026-08-30T04:57:58.002Z",
-        "previousWeight": 1.27,
-        "optimizedAt": "2026-08-30T05:15:58.339Z",
-        "total": 337
+        "winRate": 58,
+        "weight": 1.23,
+        "lastUpdated": "2026-08-30T11:26:07.211Z",
+        "previousWeight": 1.29,
+        "optimizedAt": "2026-08-30T11:56:19.115Z",
+        "total": 339
       },
       {
         "name": "strongWallet",
-        "wins": 609,
-        "losses": 446,
+        "wins": 611,
+        "losses": 450,
         "winRate": 58,
-        "weight": 1.23,
-        "lastUpdated": "2026-08-30T06:01:06.198Z",
-        "previousWeight": 1.29,
-        "optimizedAt": "2026-08-30T06:05:55.975Z",
-        "total": 1055
+        "weight": 1.29,
+        "lastUpdated": "2026-08-30T12:01:36.339Z",
+        "previousWeight": 1.3699999999999999,
+        "optimizedAt": "2026-08-30T12:01:48.013Z",
+        "total": 1061
       },
       {
         "name": "cryptoMarket",
@@ -757,7 +747,7 @@
         {
           "name": "whaleSize15k",
           "winRate": 54,
-          "record": "460W-394L",
+          "record": "462W-396L",
           "isDiscovered": false
         }
       ],
@@ -861,23 +851,6 @@
     "totalFactors": 12
   },
   "tradeLog": [
-    {
-      "type": "SKIP",
-      "market": "Counter-Strike: Legacy vs Team Falcons (BO3) - BLAST Open Porto Group B",
-      "reason": "Entry price too high for sports_binary (65% > 40%)",
-      "walletTier": "ELITE",
-      "marketCategory": "esports",
-      "timestamp": "2026-08-30T00:12:00.325Z"
-    },
-    {
-      "type": "EXIT",
-      "market": "Jacksonville State vs. North Dakota State Bison",
-      "reason": "Market resolved (gamma_resolved). Final price: 0%",
-      "exitType": "market_resolved",
-      "pnl": -3,
-      "paperTrade": true,
-      "timestamp": "2026-08-30T01:13:27.817Z"
-    },
     {
       "type": "SKIP",
       "market": "Counter-Strike: Legacy vs Team Falcons (BO3) - BLAST Open Porto Group B",
@@ -1115,6 +1088,22 @@
       "walletTier": "STRONG",
       "marketCategory": "politics",
       "timestamp": "2026-08-30T05:15:57.411Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Will Sunderland AFC win on 2026-08-30?",
+      "reason": "No proven edge for entry band 41-60 (-3pt)",
+      "walletTier": "STRONG",
+      "marketCategory": "sports_binary",
+      "timestamp": "2026-08-30T11:21:28.919Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Counter-Strike: M80 vs Aurora Gaming (BO3) - BLAST Open Porto Group A",
+      "reason": "No proven edge for entry band 61-80 (0pt)",
+      "walletTier": "ELITE",
+      "marketCategory": "esports",
+      "timestamp": "2026-08-30T11:51:13.895Z"
     }
   ],
   "tradeHistory": [
@@ -2223,17 +2212,37 @@
     "success": true,
     "overview": {
       "totalFactorsTracked": 13,
-      "totalSignalsProcessed": 5738,
+      "totalSignalsProcessed": 5754,
       "overallWinRate": 55,
-      "pendingSignals": 326
+      "pendingSignals": 387
     },
     "walletEdge": {
       "totalTracked": 500,
       "insiderCount": 0,
       "eliteCount": 0,
       "strongCount": 0,
-      "fadeCount": 0,
-      "topPerformers": []
+      "fadeCount": 1,
+      "topPerformers": [
+        {
+          "address": "0xb340ecd9e8b681562affbafe4a87514b31261ad1",
+          "tier": "AVERAGE",
+          "winRate": 80,
+          "record": "4W-1L",
+          "totalVolume": 168421.75307999176,
+          "edgeMetrics": {
+            "avgOdds": 74,
+            "avgBetTiming": 0,
+            "consistencyScore": 83,
+            "bigBetWinRate": 57,
+            "sportWinRate": 0,
+            "politicalWinRate": 0,
+            "cryptoWinRate": 0,
+            "totalBigBets": 7,
+            "roi": 0,
+            "bigBetWins": 4
+          }
+        }
+      ]
     },
     "aiRecommendation": {
       "hasRecommendation": true,
@@ -2289,30 +2298,30 @@
       },
       "whaleSize25k": {
         "wins": 266,
-        "losses": 227,
+        "losses": 228,
         "winRate": 54,
         "weight": 1.18,
-        "lastUpdated": "2026-08-30T05:30:58.737Z",
+        "lastUpdated": "2026-08-30T11:26:05.055Z",
         "previousWeight": 1.23,
-        "optimizedAt": "2026-08-30T05:37:28.617Z"
+        "optimizedAt": "2026-08-30T11:56:19.115Z"
       },
       "concentrated": {
         "wins": 623,
-        "losses": 540,
-        "winRate": 54,
-        "weight": 1.23,
-        "lastUpdated": "2026-08-30T07:41:01.435Z",
-        "previousWeight": 1.31,
-        "optimizedAt": "2026-08-30T07:41:06.957Z"
-      },
-      "whaleSize15k": {
-        "wins": 460,
-        "losses": 394,
+        "losses": 541,
         "winRate": 54,
         "weight": 1.18,
-        "lastUpdated": "2026-08-30T06:11:01.621Z",
+        "lastUpdated": "2026-08-30T09:06:05.744Z",
         "previousWeight": 1.23,
-        "optimizedAt": "2026-08-30T07:41:06.957Z"
+        "optimizedAt": "2026-08-30T10:41:30.940Z"
+      },
+      "whaleSize15k": {
+        "wins": 462,
+        "losses": 396,
+        "winRate": 54,
+        "weight": 1.23,
+        "lastUpdated": "2026-08-30T12:01:34.156Z",
+        "previousWeight": 1.31,
+        "optimizedAt": "2026-08-30T12:01:48.013Z"
       },
       "freshWallet": {
         "wins": 65,
@@ -2324,31 +2333,31 @@
         "optimizedAt": "2026-08-30T03:23:31.955Z"
       },
       "strongWallet": {
-        "wins": 609,
-        "losses": 446,
+        "wins": 611,
+        "losses": 450,
         "winRate": 58,
-        "weight": 1.23,
-        "lastUpdated": "2026-08-30T06:01:06.198Z",
-        "previousWeight": 1.29,
-        "optimizedAt": "2026-08-30T06:05:55.975Z"
+        "weight": 1.29,
+        "lastUpdated": "2026-08-30T12:01:36.339Z",
+        "previousWeight": 1.3699999999999999,
+        "optimizedAt": "2026-08-30T12:01:48.013Z"
       },
       "eliteWallet": {
-        "wins": 193,
+        "wins": 195,
         "losses": 144,
-        "winRate": 57,
-        "weight": 1.21,
-        "lastUpdated": "2026-08-30T04:57:58.002Z",
-        "previousWeight": 1.27,
-        "optimizedAt": "2026-08-30T05:15:58.339Z"
+        "winRate": 58,
+        "weight": 1.23,
+        "lastUpdated": "2026-08-30T11:26:07.211Z",
+        "previousWeight": 1.29,
+        "optimizedAt": "2026-08-30T11:56:19.115Z"
       },
       "sportsMarket": {
-        "wins": 61,
-        "losses": 50,
+        "wins": 62,
+        "losses": 51,
         "winRate": 55,
-        "weight": 1.19,
-        "lastUpdated": "2026-08-29T20:42:53.516Z",
-        "previousWeight": 1.25,
-        "optimizedAt": "2026-08-29T20:59:11.854Z"
+        "weight": 1.25,
+        "lastUpdated": "2026-08-30T12:01:36.339Z",
+        "previousWeight": 1.3250000000000002,
+        "optimizedAt": "2026-08-30T12:01:48.013Z"
       },
       "cryptoMarket": {
         "wins": 9,
@@ -2422,11 +2431,11 @@
   "learningInsights": {
     "success": true,
     "systemPerformance": {
-      "totalSignalsProcessed": 5738,
-      "wins": 3151,
-      "losses": 2587,
+      "totalSignalsProcessed": 5754,
+      "wins": 3158,
+      "losses": 2596,
       "winRate": 55,
-      "pendingSignals": 326
+      "pendingSignals": 387
     },
     "insights": {
       "bestFactors": [
@@ -2486,17 +2495,17 @@
       {
         "factor": "strongWallet",
         "winRate": 58,
-        "wins": 609,
-        "losses": 446,
-        "weight": 1.23,
+        "wins": 611,
+        "losses": 450,
+        "weight": 1.29,
         "performance": "AVERAGE"
       },
       {
         "factor": "eliteWallet",
-        "winRate": 57,
-        "wins": 193,
+        "winRate": 58,
+        "wins": 195,
         "losses": 144,
-        "weight": 1.21,
+        "weight": 1.23,
         "performance": "AVERAGE"
       },
       {
@@ -2510,16 +2519,16 @@
       {
         "factor": "sportsMarket",
         "winRate": 55,
-        "wins": 61,
-        "losses": 50,
-        "weight": 1.19,
+        "wins": 62,
+        "losses": 51,
+        "weight": 1.25,
         "performance": "AVERAGE"
       },
       {
         "factor": "whaleSize25k",
         "winRate": 54,
         "wins": 266,
-        "losses": 227,
+        "losses": 228,
         "weight": 1.18,
         "performance": "AVERAGE"
       },
@@ -2527,16 +2536,16 @@
         "factor": "concentrated",
         "winRate": 54,
         "wins": 623,
-        "losses": 540,
-        "weight": 1.23,
+        "losses": 541,
+        "weight": 1.18,
         "performance": "AVERAGE"
       },
       {
         "factor": "whaleSize15k",
         "winRate": 54,
-        "wins": 460,
-        "losses": 394,
-        "weight": 1.18,
+        "wins": 462,
+        "losses": 396,
+        "weight": 1.23,
         "performance": "AVERAGE"
       },
       {
@@ -2566,12 +2575,12 @@
         "key": "underdog",
         "label": "Underdog entries (≤40¢)",
         "side": "follow",
-        "settled": 483,
-        "wins": 162,
+        "settled": 484,
+        "wins": 163,
         "losses": 321,
-        "staked": 48300,
-        "pnl": 540.29,
-        "roi": 1.1,
+        "staked": 48400,
+        "pnl": 718.07,
+        "roi": 1.5,
         "winRate": 34,
         "readyForAuto": true
       },
@@ -2579,12 +2588,12 @@
         "key": "fade_favorites",
         "label": "Fade favorites (≥60¢)",
         "side": "fade",
-        "settled": 1435,
-        "wins": 439,
+        "settled": 1438,
+        "wins": 442,
         "losses": 996,
-        "staked": 143500,
-        "pnl": 153.62,
-        "roi": 0.1,
+        "staked": 143800,
+        "pnl": 851.89,
+        "roi": 0.6,
         "winRate": 31,
         "readyForAuto": true
       },
@@ -2592,11 +2601,11 @@
         "key": "all",
         "label": "Follow all signals",
         "side": "follow",
-        "settled": 3898,
-        "wins": 2144,
-        "losses": 1754,
-        "staked": 389800,
-        "pnl": -2797.04,
+        "settled": 3909,
+        "wins": 2149,
+        "losses": 1760,
+        "staked": 390900,
+        "pnl": -2825.41,
         "roi": -0.7,
         "winRate": 55,
         "readyForAuto": false
@@ -2605,12 +2614,12 @@
         "key": "high_score",
         "label": "High score (≥100)",
         "side": "follow",
-        "settled": 1004,
+        "settled": 1005,
         "wins": 554,
-        "losses": 450,
-        "staked": 100400,
-        "pnl": -689.29,
-        "roi": -0.7,
+        "losses": 451,
+        "staked": 100500,
+        "pnl": -789.29,
+        "roi": -0.8,
         "winRate": 55,
         "readyForAuto": false
       },
@@ -2636,13 +2645,12 @@
     "settledCount": 0,
     "winRate": null,
     "lastScan": {
-      "at": 1788077160120,
-      "scanned": 4,
+      "at": 1788090975638,
+      "scanned": 3,
       "sports": [
         "mlb",
         "wnba",
-        "nhl",
-        "nfl"
+        "nba"
       ],
       "found": 0,
       "newCount": 0
@@ -3014,6 +3022,66 @@
     "enabled": true,
     "results": [
       {
+        "inv_key": "investigation:highest-temperature-in-wellington-on-september-1-2026-14c::Yes",
+        "market_slug": "highest-temperature-in-wellington-on-september-1-2026-14c",
+        "direction_raw": "Yes",
+        "market_title": "Will the highest temperature in Wellington be 14°C on September 1?",
+        "source": "sweep",
+        "status": "done",
+        "agent_prob": 0.3,
+        "confidence": "LOW",
+        "reasoning": "AccuWeather's forecast (2 days out) puts Wellington's Sept 1 high near 59°F (~15°C), slightly above the 14°C threshold in question, though short-range forecast noise and the airport station's typically cooler/windier microclimate versus city readings leave meaningful uncertainty. With whole-degree bucket resolution, 14°C and 15°C both appear plausible, but current forecast data leans marginally toward 15°C as the more likely outcome.",
+        "key_findings": "[\"AccuWeather day-ahead forecast shows Sept 1 high of 59°F (~15.0°C) for Wellington\",\"No detailed hourly/airport-specific forecast (MetService/NIWA) was found with finer granularity\",\"Wellington Airport station often reads slightly cooler than city-center forecasts due to wind exposure\",\"Short forecast horizon (2 days) increases reliability but single-degree bucket resolution still carries real uncertainty\"]",
+        "model": "claude-sonnet-5",
+        "web_searches": 5,
+        "market_prob": 0.52,
+        "entry_price_pct": 52,
+        "edge_pts": -22,
+        "event_date": "2026-09-01T12:00:00Z",
+        "investigated_at": "2026-08-30T10:36:32.863Z",
+        "outcome": null,
+        "y": null,
+        "agent_brier": null,
+        "market_brier": null,
+        "settled_by": null,
+        "settled_at": null,
+        "updated_at": "2026-08-30T10:36:32.863Z",
+        "market_impact": null,
+        "last_error": null,
+        "market_prob_now": 0.545,
+        "price_checked_at": "2026-08-30T12:07:00.306Z"
+      },
+      {
+        "inv_key": "investigation:lowest-temperature-in-seoul-on-august-31-2026-21c::Yes",
+        "market_slug": "lowest-temperature-in-seoul-on-august-31-2026-21c",
+        "direction_raw": "Yes",
+        "market_title": "Will the lowest temperature in Seoul (Incheon) be 21°C on August 31?",
+        "source": "sweep",
+        "status": "done",
+        "agent_prob": 0.27,
+        "confidence": "MEDIUM",
+        "reasoning": "AccuWeather's forecast for Incheon on Aug 31, 2026 shows an overnight low of about 71°F (~21.7°C), which sits right on the boundary between the 21°C and 22°C whole-degree bins used for NOAA resolution. Given typical day-ahead forecast error of roughly 1-1.5°C, modeling the actual low as normally distributed around 21.7°C puts the 21°C bin (20.5-21.5°C) at roughly a quarter of the probability mass, with the 22°C bin somewhat more likely.",
+        "key_findings": "[\"AccuWeather forecasts Aug 31 2026 low of 71°F (~21.7°C) at Incheon, which converts to a value bordering the 21°C/22°C bins\",\"Subsequent days (Sept 1-5) show forecast lows fluctuating between 67-71°F (~19-22°C), indicating a cooling trend but with day-to-day forecast noise\",\"NOAA resolves using whole-degree Celsius readings from the RKSI station timeseries, so small forecast shifts of ~1°C can move the outcome between adjacent bins\",\"No single authoritative Korean source giving an ICN-specific tomorrow low in Celsius was found beyond AccuWeather's converted Fahrenheit forecast\"]",
+        "model": "claude-sonnet-5",
+        "web_searches": 5,
+        "market_prob": 0.235,
+        "entry_price_pct": 24,
+        "edge_pts": 3.5,
+        "event_date": "2026-08-31T12:00:00Z",
+        "investigated_at": "2026-08-30T08:56:55.618Z",
+        "outcome": null,
+        "y": null,
+        "agent_brier": null,
+        "market_brier": null,
+        "settled_by": null,
+        "settled_at": null,
+        "updated_at": "2026-08-30T08:56:55.618Z",
+        "market_impact": null,
+        "last_error": null,
+        "market_prob_now": 0.145,
+        "price_checked_at": "2026-08-30T12:07:00.306Z"
+      },
+      {
         "inv_key": "investigation:highest-temperature-in-seoul-on-september-1-2026-27c::Yes",
         "market_slug": "highest-temperature-in-seoul-on-september-1-2026-27c",
         "direction_raw": "Yes",
@@ -3040,8 +3108,8 @@
         "updated_at": "2026-08-30T07:32:51.572Z",
         "market_impact": null,
         "last_error": null,
-        "market_prob_now": 0.305,
-        "price_checked_at": "2026-08-30T08:06:45.693Z"
+        "market_prob_now": 0.345,
+        "price_checked_at": "2026-08-30T12:07:00.306Z"
       },
       {
         "inv_key": "investigation:will-dell-say-inflation-or-inflationary-during-earnings-call-20260901::Yes",
@@ -3070,8 +3138,8 @@
         "updated_at": "2026-08-30T06:56:10.349Z",
         "market_impact": null,
         "last_error": null,
-        "market_prob_now": 0.52,
-        "price_checked_at": "2026-08-30T08:06:45.693Z"
+        "market_prob_now": 0.48,
+        "price_checked_at": "2026-08-30T12:07:00.306Z"
       },
       {
         "inv_key": "investigation:will-coyote-vs-acme-score-at-least-96-on-the-rotten-tomatoes-tomatometer-20260831::Yes",
@@ -3100,8 +3168,8 @@
         "updated_at": "2026-08-30T06:53:21.096Z",
         "market_impact": null,
         "last_error": null,
-        "market_prob_now": 0.435,
-        "price_checked_at": "2026-08-30T08:06:45.693Z"
+        "market_prob_now": 0.25,
+        "price_checked_at": "2026-08-30T12:07:00.306Z"
       },
       {
         "inv_key": "investigation:highest-temperature-in-austin-on-august-30-2026-100-101f::Yes",
@@ -3130,8 +3198,8 @@
         "updated_at": "2026-08-30T06:44:09.325Z",
         "market_impact": null,
         "last_error": null,
-        "market_prob_now": 0.245,
-        "price_checked_at": "2026-08-30T08:06:45.693Z"
+        "market_prob_now": 0.26,
+        "price_checked_at": "2026-08-30T12:07:00.306Z"
       },
       {
         "inv_key": "investigation:lowest-temperature-in-wellington-on-august-30-2026-10c::Yes",
@@ -3160,8 +3228,8 @@
         "updated_at": "2026-08-30T06:26:31.591Z",
         "market_impact": null,
         "last_error": null,
-        "market_prob_now": 0.965,
-        "price_checked_at": "2026-08-30T08:06:45.693Z"
+        "market_prob_now": 0.0005,
+        "price_checked_at": "2026-08-30T12:07:00.306Z"
       },
       {
         "inv_key": "investigation:will-the-ornn-h100-index-be-between-2pt75-and-3pt00-on-august-31-2026-1785423806195::Yes",
@@ -3191,7 +3259,7 @@
         "market_impact": "[{\"asset\":\"COIN\",\"assetType\":\"stock\",\"direction\":\"UP\",\"conviction\":\"LOW\",\"rationale\":\"Not directly relevant; included as placeholder is inappropriate, no strong causal link to crypto/GPU pricing market outcome.\"}]",
         "last_error": null,
         "market_prob_now": 0.385,
-        "price_checked_at": "2026-08-30T08:06:45.693Z"
+        "price_checked_at": "2026-08-30T12:07:00.306Z"
       },
       {
         "inv_key": "investigation:lowest-temperature-in-london-on-august-29-2026-18c::Yes",
@@ -3388,8 +3456,8 @@
         "updated_at": "2026-08-30T03:58:11.618Z",
         "market_impact": null,
         "last_error": null,
-        "market_prob_now": 0.475,
-        "price_checked_at": "2026-08-30T08:06:45.693Z"
+        "market_prob_now": 0.445,
+        "price_checked_at": "2026-08-30T12:07:00.306Z"
       },
       {
         "inv_key": "investigation:elon-musk-of-tweets-august-28-september-4-2026-140-159::Yes",
@@ -3419,7 +3487,7 @@
         "market_impact": null,
         "last_error": null,
         "market_prob_now": 0.095,
-        "price_checked_at": "2026-08-30T08:06:45.693Z"
+        "price_checked_at": "2026-08-30T12:07:00.306Z"
       },
       {
         "inv_key": "investigation:will-swedish-social-democratic-party-s-win-at-least-33-of-all-valid-votes-20260812172636414::Yes",
@@ -3449,7 +3517,7 @@
         "market_impact": null,
         "last_error": null,
         "market_prob_now": 0.185,
-        "price_checked_at": "2026-08-30T08:06:45.693Z"
+        "price_checked_at": "2026-08-30T12:07:00.306Z"
       },
       {
         "inv_key": "investigation:highest-temperature-in-wellington-on-august-30-2026-18c::Yes",
@@ -3506,8 +3574,8 @@
         "updated_at": "2026-08-30T01:37:50.021Z",
         "market_impact": null,
         "last_error": null,
-        "market_prob_now": 0.32,
-        "price_checked_at": "2026-08-30T08:06:45.693Z"
+        "market_prob_now": 0.0025,
+        "price_checked_at": "2026-08-30T12:07:00.306Z"
       },
       {
         "inv_key": "investigation:will-anthropic-have-the-best-ai-model-on-livebench-overall-at-the-end-of-september-2026-20260728164124637::Yes",
@@ -3536,68 +3604,8 @@
         "updated_at": "2026-08-30T00:27:09.426Z",
         "market_impact": "[{\"asset\":\"Defense/enterprise AI exposure via MSFT\",\"assetType\":\"stock\",\"direction\":\"VOLATILE\",\"conviction\":\"LOW\",\"rationale\":\"Microsoft has heavy exposure to both OpenAI (via investment) and enterprise AI demand broadly; a continued Anthropic benchmark lead could marginally pressure sentiment on OpenAI-linked narratives but effect is diffuse and low-conviction.\"},{\"asset\":\"Alphabet/GOOGL\",\"assetType\":\"stock\",\"direction\":\"DOWN\",\"conviction\":\"LOW\",\"rationale\":\"If Anthropic retains the top LiveBench spot over Google's Gemini line, it reinforces a narrative that Google has not achieved outright model-quality leadership, a mild sentiment headwind for AI-model competitive positioning.\"},{\"asset\":\"AI/Cloud infrastructure sector (Anthropic ecosystem: AWS, Google Cloud partners)\",\"assetType\":\"sector\",\"direction\":\"UP\",\"conviction\":\"LOW\",\"rationale\":\"Continued benchmark leadership strengthens Anthropic's enterprise sales narrative, indirectly benefiting cloud partners (AWS, Google Cloud via TPU deal) that host and monetize Claude usage through increased enterprise adoption flows.\"}]",
         "last_error": null,
-        "market_prob_now": 0.735,
-        "price_checked_at": "2026-08-30T08:06:45.693Z"
-      },
-      {
-        "inv_key": "investigation:highest-temperature-in-busan-on-august-31-2026-32c::Yes",
-        "market_slug": "highest-temperature-in-busan-on-august-31-2026-32c",
-        "direction_raw": "Yes",
-        "market_title": "Will the highest temperature in Busan be 32°C on August 31?",
-        "source": "sweep",
-        "status": "done",
-        "agent_prob": 0.2,
-        "confidence": "MEDIUM",
-        "reasoning": "Short-range forecasts (AccuWeather for Busan and Gimhae) for Aug 31, 2026 point to highs of roughly 86-88°F (~30-31°C), just below the 32°C threshold. Given typical late-August Busan/Gimhae highs cluster in the 29-31°C range with some day-to-day variance, hitting exactly 32°C is plausible but not the most likely single-degree outcome.",
-        "key_findings": "[\"AccuWeather Busan forecast for Aug 31, 2026 shows a high of 87°F (~30.6°C)\",\"AccuWeather Gimhae forecast for Aug 31, 2026 shows a high of 86°F (~30.0°C)\",\"Surrounding days in the forecast window (Aug 26-Sep 8) mostly show highs of 82-88°F (~27.8-31.1°C), rarely reaching 32°C (89.6°F)\",\"Resolution depends on NOAA whole-degree Celsius reading at Gimhae Intl Airport (RKPK), which could deviate from consumer forecast sites by 1-2°C\"]",
-        "model": "claude-sonnet-5",
-        "web_searches": 5,
-        "market_prob": 0.505,
-        "entry_price_pct": 51,
-        "edge_pts": -30.5,
-        "event_date": "2026-08-31T12:00:00Z",
-        "investigated_at": "2026-08-30T00:22:27.296Z",
-        "outcome": null,
-        "y": null,
-        "agent_brier": null,
-        "market_brier": null,
-        "settled_by": null,
-        "settled_at": null,
-        "updated_at": "2026-08-30T00:22:27.296Z",
-        "market_impact": null,
-        "last_error": null,
-        "market_prob_now": 0.49,
-        "price_checked_at": "2026-08-30T08:06:45.693Z"
-      },
-      {
-        "inv_key": "investigation:will-the-price-of-bitcoin-be-between-78000-80000-on-august-30-2026::Yes",
-        "market_slug": "will-the-price-of-bitcoin-be-between-78000-80000-on-august-30-2026",
-        "direction_raw": "Yes",
-        "market_title": "Will the price of Bitcoin be between $78,000 and $80,000 on August 30?",
-        "source": "sweep",
-        "status": "done",
-        "agent_prob": 0.55,
-        "confidence": "MEDIUM",
-        "reasoning": "Recent data shows BTC/USD hovering between roughly $77,700 and $78,900 in the days just before Aug 30, 2026 (CoinDesk, CoinGecko, Coinbase), placing spot price near the lower edge of the $78,000-$80,000 resolution band. Given BTC's demonstrated daily volatility this month (e.g., a $7,600 single-day swing on Aug 19-20), there is meaningful risk the price could dip below $78,000 or rally above $80,000 by the noon ET snapshot, making a stay-within-band outcome only moderately more likely than not.",
-        "key_findings": "[\"CoinDesk: BTC at $77,677.86 as of Aug 29, 2026 1:28am EDT\",\"CoinGecko: BTC at $78,144.99, up 1% in prior 24h (as of report ~18h before query)\",\"Coinbase converter: BTC at $78,232.62 'now'\",\"Fortune: BTC at $78,745.95 on Aug 26, down from prior day\",\"August has shown large daily swings (e.g. $71,970 on Aug 20 vs $78,976 on Aug 24), indicating high volatility relative to the $2,000-wide resolution band\"]",
-        "model": "claude-sonnet-5",
-        "web_searches": 4,
-        "market_prob": 0.61,
-        "entry_price_pct": 63,
-        "edge_pts": -6,
-        "event_date": "2026-08-30T16:00:00Z",
-        "investigated_at": "2026-08-30T00:12:21.266Z",
-        "outcome": null,
-        "y": null,
-        "agent_brier": null,
-        "market_brier": null,
-        "settled_by": null,
-        "settled_at": null,
-        "updated_at": "2026-08-30T00:12:21.266Z",
-        "market_impact": null,
-        "last_error": null,
-        "market_prob_now": 0.59,
-        "price_checked_at": "2026-08-30T08:06:45.693Z"
+        "market_prob_now": 0.73,
+        "price_checked_at": "2026-08-30T12:07:00.306Z"
       }
     ]
   },
@@ -3606,8 +3614,8 @@
     "report": {
       "note": "Brier score (lower is better). agentBeatsMarket / edgeDirection are honest but small-sample: this is a survivorship-biased set of markets that happened to resolve, self-reported confidence is uncalibrated (shown for description, not weighting), and N is small. Treat as directional until N is large.",
       "counts": {
-        "total": 52,
-        "done": 32,
+        "total": 54,
+        "done": 34,
         "pending": 0,
         "error": 20,
         "scored": 7
