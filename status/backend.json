@@ -1,27 +1,27 @@
 {
-  "fetchedAt": "2026-08-31T06:37:02Z",
+  "fetchedAt": "2026-08-31T14:48:11Z",
   "health": {
     "status": "ok",
-    "timestamp": "2026-08-31T06:37:03.420Z",
+    "timestamp": "2026-08-31T14:48:12.315Z",
     "version": "21.1.0 - Modularize: extract src/odds.js + src/gamma.js from index.js",
     "cache": {
-      "signalCount": 11015,
-      "oldestSignal": "2026-08-24T06:36:09.000Z",
-      "newestSignal": "2026-08-31T06:27:06.000Z"
+      "signalCount": 11017,
+      "oldestSignal": "2026-08-24T14:50:54.000Z",
+      "newestSignal": "2026-08-31T14:44:52.000Z"
     }
   },
   "cronStatus": {
     "success": true,
     "lastRun": {
-      "startedAt": "2026-08-31T06:35:23.430Z",
+      "startedAt": "2026-08-31T14:45:25.525Z",
       "scan": {
-        "signals": 108,
+        "signals": 163,
         "success": true
       },
       "settlement": {
-        "processed": 0,
-        "wins": 0,
-        "losses": 0,
+        "processed": 4,
+        "wins": 2,
+        "losses": 2,
         "errors": 0
       },
       "investigations": {
@@ -32,7 +32,7 @@
       },
       "overround": {
         "scanned": 76,
-        "flagged": 44
+        "flagged": 46
       },
       "sweep": {
         "skipped": "daily cap reached"
@@ -42,17 +42,41 @@
         "confirmed": 0,
         "total": 0
       },
-      "optimization": null,
+      "optimization": {
+        "optimized": true,
+        "totalFactors": 13,
+        "totalOptimized": 3,
+        "optimizations": [
+          {
+            "factor": "whaleSize15k",
+            "winRate": 54,
+            "samples": 903,
+            "oldWeight": 1.31,
+            "newWeight": 1.23,
+            "change": -0.08
+          },
+          {
+            "factor": "strongWallet",
+            "winRate": 58,
+            "samples": 1107,
+            "oldWeight": 1.3699999999999999,
+            "newWeight": 1.29,
+            "change": -0.08
+          },
+          {
+            "factor": "eliteWallet",
+            "winRate": 58,
+            "samples": 365,
+            "oldWeight": 1.29,
+            "newWeight": 1.23,
+            "change": -0.06
+          }
+        ]
+      },
       "error": null,
       "edgeScan": {
-        "at": 1788158150903,
-        "scanned": 2,
-        "sports": [
-          "mlb",
-          "wnba"
-        ],
-        "found": 0,
-        "newCount": 0
+        "skipped": "throttled",
+        "nextInMin": 4
       },
       "edgeSettle": {
         "checked": 0,
@@ -60,43 +84,53 @@
       },
       "invSettle": {
         "checked": 10,
-        "scored": 0
+        "scored": 1
       },
       "signalBackfill": {
         "checked": 25,
         "updated": 0,
-        "expired": 0
+        "expired": 2
       },
       "autotrader": {
-        "evaluated": 108,
+        "evaluated": 163,
         "tradesOpened": 0,
         "tradesPaperTraded": 0,
         "tradesQueued": 0,
-        "skipped": 108,
+        "skipped": 163,
         "skipReasons": {
+          "Entry price too high for sports_binary (48% > 40%)": 1,
+          "Entry price too high for sports_binary (73% > 40%)": 1,
           "Entry price too high for sports_binary (64% > 40%)": 1,
-          "No winning wallet on signal": 47,
-          "Event too far out (23d > 7d horizon)": 10,
-          "Event too far out (21d > 7d horizon)": 12,
-          "Event too far out (22d > 7d horizon)": 13,
-          "Event too far out (31d > 7d horizon)": 8,
-          "Signal has no market slug — cannot price or settle": 4,
+          "No winning wallet on signal": 75,
+          "Event too far out (21d > 7d horizon)": 15,
+          "Event too far out (20d > 7d horizon)": 14,
+          "Event too far out (22d > 7d horizon)": 11,
+          "Duplicate market (already traded)": 9,
+          "Event too far out (31d > 7d horizon)": 9,
+          "Entry price too high for sports_binary (83% > 40%)": 1,
+          "Entry price too high for sports_binary (56% > 40%)": 1,
+          "Entry price too high for sports_other (55% > 40%)": 1,
+          "Entry price too high for sports_binary (44% > 40%)": 2,
+          "Entry price too low for sports_binary (18% < 20%)": 1,
+          "Entry price too high for sports_binary (55% > 40%)": 1,
+          "Signal has no market slug — cannot price or settle": 5,
           "Event too far out (124d > 7d horizon)": 3,
           "Event too far out (62d > 7d horizon)": 1,
           "Event too far out (123d > 7d horizon)": 4,
           "Event too far out (11d > 7d horizon)": 1,
+          "Event too far out (122d > 7d horizon)": 2,
           "Event too far out (32d > 7d horizon)": 2,
           "Event too far out (304d > 7d horizon)": 1,
           "Event too far out (16d > 7d horizon)": 1
         },
-        "exitChecks": 0,
-        "positionsExited": 0,
+        "exitChecks": 1,
+        "positionsExited": 1,
         "errors": [],
         "openPositions": 0,
-        "dailyPnL": 3.09,
+        "dailyPnL": 0.08999999999999986,
         "totalPnL": 3139.4549494949483
       },
-      "completedAt": "2026-08-31T06:35:54.467Z"
+      "completedAt": "2026-08-31T14:46:32.182Z"
     },
     "cronSchedule": "Every 5 minutes",
     "note": "Settlement runs automatically. Sports events settle ~12h after game ends."
@@ -200,12 +234,12 @@
     "_v3ProfitOverhaul": true
   },
   "performance": {
-    "totalTrades": 254,
+    "totalTrades": 255,
     "wins": 105,
-    "losses": 149,
+    "losses": 150,
     "pushes": 286,
     "winRate": 41,
-    "totalPnL": 3139.4549494949483,
+    "totalPnL": 3136.4549494949483,
     "bestTrade": {
       "market": "Will Bitcoin dip to $55,000 in February?",
       "pnl": 1228.57,
@@ -216,15 +250,15 @@
       "pnl": -170.11,
       "date": "2026-02-15T00:20:13.015Z"
     },
-    "avgReturn": 12.36,
-    "currentStreak": 3,
+    "avgReturn": 12.3,
+    "currentStreak": -1,
     "longestWinStreak": 23,
     "longestLoseStreak": 32,
     "byMarketType": {
       "other": {
         "wins": 74,
-        "losses": 79,
-        "pnl": 1299.8799999999997
+        "losses": 80,
+        "pnl": 1296.8799999999997
       },
       "sports-other": {
         "wins": 17,
@@ -275,8 +309,8 @@
       },
       "HIGH_CONVICTION": {
         "wins": 63,
-        "losses": 93,
-        "pnl": 24.789999999999992
+        "losses": 94,
+        "pnl": 21.789999999999992
       }
     },
     "bySport": {},
@@ -285,14 +319,14 @@
   },
   "daily": {
     "date": "2026-08-31",
-    "tradesOpened": 2,
-    "tradesClosed": 2,
-    "totalSpent": 6,
+    "tradesOpened": 3,
+    "tradesClosed": 3,
+    "totalSpent": 9,
     "totalReturned": 9.09,
-    "realizedPnL": 3.09,
+    "realizedPnL": 0.08999999999999986,
     "wins": 1,
-    "losses": 0,
-    "explorationTradesOpened": 2,
+    "losses": 1,
+    "explorationTradesOpened": 3,
     "skippedReasons": {}
   },
   "dailyRange": {
@@ -300,14 +334,14 @@
     "days": [
       {
         "date": "2026-08-31",
-        "tradesOpened": 2,
-        "tradesClosed": 2,
-        "totalSpent": 6,
+        "tradesOpened": 3,
+        "tradesClosed": 3,
+        "totalSpent": 9,
         "totalReturned": 9.09,
-        "realizedPnL": 3.09,
+        "realizedPnL": 0.08999999999999986,
         "wins": 1,
-        "losses": 0,
-        "explorationTradesOpened": 2,
+        "losses": 1,
+        "explorationTradesOpened": 3,
         "skippedReasons": {}
       },
       {
@@ -480,47 +514,47 @@
       },
       {
         "name": "freshWallet",
-        "wins": 66,
+        "wins": 67,
         "losses": 41,
         "winRate": 62,
         "weight": 1.28,
-        "lastUpdated": "2026-08-30T19:51:05.579Z",
+        "lastUpdated": "2026-08-31T14:06:05.325Z",
         "previousWeight": 1.34,
-        "optimizedAt": "2026-08-30T20:01:53.399Z",
-        "total": 107
+        "optimizedAt": "2026-08-31T14:11:09.652Z",
+        "total": 108
       },
       {
         "name": "strongWallet",
-        "wins": 638,
-        "losses": 467,
+        "wins": 639,
+        "losses": 468,
         "winRate": 58,
         "weight": 1.29,
-        "lastUpdated": "2026-08-31T06:20:59.283Z",
+        "lastUpdated": "2026-08-31T14:46:18.574Z",
         "previousWeight": 1.3699999999999999,
-        "optimizedAt": "2026-08-31T06:21:06.119Z",
-        "total": 1105
+        "optimizedAt": "2026-08-31T14:46:32.117Z",
+        "total": 1107
       },
       {
         "name": "eliteWallet",
-        "wins": 210,
-        "losses": 151,
+        "wins": 212,
+        "losses": 153,
         "winRate": 58,
         "weight": 1.23,
-        "lastUpdated": "2026-08-31T04:35:49.989Z",
+        "lastUpdated": "2026-08-31T14:11:02.055Z",
         "previousWeight": 1.29,
-        "optimizedAt": "2026-08-31T05:10:51.999Z",
-        "total": 361
+        "optimizedAt": "2026-08-31T14:46:32.117Z",
+        "total": 365
       },
       {
         "name": "lastMinute6h",
-        "wins": 504,
+        "wins": 505,
         "losses": 385,
         "winRate": 57,
         "weight": 1.21,
-        "lastUpdated": "2026-08-31T04:35:45.487Z",
+        "lastUpdated": "2026-08-31T07:20:59.274Z",
         "previousWeight": 1.27,
-        "optimizedAt": "2026-08-31T05:10:51.999Z",
-        "total": 889
+        "optimizedAt": "2026-08-31T08:36:05.231Z",
+        "total": 890
       },
       {
         "name": "cryptoMarket",
@@ -535,47 +569,47 @@
       },
       {
         "name": "sportsMarket",
-        "wins": 64,
+        "wins": 65,
         "losses": 53,
         "winRate": 55,
         "weight": 1.19,
-        "lastUpdated": "2026-08-31T02:45:47.275Z",
+        "lastUpdated": "2026-08-31T14:06:05.325Z",
         "previousWeight": 1.25,
-        "optimizedAt": "2026-08-31T02:55:54.301Z",
-        "total": 117
+        "optimizedAt": "2026-08-31T14:11:09.652Z",
+        "total": 118
       },
       {
         "name": "whaleSize50k",
         "wins": 120,
-        "losses": 103,
+        "losses": 104,
         "winRate": 54,
         "weight": 1.18,
-        "lastUpdated": "2026-08-31T03:00:58.488Z",
+        "lastUpdated": "2026-08-31T11:21:05.897Z",
         "previousWeight": 1.23,
-        "optimizedAt": "2026-08-31T03:05:53.059Z",
-        "total": 223
+        "optimizedAt": "2026-08-31T13:01:42.402Z",
+        "total": 224
       },
       {
         "name": "whaleSize25k",
-        "wins": 275,
+        "wins": 276,
         "losses": 239,
         "winRate": 54,
         "weight": 1.18,
-        "lastUpdated": "2026-08-30T22:50:55.738Z",
+        "lastUpdated": "2026-08-31T11:21:04.987Z",
         "previousWeight": 1.23,
-        "optimizedAt": "2026-08-30T23:06:01.563Z",
-        "total": 514
+        "optimizedAt": "2026-08-31T13:01:42.402Z",
+        "total": 515
       },
       {
         "name": "whaleSize15k",
-        "wins": 485,
+        "wins": 487,
         "losses": 416,
         "winRate": 54,
-        "weight": 1.18,
-        "lastUpdated": "2026-08-31T04:25:46.134Z",
-        "previousWeight": 1.23,
-        "optimizedAt": "2026-08-31T04:36:03.294Z",
-        "total": 901
+        "weight": 1.23,
+        "lastUpdated": "2026-08-31T14:46:20.518Z",
+        "previousWeight": 1.31,
+        "optimizedAt": "2026-08-31T14:46:32.117Z",
+        "total": 903
       }
     ],
     "bottomFactors": [
@@ -592,58 +626,58 @@
       },
       {
         "name": "concentrated",
-        "wins": 653,
+        "wins": 655,
         "losses": 583,
         "winRate": 53,
         "weight": 1.16,
-        "lastUpdated": "2026-08-31T04:35:45.487Z",
+        "lastUpdated": "2026-08-31T13:31:32.459Z",
         "previousWeight": 1.22,
-        "optimizedAt": "2026-08-31T05:10:51.999Z",
-        "total": 1236
+        "optimizedAt": "2026-08-31T14:06:16.015Z",
+        "total": 1238
       },
       {
         "name": "whaleSize15k",
-        "wins": 485,
+        "wins": 487,
         "losses": 416,
         "winRate": 54,
-        "weight": 1.18,
-        "lastUpdated": "2026-08-31T04:25:46.134Z",
-        "previousWeight": 1.23,
-        "optimizedAt": "2026-08-31T04:36:03.294Z",
-        "total": 901
+        "weight": 1.23,
+        "lastUpdated": "2026-08-31T14:46:20.518Z",
+        "previousWeight": 1.31,
+        "optimizedAt": "2026-08-31T14:46:32.117Z",
+        "total": 903
       },
       {
         "name": "whaleSize25k",
-        "wins": 275,
+        "wins": 276,
         "losses": 239,
         "winRate": 54,
         "weight": 1.18,
-        "lastUpdated": "2026-08-30T22:50:55.738Z",
+        "lastUpdated": "2026-08-31T11:21:04.987Z",
         "previousWeight": 1.23,
-        "optimizedAt": "2026-08-30T23:06:01.563Z",
-        "total": 514
+        "optimizedAt": "2026-08-31T13:01:42.402Z",
+        "total": 515
       },
       {
         "name": "whaleSize50k",
         "wins": 120,
-        "losses": 103,
+        "losses": 104,
         "winRate": 54,
         "weight": 1.18,
-        "lastUpdated": "2026-08-31T03:00:58.488Z",
+        "lastUpdated": "2026-08-31T11:21:05.897Z",
         "previousWeight": 1.23,
-        "optimizedAt": "2026-08-31T03:05:53.059Z",
-        "total": 223
+        "optimizedAt": "2026-08-31T13:01:42.402Z",
+        "total": 224
       },
       {
         "name": "sportsMarket",
-        "wins": 64,
+        "wins": 65,
         "losses": 53,
         "winRate": 55,
         "weight": 1.19,
-        "lastUpdated": "2026-08-31T02:45:47.275Z",
+        "lastUpdated": "2026-08-31T14:06:05.325Z",
         "previousWeight": 1.25,
-        "optimizedAt": "2026-08-31T02:55:54.301Z",
-        "total": 117
+        "optimizedAt": "2026-08-31T14:11:09.652Z",
+        "total": 118
       },
       {
         "name": "cryptoMarket",
@@ -658,36 +692,36 @@
       },
       {
         "name": "lastMinute6h",
-        "wins": 504,
+        "wins": 505,
         "losses": 385,
         "winRate": 57,
         "weight": 1.21,
-        "lastUpdated": "2026-08-31T04:35:45.487Z",
+        "lastUpdated": "2026-08-31T07:20:59.274Z",
         "previousWeight": 1.27,
-        "optimizedAt": "2026-08-31T05:10:51.999Z",
-        "total": 889
+        "optimizedAt": "2026-08-31T08:36:05.231Z",
+        "total": 890
       },
       {
         "name": "eliteWallet",
-        "wins": 210,
-        "losses": 151,
+        "wins": 212,
+        "losses": 153,
         "winRate": 58,
         "weight": 1.23,
-        "lastUpdated": "2026-08-31T04:35:49.989Z",
+        "lastUpdated": "2026-08-31T14:11:02.055Z",
         "previousWeight": 1.29,
-        "optimizedAt": "2026-08-31T05:10:51.999Z",
-        "total": 361
+        "optimizedAt": "2026-08-31T14:46:32.117Z",
+        "total": 365
       },
       {
         "name": "strongWallet",
-        "wins": 638,
-        "losses": 467,
+        "wins": 639,
+        "losses": 468,
         "winRate": 58,
         "weight": 1.29,
-        "lastUpdated": "2026-08-31T06:20:59.283Z",
+        "lastUpdated": "2026-08-31T14:46:18.574Z",
         "previousWeight": 1.3699999999999999,
-        "optimizedAt": "2026-08-31T06:21:06.119Z",
-        "total": 1105
+        "optimizedAt": "2026-08-31T14:46:32.117Z",
+        "total": 1107
       }
     ],
     "recommendation": {
@@ -709,7 +743,7 @@
         {
           "name": "freshWallet",
           "winRate": 62,
-          "record": "66W-41L",
+          "record": "67W-41L",
           "isDiscovered": false
         }
       ],
@@ -723,13 +757,13 @@
         {
           "name": "concentrated",
           "winRate": 53,
-          "record": "653W-583L",
+          "record": "655W-583L",
           "isDiscovered": false
         },
         {
           "name": "whaleSize15k",
           "winRate": 54,
-          "record": "485W-416L",
+          "record": "487W-416L",
           "isDiscovered": false
         }
       ],
@@ -833,34 +867,6 @@
     "totalFactors": 12
   },
   "tradeLog": [
-    {
-      "type": "SKIP",
-      "market": "LoL: JD Gaming vs Team WE (BO5) - LPL Playoffs",
-      "reason": "Market already closed/resolved on Gamma",
-      "marketCategory": "other",
-      "timestamp": "2026-08-31T00:09:43.786Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "Will Sunderland AFC vs. Fulham FC end in a draw?",
-      "reason": "Market already closed/resolved on Gamma",
-      "marketCategory": "other",
-      "timestamp": "2026-08-31T00:09:43.920Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "Memphis vs. UNLV Runnin'",
-      "reason": "Market already closed/resolved on Gamma",
-      "marketCategory": "other",
-      "timestamp": "2026-08-31T00:09:44.034Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "US Open ATP: Jaime Faria vs Jenson Brooksby",
-      "reason": "Market already closed/resolved on Gamma",
-      "marketCategory": "tennis",
-      "timestamp": "2026-08-31T00:09:44.197Z"
-    },
     {
       "type": "PAPER_TRADE",
       "market": "US Open WTA: Emma Navarro vs Lois Boisson",
@@ -1077,46 +1083,47 @@
       "pnl": 0,
       "paperTrade": true,
       "timestamp": "2026-08-31T04:00:57.051Z"
+    },
+    {
+      "type": "PAPER_TRADE",
+      "market": "Counter-Strike: G2 vs Aurora Gaming - Map 2 Winner",
+      "size": 3,
+      "entryPrice": 39,
+      "walletTier": "HIGH_CONVICTION",
+      "walletWR": 0,
+      "betSummary": null,
+      "whaleAction": "BUY",
+      "exploration": true,
+      "marketCategory": "esports",
+      "timestamp": "2026-08-31T12:41:15.509Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Counter-Strike: MOUZ vs Team Falcons (BO3) - BLAST Open Porto Group B",
+      "reason": "Entry price too high for sports_binary (48% > 40%)",
+      "walletTier": "ELITE",
+      "marketCategory": "esports",
+      "timestamp": "2026-08-31T14:21:14.890Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Map Handicap: FAL (-1.5) vs MOUZ (+1.5)",
+      "reason": "Entry price too high for sports_binary (73% > 40%)",
+      "walletTier": "ELITE",
+      "marketCategory": "other",
+      "timestamp": "2026-08-31T14:21:14.974Z"
+    },
+    {
+      "type": "EXIT",
+      "market": "Counter-Strike: G2 vs Aurora Gaming - Map 2 Winner",
+      "reason": "Market resolved (gamma_resolved). Final price: 0%",
+      "exitType": "market_resolved",
+      "pnl": -3,
+      "paperTrade": true,
+      "timestamp": "2026-08-31T14:46:30.670Z"
     }
   ],
   "tradeHistory": [
-    {
-      "id": "at_1787015837240_4rmmz5",
-      "marketSlug": "mlb-bal-tb-2026-08-17",
-      "marketTitle": "Baltimore Orioles vs. Tampa Bay Rays",
-      "marketType": "other",
-      "signalSubType": "moneyline",
-      "direction": "Baltimore Orioles",
-      "directionRaw": "Baltimore Orioles",
-      "whaleAction": "BUY",
-      "entryPrice": 40,
-      "size": 5,
-      "walletTier": "HIGH_CONVICTION",
-      "walletWinRate": 0,
-      "walletBets": 0,
-      "score": 80,
-      "confidence": 49,
-      "hoursUntilEvent": 1.8,
-      "openedAt": "2026-08-18T01:17:17.240Z",
-      "paperTrade": true,
-      "marketCategory": "other",
-      "aiConfidence": null,
-      "strongCombo": null,
-      "isHighConviction": true,
-      "shares": 12.5,
-      "peakPctGain": 35,
-      "trailingStopActive": true,
-      "trailingStopLevel": 15,
-      "closedAt": "2026-08-18T01:27:23.294Z",
-      "exitPrice": 0,
-      "exitType": "market_resolved",
-      "exitReason": "Market resolved (gamma_resolved). Final price: 0%",
-      "pnl": -5,
-      "pnlPercent": -100,
-      "outcome": "loss",
-      "entryHourUTC": 1,
-      "exitHourUTC": 1
-    },
     {
       "id": "at_1787015835968_zvku8v",
       "marketSlug": "mlb-lad-col-2026-08-17-spread-away-1pt5",
@@ -2199,15 +2206,56 @@
       "outcome": "push",
       "entryHourUTC": 0,
       "exitHourUTC": 4
+    },
+    {
+      "id": "at_1788180075406_f8e1e0",
+      "marketSlug": "cs2-g2-aur1-2026-08-31-game2",
+      "marketTitle": "Counter-Strike: G2 vs Aurora Gaming - Map 2 Winner",
+      "marketType": "other",
+      "signalSubType": "moneyline",
+      "direction": "Aurora Gaming",
+      "directionRaw": "Aurora Gaming",
+      "whaleAction": "BUY",
+      "entryPrice": 39,
+      "size": 3,
+      "walletTier": "HIGH_CONVICTION",
+      "walletWinRate": 0,
+      "walletBets": 0,
+      "score": 80,
+      "confidence": 54,
+      "hoursUntilEvent": 11.3,
+      "openedAt": "2026-08-31T12:41:15.406Z",
+      "paperTrade": true,
+      "marketCategory": "esports",
+      "aiConfidence": null,
+      "strongCombo": null,
+      "isHighConviction": true,
+      "isExploration": true,
+      "agentProb": null,
+      "agentEdgePts": null,
+      "agentOpinion": null,
+      "shares": 7.692307692307692,
+      "peakPctGain": 53.84615384615385,
+      "trailingStopActive": true,
+      "trailingStopLevel": 43.84615384615385,
+      "closedAt": "2026-08-31T14:46:30.229Z",
+      "exitPrice": 0,
+      "exitType": "market_resolved",
+      "exitReason": "Market resolved (gamma_resolved). Final price: 0%",
+      "pnl": -3,
+      "pnlPercent": -100,
+      "outcome": "loss",
+      "entryHourUTC": 12,
+      "exitHourUTC": 14
     }
   ],
   "learningStats": {
     "success": true,
     "overview": {
       "totalFactorsTracked": 13,
-      "totalSignalsProcessed": 6023,
+      "totalSignalsProcessed": 6038,
       "overallWinRate": 55,
-      "pendingSignals": 286
+      "pendingSignals": 321
     },
     "walletEdge": {
       "totalTracked": 500,
@@ -2217,58 +2265,20 @@
       "fadeCount": 0,
       "topPerformers": [
         {
-          "address": "0xb340ecd9e8b681562affbafe4a87514b31261ad1",
-          "tier": "AVERAGE",
-          "winRate": 80,
-          "record": "4W-1L",
-          "totalVolume": 168421.75307999176,
-          "edgeMetrics": {
-            "avgOdds": 74,
-            "avgBetTiming": 0,
-            "consistencyScore": 83,
-            "bigBetWinRate": 57,
-            "sportWinRate": 0,
-            "politicalWinRate": 0,
-            "cryptoWinRate": 0,
-            "totalBigBets": 7,
-            "roi": 0,
-            "bigBetWins": 4
-          }
-        },
-        {
-          "address": "0xf28e42d20e4826f2b10a24bc952001697947cab2",
-          "tier": "AVERAGE",
-          "winRate": 60,
-          "record": "3W-2L",
-          "totalVolume": 518889.76690145826,
-          "edgeMetrics": {
-            "avgOdds": 63,
-            "avgBetTiming": 0,
-            "consistencyScore": 63,
-            "bigBetWinRate": 43,
-            "sportWinRate": 0,
-            "politicalWinRate": 0,
-            "cryptoWinRate": 0,
-            "totalBigBets": 7,
-            "roi": 0,
-            "bigBetWins": 3
-          }
-        },
-        {
           "address": "0x05f6cb63d4ffdfaecd7ad8acd0765b6f6a5a25a1",
           "tier": "AVERAGE",
           "winRate": 60,
           "record": "3W-2L",
-          "totalVolume": 174806.294,
+          "totalVolume": 201067.27829999998,
           "edgeMetrics": {
-            "avgOdds": 61,
+            "avgOdds": 60,
             "avgBetTiming": 0,
             "consistencyScore": 63,
             "bigBetWinRate": 43,
             "sportWinRate": 0,
             "politicalWinRate": 0,
             "cryptoWinRate": 0,
-            "totalBigBets": 7,
+            "totalBigBets": 9,
             "roi": 0,
             "bigBetWins": 3
           }
@@ -2293,7 +2303,7 @@
         },
         {
           "name": "freshWallet",
-          "record": "66W-41L",
+          "record": "67W-41L",
           "winRate": 62
         }
       ],
@@ -2302,21 +2312,21 @@
     "factors": {
       "whaleSize50k": {
         "wins": 120,
-        "losses": 103,
+        "losses": 104,
         "winRate": 54,
         "weight": 1.18,
-        "lastUpdated": "2026-08-31T03:00:58.488Z",
+        "lastUpdated": "2026-08-31T11:21:05.897Z",
         "previousWeight": 1.23,
-        "optimizedAt": "2026-08-31T03:05:53.059Z"
+        "optimizedAt": "2026-08-31T13:01:42.402Z"
       },
       "lastMinute6h": {
-        "wins": 504,
+        "wins": 505,
         "losses": 385,
         "winRate": 57,
         "weight": 1.21,
-        "lastUpdated": "2026-08-31T04:35:45.487Z",
+        "lastUpdated": "2026-08-31T07:20:59.274Z",
         "previousWeight": 1.27,
-        "optimizedAt": "2026-08-31T05:10:51.999Z"
+        "optimizedAt": "2026-08-31T08:36:05.231Z"
       },
       "lastMinute2h": {
         "wins": 264,
@@ -2328,67 +2338,67 @@
         "optimizedAt": "2026-08-31T06:21:06.119Z"
       },
       "whaleSize25k": {
-        "wins": 275,
+        "wins": 276,
         "losses": 239,
         "winRate": 54,
         "weight": 1.18,
-        "lastUpdated": "2026-08-30T22:50:55.738Z",
+        "lastUpdated": "2026-08-31T11:21:04.987Z",
         "previousWeight": 1.23,
-        "optimizedAt": "2026-08-30T23:06:01.563Z"
+        "optimizedAt": "2026-08-31T13:01:42.402Z"
       },
       "concentrated": {
-        "wins": 653,
+        "wins": 655,
         "losses": 583,
         "winRate": 53,
         "weight": 1.16,
-        "lastUpdated": "2026-08-31T04:35:45.487Z",
+        "lastUpdated": "2026-08-31T13:31:32.459Z",
         "previousWeight": 1.22,
-        "optimizedAt": "2026-08-31T05:10:51.999Z"
+        "optimizedAt": "2026-08-31T14:06:16.015Z"
       },
       "whaleSize15k": {
-        "wins": 485,
+        "wins": 487,
         "losses": 416,
         "winRate": 54,
-        "weight": 1.18,
-        "lastUpdated": "2026-08-31T04:25:46.134Z",
-        "previousWeight": 1.23,
-        "optimizedAt": "2026-08-31T04:36:03.294Z"
+        "weight": 1.23,
+        "lastUpdated": "2026-08-31T14:46:20.518Z",
+        "previousWeight": 1.31,
+        "optimizedAt": "2026-08-31T14:46:32.117Z"
       },
       "freshWallet": {
-        "wins": 66,
+        "wins": 67,
         "losses": 41,
         "winRate": 62,
         "weight": 1.28,
-        "lastUpdated": "2026-08-30T19:51:05.579Z",
+        "lastUpdated": "2026-08-31T14:06:05.325Z",
         "previousWeight": 1.34,
-        "optimizedAt": "2026-08-30T20:01:53.399Z"
+        "optimizedAt": "2026-08-31T14:11:09.652Z"
       },
       "strongWallet": {
-        "wins": 638,
-        "losses": 467,
+        "wins": 639,
+        "losses": 468,
         "winRate": 58,
         "weight": 1.29,
-        "lastUpdated": "2026-08-31T06:20:59.283Z",
+        "lastUpdated": "2026-08-31T14:46:18.574Z",
         "previousWeight": 1.3699999999999999,
-        "optimizedAt": "2026-08-31T06:21:06.119Z"
+        "optimizedAt": "2026-08-31T14:46:32.117Z"
       },
       "eliteWallet": {
-        "wins": 210,
-        "losses": 151,
+        "wins": 212,
+        "losses": 153,
         "winRate": 58,
         "weight": 1.23,
-        "lastUpdated": "2026-08-31T04:35:49.989Z",
+        "lastUpdated": "2026-08-31T14:11:02.055Z",
         "previousWeight": 1.29,
-        "optimizedAt": "2026-08-31T05:10:51.999Z"
+        "optimizedAt": "2026-08-31T14:46:32.117Z"
       },
       "sportsMarket": {
-        "wins": 64,
+        "wins": 65,
         "losses": 53,
         "winRate": 55,
         "weight": 1.19,
-        "lastUpdated": "2026-08-31T02:45:47.275Z",
+        "lastUpdated": "2026-08-31T14:06:05.325Z",
         "previousWeight": 1.25,
-        "optimizedAt": "2026-08-31T02:55:54.301Z"
+        "optimizedAt": "2026-08-31T14:11:09.652Z"
       },
       "cryptoMarket": {
         "wins": 9,
@@ -2462,11 +2472,11 @@
   "learningInsights": {
     "success": true,
     "systemPerformance": {
-      "totalSignalsProcessed": 6023,
-      "wins": 3305,
-      "losses": 2718,
+      "totalSignalsProcessed": 6038,
+      "wins": 3316,
+      "losses": 2722,
       "winRate": 55,
-      "pendingSignals": 286
+      "pendingSignals": 321
     },
     "insights": {
       "bestFactors": [
@@ -2481,7 +2491,7 @@
         {
           "factor": "freshWallet",
           "winRate": 62,
-          "wins": 66,
+          "wins": 67,
           "losses": 41,
           "weight": 1.28,
           "performance": "STRONG"
@@ -2502,7 +2512,7 @@
       {
         "factor": "freshWallet",
         "winRate": 62,
-        "wins": 66,
+        "wins": 67,
         "losses": 41,
         "weight": 1.28,
         "performance": "STRONG"
@@ -2510,23 +2520,23 @@
       {
         "factor": "strongWallet",
         "winRate": 58,
-        "wins": 638,
-        "losses": 467,
+        "wins": 639,
+        "losses": 468,
         "weight": 1.29,
         "performance": "AVERAGE"
       },
       {
         "factor": "eliteWallet",
         "winRate": 58,
-        "wins": 210,
-        "losses": 151,
+        "wins": 212,
+        "losses": 153,
         "weight": 1.23,
         "performance": "AVERAGE"
       },
       {
         "factor": "lastMinute6h",
         "winRate": 57,
-        "wins": 504,
+        "wins": 505,
         "losses": 385,
         "weight": 1.21,
         "performance": "AVERAGE"
@@ -2542,7 +2552,7 @@
       {
         "factor": "sportsMarket",
         "winRate": 55,
-        "wins": 64,
+        "wins": 65,
         "losses": 53,
         "weight": 1.19,
         "performance": "AVERAGE"
@@ -2551,14 +2561,14 @@
         "factor": "whaleSize50k",
         "winRate": 54,
         "wins": 120,
-        "losses": 103,
+        "losses": 104,
         "weight": 1.18,
         "performance": "AVERAGE"
       },
       {
         "factor": "whaleSize25k",
         "winRate": 54,
-        "wins": 275,
+        "wins": 276,
         "losses": 239,
         "weight": 1.18,
         "performance": "AVERAGE"
@@ -2566,15 +2576,15 @@
       {
         "factor": "whaleSize15k",
         "winRate": 54,
-        "wins": 485,
+        "wins": 487,
         "losses": 416,
-        "weight": 1.18,
+        "weight": 1.23,
         "performance": "AVERAGE"
       },
       {
         "factor": "concentrated",
         "winRate": 53,
-        "wins": 653,
+        "wins": 655,
         "losses": 583,
         "weight": 1.16,
         "performance": "AVERAGE"
@@ -2598,12 +2608,12 @@
         "key": "underdog",
         "label": "Underdog entries (≤40¢)",
         "side": "follow",
-        "settled": 503,
+        "settled": 504,
         "wins": 171,
-        "losses": 332,
-        "staked": 50300,
-        "pnl": 1161.98,
-        "roi": 2.3,
+        "losses": 333,
+        "staked": 50400,
+        "pnl": 1061.98,
+        "roi": 2.1,
         "winRate": 34,
         "readyForAuto": true
       },
@@ -2611,11 +2621,11 @@
         "key": "all",
         "label": "Follow all signals",
         "side": "follow",
-        "settled": 4086,
-        "wins": 2253,
-        "losses": 1833,
-        "staked": 408600,
-        "pnl": -1957.1,
+        "settled": 4097,
+        "wins": 2260,
+        "losses": 1837,
+        "staked": 409700,
+        "pnl": -2004.11,
         "roi": -0.5,
         "winRate": 55,
         "readyForAuto": false
@@ -2624,12 +2634,12 @@
         "key": "fade_favorites",
         "label": "Fade favorites (≥60¢)",
         "side": "fade",
-        "settled": 1505,
+        "settled": 1511,
         "wins": 457,
-        "losses": 1048,
-        "staked": 150500,
-        "pnl": -750.76,
-        "roi": -0.5,
+        "losses": 1054,
+        "staked": 151100,
+        "pnl": -1350.76,
+        "roi": -0.9,
         "winRate": 30,
         "readyForAuto": false
       },
@@ -2637,12 +2647,12 @@
         "key": "high_score",
         "label": "High score (≥100)",
         "side": "follow",
-        "settled": 1056,
-        "wins": 581,
-        "losses": 475,
-        "staked": 105600,
-        "pnl": -1164.33,
-        "roi": -1.1,
+        "settled": 1058,
+        "wins": 582,
+        "losses": 476,
+        "staked": 105800,
+        "pnl": -1227.34,
+        "roi": -1.2,
         "winRate": 55,
         "readyForAuto": false
       },
@@ -2668,11 +2678,10 @@
     "settledCount": 0,
     "winRate": null,
     "lastScan": {
-      "at": 1788158150903,
-      "scanned": 2,
+      "at": 1788186963520,
+      "scanned": 1,
       "sports": [
-        "mlb",
-        "wnba"
+        "mlb"
       ],
       "found": 0,
       "newCount": 0
@@ -3044,6 +3053,90 @@
     "enabled": true,
     "results": [
       {
+        "inv_key": "investigation:will-nvda-reach-220-by-august-31-2026::Yes",
+        "market_slug": "will-nvda-reach-220-by-august-31-2026",
+        "direction_raw": "Yes",
+        "market_title": "Will NVIDIA (NVDA) hit (HIGH) $220 Week of August 31 2026?",
+        "source": "sweep",
+        "status": "done",
+        "agent_prob": 0.83,
+        "confidence": "MEDIUM",
+        "reasoning": "NVDA closed around $217.5-$218 on Friday Aug 28, 2026 after a sharp post-earnings pullback (stock had traded in a $216.81-$229.26 range in the prior session alone), so the $220 target sits only ~1% above the last close. Given NVDA's demonstrated intraday volatility (multi-percent swings common) and a full 5-day trading week (Aug31-Sep4, no holiday interruption) for the target to be hit even briefly, the bar is relatively easy to clear despite the recent downtrend. Some downside risk remains if the sell-off (driven by rate-hike concerns and post-earnings profit-taking) accelerates without any bounce.",
+        "key_findings": "[\"NVDA closed near $217.88 on Aug 28, 2026, down ~3.4% that day amid broader market weakness (Fed rate warning) - Eastern Herald/Google Finance\",\"Same-day trading range was $216.81-$229.26, showing extreme intraday volatility - Google Finance\",\"Stock had fallen for 8 of the prior 9 sessions heading into its Aug 26 earnings before a guidance-driven pop - CNBC\",\"52-week high is $236.54 and stock was above $227 just days earlier, showing $220 is well within recent trading range - MacroTrends/Investing.com\",\"Full trading week Aug 31-Sep 4, 2026 has 5 open sessions (Labor Day falls on Sept 7, not within this window)\"]",
+        "model": "claude-sonnet-5",
+        "web_searches": 5,
+        "market_prob": 0.73,
+        "entry_price_pct": 73,
+        "edge_pts": 10,
+        "event_date": "2026-09-04T20:00:00Z",
+        "investigated_at": "2026-08-31T03:31:59.503Z",
+        "outcome": "WIN",
+        "y": 1,
+        "agent_brier": 0.0289,
+        "market_brier": 0.0729,
+        "settled_by": "gamma",
+        "settled_at": "2026-08-31T14:46:26.399Z",
+        "updated_at": "2026-08-31T14:46:26.399Z",
+        "market_impact": "[{\"asset\":\"NVDA\",\"assetType\":\"stock\",\"direction\":\"UP\",\"conviction\":\"MEDIUM\",\"rationale\":\"A move back to $220 would represent a modest relief rally from the post-earnings, rate-driven pullback, consistent with continued high realized volatility rather than a sustained trend reversal.\"},{\"asset\":\"SMH\",\"assetType\":\"etf\",\"direction\":\"UP\",\"conviction\":\"LOW\",\"rationale\":\"Semiconductor ETF (SMH) is heavily weighted toward NVDA and tends to co-move with any bounce in the largest AI chipmaker's shares.\"},{\"asset\":\"AMD\",\"assetType\":\"stock\",\"direction\":\"UP\",\"conviction\":\"LOW\",\"rationale\":\"AI/semiconductor peer sentiment tends to move in tandem with NVDA given shared exposure to AI capex demand narratives.\"}]",
+        "last_error": null
+      },
+      {
+        "inv_key": "investigation:will-googl-dip-to-340-by-august-31-2026::Yes",
+        "market_slug": "will-googl-dip-to-340-by-august-31-2026",
+        "direction_raw": "Yes",
+        "market_title": "Will Alphabet Inc. (GOOGL) hit (LOW) $340 Week of August 31 2026?",
+        "source": "sweep",
+        "status": "done",
+        "agent_prob": 0.76,
+        "confidence": "MEDIUM",
+        "reasoning": "GOOGL closed at $346.59 on Aug 28, 2026 with a day range of $340.27–$349.14, meaning the stock already touched within $0.27 of the $340 threshold just before the market week begins. Given typical daily volatility of several dollars and the stock hovering in the $340–$350 band amid active AI-capex and competitive news flow (Anthropic/Microsoft pricing pressure), a dip to $340 during the full trading week (Aug 31–Sep 4) is quite likely, though not certain if the stock instead rallies further from AI optimism.",
+        "key_findings": "[\"CNBC: GOOGL day low $340.27, prior close $340.65 (as of Aug 27-28, 2026)\",\"Yahoo Finance: recent day range $340.27–$349.14, current price ~$341.90-$346.59\",\"Stock is trading in a tight band just above the $340 target, requiring only a marginal (~2%) pullback\",\"News flow includes AI capex competition (Anthropic, Microsoft budget AI pricing) creating potential for volatility\"]",
+        "model": "claude-sonnet-5",
+        "web_searches": 4,
+        "market_prob": 0.675,
+        "entry_price_pct": 68,
+        "edge_pts": 8.5,
+        "event_date": "2026-09-04T20:00:00Z",
+        "investigated_at": "2026-08-31T00:26:26.570Z",
+        "outcome": "WIN",
+        "y": 1,
+        "agent_brier": 0.0576,
+        "market_brier": 0.1056,
+        "settled_by": "gamma",
+        "settled_at": "2026-08-31T14:31:17.896Z",
+        "updated_at": "2026-08-31T14:31:17.896Z",
+        "market_impact": "[{\"asset\":\"GOOGL\",\"assetType\":\"stock\",\"direction\":\"DOWN\",\"conviction\":\"MEDIUM\",\"rationale\":\"A dip to $340 implies a short-term pullback in Alphabet shares, likely driven by profit-taking or AI competitive pricing pressure narratives already circulating in the news.\"},{\"asset\":\"QQQ\",\"assetType\":\"etf\",\"direction\":\"DOWN\",\"conviction\":\"LOW\",\"rationale\":\"GOOGL is a major Nasdaq-100 constituent; a pullback in Alphabet could coincide with broader mega-cap tech weakness reflected in QQQ.\"},{\"asset\":\"Mega-cap AI/Tech sector\",\"assetType\":\"sector\",\"direction\":\"VOLATILE\",\"conviction\":\"LOW\",\"rationale\":\"Heightened AI capex competition (Anthropic, Microsoft, Google) is creating volatility across hyperscaler stocks, which could amplify intraday swings hitting the $340 low.\"}]",
+        "last_error": null
+      },
+      {
+        "inv_key": "investigation:highest-temperature-in-wellington-on-august-31-2026-16c::Yes",
+        "market_slug": "highest-temperature-in-wellington-on-august-31-2026-16c",
+        "direction_raw": "Yes",
+        "market_title": "Will the highest temperature in Wellington be 16°C on August 31?",
+        "source": "sweep",
+        "status": "done",
+        "agent_prob": 0.08,
+        "confidence": "LOW",
+        "reasoning": "News coverage from NZ Herald describing MetService's August 31, 2026 morning update points to a strong southwesterly/southerly flow bringing colder air and snow warnings across NZ, with Wellington likely experiencing a cool, blustery day rather than a mild one. Wellington's average August daily high normally sits around 12-13°C, and the monthly max of 16.4°C this August occurred earlier (Aug 3) under different conditions, not during this cold southerly event. Given the cold snap context, a max exactly at 16°C is plausible but less likely than a lower reading (roughly 10-13°C range), so I estimate a below-crowd probability with low confidence due to lack of direct station-level forecast data.",
+        "key_findings": "[\"NZ Herald: MetService's Aug 31, 2026 update describes 'strong southwesterly flow' dragging colder air across NZ with snow warnings on southern routes (NZ Herald)\",\"Wellington's August 2026 monthly mean temp was reported at 9.9°C, slightly below the 10.3°C normal (weatherandclimate.eu)\",\"The month's highest max (16.4°C) occurred on August 3, not during the cold snap period near month's end (weatherandclimate.eu)\",\"Search tool became rate-limited before more granular hourly/daily forecast data for Wellington specifically on Aug 31 could be retrieved\"]",
+        "model": "claude-sonnet-5",
+        "web_searches": 5,
+        "market_prob": 0.25,
+        "entry_price_pct": 25,
+        "edge_pts": -17,
+        "event_date": "2026-08-31T12:00:00Z",
+        "investigated_at": "2026-08-31T00:09:22.601Z",
+        "outcome": "LOSS",
+        "y": 0,
+        "agent_brier": 0.0064,
+        "market_brier": 0.0625,
+        "settled_by": "gamma",
+        "settled_at": "2026-08-31T12:41:12.837Z",
+        "updated_at": "2026-08-31T12:41:12.837Z",
+        "market_impact": null,
+        "last_error": null
+      },
+      {
         "inv_key": "investigation:highest-temperature-in-austin-on-august-30-2026-100-101f::Yes",
         "market_slug": "highest-temperature-in-austin-on-august-30-2026-100-101f",
         "direction_raw": "Yes",
@@ -3128,36 +3221,6 @@
         "last_error": "Anthropic API 400: {\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.\"},\"request_id\":\"req_011Cea8FKTz12tZbeihCjRng\"}"
       },
       {
-        "inv_key": "investigation:will-nvda-reach-220-by-august-31-2026::Yes",
-        "market_slug": "will-nvda-reach-220-by-august-31-2026",
-        "direction_raw": "Yes",
-        "market_title": "Will NVIDIA (NVDA) hit (HIGH) $220 Week of August 31 2026?",
-        "source": "sweep",
-        "status": "done",
-        "agent_prob": 0.83,
-        "confidence": "MEDIUM",
-        "reasoning": "NVDA closed around $217.5-$218 on Friday Aug 28, 2026 after a sharp post-earnings pullback (stock had traded in a $216.81-$229.26 range in the prior session alone), so the $220 target sits only ~1% above the last close. Given NVDA's demonstrated intraday volatility (multi-percent swings common) and a full 5-day trading week (Aug31-Sep4, no holiday interruption) for the target to be hit even briefly, the bar is relatively easy to clear despite the recent downtrend. Some downside risk remains if the sell-off (driven by rate-hike concerns and post-earnings profit-taking) accelerates without any bounce.",
-        "key_findings": "[\"NVDA closed near $217.88 on Aug 28, 2026, down ~3.4% that day amid broader market weakness (Fed rate warning) - Eastern Herald/Google Finance\",\"Same-day trading range was $216.81-$229.26, showing extreme intraday volatility - Google Finance\",\"Stock had fallen for 8 of the prior 9 sessions heading into its Aug 26 earnings before a guidance-driven pop - CNBC\",\"52-week high is $236.54 and stock was above $227 just days earlier, showing $220 is well within recent trading range - MacroTrends/Investing.com\",\"Full trading week Aug 31-Sep 4, 2026 has 5 open sessions (Labor Day falls on Sept 7, not within this window)\"]",
-        "model": "claude-sonnet-5",
-        "web_searches": 5,
-        "market_prob": 0.73,
-        "entry_price_pct": 73,
-        "edge_pts": 10,
-        "event_date": "2026-09-04T20:00:00Z",
-        "investigated_at": "2026-08-31T03:31:59.503Z",
-        "outcome": null,
-        "y": null,
-        "agent_brier": null,
-        "market_brier": null,
-        "settled_by": null,
-        "settled_at": null,
-        "updated_at": "2026-08-31T03:31:59.503Z",
-        "market_impact": "[{\"asset\":\"NVDA\",\"assetType\":\"stock\",\"direction\":\"UP\",\"conviction\":\"MEDIUM\",\"rationale\":\"A move back to $220 would represent a modest relief rally from the post-earnings, rate-driven pullback, consistent with continued high realized volatility rather than a sustained trend reversal.\"},{\"asset\":\"SMH\",\"assetType\":\"etf\",\"direction\":\"UP\",\"conviction\":\"LOW\",\"rationale\":\"Semiconductor ETF (SMH) is heavily weighted toward NVDA and tends to co-move with any bounce in the largest AI chipmaker's shares.\"},{\"asset\":\"AMD\",\"assetType\":\"stock\",\"direction\":\"UP\",\"conviction\":\"LOW\",\"rationale\":\"AI/semiconductor peer sentiment tends to move in tandem with NVDA given shared exposure to AI capex demand narratives.\"}]",
-        "last_error": null,
-        "market_prob_now": 0.81,
-        "price_checked_at": "2026-08-31T06:37:10.904Z"
-      },
-      {
         "inv_key": "investigation:will-gracinha-caiado-win-the-most-votes-in-the-2026-goias-senate-election::Yes",
         "market_slug": "will-gracinha-caiado-win-the-most-votes-in-the-2026-goias-senate-election",
         "direction_raw": "Yes",
@@ -3212,8 +3275,8 @@
         "updated_at": "2026-08-31T02:36:40.302Z",
         "market_impact": null,
         "last_error": null,
-        "market_prob_now": 0.23,
-        "price_checked_at": "2026-08-31T06:37:10.904Z"
+        "market_prob_now": 0.205,
+        "price_checked_at": "2026-08-31T14:48:20.245Z"
       },
       {
         "inv_key": "investigation:will-the-2026-vgc-masters-champion-be-from-japan::Yes",
@@ -3271,7 +3334,7 @@
         "market_impact": null,
         "last_error": null,
         "market_prob_now": 0.145,
-        "price_checked_at": "2026-08-31T06:37:10.904Z"
+        "price_checked_at": "2026-08-31T14:48:20.245Z"
       },
       {
         "inv_key": "investigation:will-the-ornn-h100-index-be-between-2pt50-and-2pt75-on-september-30-2026-1785423806294::Yes",
@@ -3328,8 +3391,8 @@
         "updated_at": "2026-08-31T00:36:30.789Z",
         "market_impact": null,
         "last_error": null,
-        "market_prob_now": 0.1645,
-        "price_checked_at": "2026-08-31T06:37:10.904Z"
+        "market_prob_now": 0.166,
+        "price_checked_at": "2026-08-31T14:48:20.245Z"
       },
       {
         "inv_key": "investigation:us-iran-hormuz-agreement-by-september-30::Yes",
@@ -3360,36 +3423,6 @@
         "last_error": "Model call timed out after 300s (client abort; raise INVESTIGATION_FETCH_TIMEOUT_MS if this recurs)"
       },
       {
-        "inv_key": "investigation:will-googl-dip-to-340-by-august-31-2026::Yes",
-        "market_slug": "will-googl-dip-to-340-by-august-31-2026",
-        "direction_raw": "Yes",
-        "market_title": "Will Alphabet Inc. (GOOGL) hit (LOW) $340 Week of August 31 2026?",
-        "source": "sweep",
-        "status": "done",
-        "agent_prob": 0.76,
-        "confidence": "MEDIUM",
-        "reasoning": "GOOGL closed at $346.59 on Aug 28, 2026 with a day range of $340.27–$349.14, meaning the stock already touched within $0.27 of the $340 threshold just before the market week begins. Given typical daily volatility of several dollars and the stock hovering in the $340–$350 band amid active AI-capex and competitive news flow (Anthropic/Microsoft pricing pressure), a dip to $340 during the full trading week (Aug 31–Sep 4) is quite likely, though not certain if the stock instead rallies further from AI optimism.",
-        "key_findings": "[\"CNBC: GOOGL day low $340.27, prior close $340.65 (as of Aug 27-28, 2026)\",\"Yahoo Finance: recent day range $340.27–$349.14, current price ~$341.90-$346.59\",\"Stock is trading in a tight band just above the $340 target, requiring only a marginal (~2%) pullback\",\"News flow includes AI capex competition (Anthropic, Microsoft budget AI pricing) creating potential for volatility\"]",
-        "model": "claude-sonnet-5",
-        "web_searches": 4,
-        "market_prob": 0.675,
-        "entry_price_pct": 68,
-        "edge_pts": 8.5,
-        "event_date": "2026-09-04T20:00:00Z",
-        "investigated_at": "2026-08-31T00:26:26.570Z",
-        "outcome": null,
-        "y": null,
-        "agent_brier": null,
-        "market_brier": null,
-        "settled_by": null,
-        "settled_at": null,
-        "updated_at": "2026-08-31T00:26:26.570Z",
-        "market_impact": "[{\"asset\":\"GOOGL\",\"assetType\":\"stock\",\"direction\":\"DOWN\",\"conviction\":\"MEDIUM\",\"rationale\":\"A dip to $340 implies a short-term pullback in Alphabet shares, likely driven by profit-taking or AI competitive pricing pressure narratives already circulating in the news.\"},{\"asset\":\"QQQ\",\"assetType\":\"etf\",\"direction\":\"DOWN\",\"conviction\":\"LOW\",\"rationale\":\"GOOGL is a major Nasdaq-100 constituent; a pullback in Alphabet could coincide with broader mega-cap tech weakness reflected in QQQ.\"},{\"asset\":\"Mega-cap AI/Tech sector\",\"assetType\":\"sector\",\"direction\":\"VOLATILE\",\"conviction\":\"LOW\",\"rationale\":\"Heightened AI capex competition (Anthropic, Microsoft, Google) is creating volatility across hyperscaler stocks, which could amplify intraday swings hitting the $340 low.\"}]",
-        "last_error": null,
-        "market_prob_now": 0.63,
-        "price_checked_at": "2026-08-31T06:37:10.904Z"
-      },
-      {
         "inv_key": "investigation:will-anthropics-valuation-be-at-least-2pt25t-at-the-end-of-august-2026-20260804180220379::Yes",
         "market_slug": "will-anthropics-valuation-be-at-least-2pt25t-at-the-end-of-august-2026-20260804180220379",
         "direction_raw": "Yes",
@@ -3416,8 +3449,8 @@
         "updated_at": "2026-08-31T00:21:22.211Z",
         "market_impact": "[{\"asset\":\"COIN\",\"assetType\":\"stock\",\"direction\":\"UP\",\"conviction\":\"LOW\",\"rationale\":\"A surprise doubling of Anthropic's private valuation would signal extreme AI-driven risk appetite that could lift sentiment toward crypto/fintech platforms facilitating tokenized pre-IPO exposure, though this is a low-conviction indirect link.\"},{\"asset\":\"AMZN\",\"assetType\":\"stock\",\"direction\":\"UP\",\"conviction\":\"MEDIUM\",\"rationale\":\"Amazon holds a large equity stake in Anthropic; a valuation surge to $2.25T would sharply increase Amazon's mark-to-market investment gains, similar to the Q2 2026 non-operating income boost already seen.\"},{\"asset\":\"AI/software sector\",\"assetType\":\"sector\",\"direction\":\"UP\",\"conviction\":\"LOW\",\"rationale\":\"A sudden confirmed jump to $2.25T would reinforce narrative of unchecked AI valuation expansion, likely lifting sentiment and comps across private and public AI-adjacent equities ahead of the anticipated October IPO.\"}]",
         "last_error": null,
-        "market_prob_now": 0.0855,
-        "price_checked_at": "2026-08-31T06:37:10.904Z"
+        "market_prob_now": 0.073,
+        "price_checked_at": "2026-08-31T14:48:20.245Z"
       },
       {
         "inv_key": "investigation:will-lyon-win-lcs-2026-summer-split-20260703175356405::Yes",
@@ -3447,7 +3480,7 @@
         "market_impact": null,
         "last_error": null,
         "market_prob_now": 0.525,
-        "price_checked_at": "2026-08-31T06:37:10.904Z"
+        "price_checked_at": "2026-08-31T14:48:20.245Z"
       },
       {
         "inv_key": "investigation:highest-temperature-in-wuhan-on-august-31-2026-31c::Yes",
@@ -3477,7 +3510,7 @@
         "market_impact": null,
         "last_error": null,
         "market_prob_now": 0.0005,
-        "price_checked_at": "2026-08-31T06:37:10.904Z"
+        "price_checked_at": "2026-08-31T14:48:20.245Z"
       },
       {
         "inv_key": "investigation:will-gladson-cameli-win-the-second-most-votes-in-the-2026-acre-senate-election::Yes",
@@ -3508,36 +3541,6 @@
         "last_error": "Model call timed out after 300s (client abort; raise INVESTIGATION_FETCH_TIMEOUT_MS if this recurs)"
       },
       {
-        "inv_key": "investigation:highest-temperature-in-wellington-on-august-31-2026-16c::Yes",
-        "market_slug": "highest-temperature-in-wellington-on-august-31-2026-16c",
-        "direction_raw": "Yes",
-        "market_title": "Will the highest temperature in Wellington be 16°C on August 31?",
-        "source": "sweep",
-        "status": "done",
-        "agent_prob": 0.08,
-        "confidence": "LOW",
-        "reasoning": "News coverage from NZ Herald describing MetService's August 31, 2026 morning update points to a strong southwesterly/southerly flow bringing colder air and snow warnings across NZ, with Wellington likely experiencing a cool, blustery day rather than a mild one. Wellington's average August daily high normally sits around 12-13°C, and the monthly max of 16.4°C this August occurred earlier (Aug 3) under different conditions, not during this cold southerly event. Given the cold snap context, a max exactly at 16°C is plausible but less likely than a lower reading (roughly 10-13°C range), so I estimate a below-crowd probability with low confidence due to lack of direct station-level forecast data.",
-        "key_findings": "[\"NZ Herald: MetService's Aug 31, 2026 update describes 'strong southwesterly flow' dragging colder air across NZ with snow warnings on southern routes (NZ Herald)\",\"Wellington's August 2026 monthly mean temp was reported at 9.9°C, slightly below the 10.3°C normal (weatherandclimate.eu)\",\"The month's highest max (16.4°C) occurred on August 3, not during the cold snap period near month's end (weatherandclimate.eu)\",\"Search tool became rate-limited before more granular hourly/daily forecast data for Wellington specifically on Aug 31 could be retrieved\"]",
-        "model": "claude-sonnet-5",
-        "web_searches": 5,
-        "market_prob": 0.25,
-        "entry_price_pct": 25,
-        "edge_pts": -17,
-        "event_date": "2026-08-31T12:00:00Z",
-        "investigated_at": "2026-08-31T00:09:22.601Z",
-        "outcome": null,
-        "y": null,
-        "agent_brier": null,
-        "market_brier": null,
-        "settled_by": null,
-        "settled_at": null,
-        "updated_at": "2026-08-31T00:09:22.601Z",
-        "market_impact": null,
-        "last_error": null,
-        "market_prob_now": 0.0005,
-        "price_checked_at": "2026-08-31T06:37:10.904Z"
-      },
-      {
         "inv_key": "investigation:will-jd-vance-win-the-2028-us-presidential-election::No",
         "market_slug": "will-jd-vance-win-the-2028-us-presidential-election",
         "direction_raw": "No",
@@ -3565,7 +3568,7 @@
         "market_impact": "[{\"asset\":\"Defense sector\",\"assetType\":\"sector\",\"direction\":\"VOLATILE\",\"conviction\":\"LOW\",\"rationale\":\"A Democratic administration replacing Vance could shift defense procurement priorities and foreign policy posture, though effects are diffuse and depend heavily on which Democrat wins and congressional composition.\"},{\"asset\":\"Clean energy/renewables (ETF: ICLN)\",\"assetType\":\"etf\",\"direction\":\"UP\",\"conviction\":\"MEDIUM\",\"rationale\":\"A Democratic win over Vance would likely mean continuation or expansion of clean energy subsidies and climate regulation, boosting sentiment and potential subsidy flows to renewable energy stocks.\"},{\"asset\":\"USD\",\"assetType\":\"fx\",\"direction\":\"VOLATILE\",\"conviction\":\"LOW\",\"rationale\":\"A change in administration away from Vance/Trump-aligned tariff and trade policy could alter trade flow expectations and currency positioning, though the effect is uncertain and depends on specific policy platforms of the winning candidate.\"},{\"asset\":\"Crypto (BTC)\",\"assetType\":\"crypto\",\"direction\":\"DOWN\",\"conviction\":\"LOW\",\"rationale\":\"Vance has been seen as relatively crypto-friendly; a Democratic win could bring renewed regulatory scrutiny on digital assets, though this is a second-order, low-conviction effect given uncertainty about which Democrat and their specific stance.\"}]",
         "last_error": null,
         "market_prob_now": 0.7465,
-        "price_checked_at": "2026-08-31T06:37:10.904Z"
+        "price_checked_at": "2026-08-31T14:48:20.245Z"
       },
       {
         "inv_key": "investigation:highest-temperature-in-london-on-august-30-2026-22c::Yes",
@@ -3634,22 +3637,22 @@
         "done": 44,
         "pending": 0,
         "error": 27,
-        "scored": 16
+        "scored": 19
       },
       "overall": {
-        "n": 16,
-        "meanAgentBrier": 0.1297,
-        "meanMarketBrier": 0.1315,
-        "meanPairedDiff": 0.0019,
-        "agentBeatsMarketRate": 44,
-        "edgeDirectionHitRate": 44,
-        "edgeDirectionN": 16
+        "n": 19,
+        "meanAgentBrier": 0.1141,
+        "meanMarketBrier": 0.1234,
+        "meanPairedDiff": 0.0094,
+        "agentBeatsMarketRate": 53,
+        "edgeDirectionHitRate": 53,
+        "edgeDirectionN": 19
       },
       "byConfidence": {
         "MEDIUM": {
-          "n": 13,
-          "meanAgentBrier": 0.154,
-          "meanMarketBrier": 0.1446
+          "n": 15,
+          "meanAgentBrier": 0.1392,
+          "meanMarketBrier": 0.1372
         },
         "HIGH": {
           "n": 1,
@@ -3657,9 +3660,9 @@
           "meanMarketBrier": 0
         },
         "LOW": {
-          "n": 2,
-          "meanAgentBrier": 0.0362,
-          "meanMarketBrier": 0.1122
+          "n": 3,
+          "meanAgentBrier": 0.0263,
+          "meanMarketBrier": 0.0956
         }
       },
       "bySource": {
@@ -3669,9 +3672,9 @@
           "meanMarketBrier": 0
         },
         "sweep": {
-          "n": 14,
-          "meanAgentBrier": 0.147,
-          "meanMarketBrier": 0.1503
+          "n": 17,
+          "meanAgentBrier": 0.1265,
+          "meanMarketBrier": 0.138
         }
       }
     },
