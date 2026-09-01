@@ -1,21 +1,21 @@
 {
-  "fetchedAt": "2026-09-01T15:02:40Z",
+  "fetchedAt": "2026-09-01T18:42:15Z",
   "health": {
     "status": "ok",
-    "timestamp": "2026-09-01T15:02:41.485Z",
+    "timestamp": "2026-09-01T18:42:15.980Z",
     "version": "21.1.0 - Modularize: extract src/odds.js + src/gamma.js from index.js",
     "cache": {
-      "signalCount": 11078,
-      "oldestSignal": "2026-08-25T15:00:58.000Z",
-      "newestSignal": "2026-09-01T14:52:00.000Z"
+      "signalCount": 10993,
+      "oldestSignal": "2026-08-25T18:41:03.000Z",
+      "newestSignal": "2026-09-01T18:35:48.000Z"
     }
   },
   "cronStatus": {
     "success": true,
     "lastRun": {
-      "startedAt": "2026-09-01T15:00:39.715Z",
+      "startedAt": "2026-09-01T18:35:50.386Z",
       "scan": {
-        "signals": 200,
+        "signals": 250,
         "success": true
       },
       "settlement": {
@@ -45,8 +45,14 @@
       "optimization": null,
       "error": null,
       "edgeScan": {
-        "skipped": "throttled",
-        "nextInMin": 4
+        "at": 1788287929353,
+        "scanned": 2,
+        "sports": [
+          "mlb",
+          "nba"
+        ],
+        "found": 0,
+        "newCount": 0
       },
       "edgeSettle": {
         "checked": 0,
@@ -62,44 +68,51 @@
         "expired": 0
       },
       "autotrader": {
-        "evaluated": 200,
+        "evaluated": 250,
         "tradesOpened": 0,
         "tradesPaperTraded": 0,
         "tradesQueued": 0,
-        "skipped": 200,
+        "skipped": 250,
         "skipReasons": {
           "Entry price too high for sports_binary (68% > 40%)": 1,
           "Entry price too high for sports_binary (74% > 40%)": 1,
+          "Entry price too high for sports_binary (52% > 40%)": 2,
           "Entry price too high for sports_binary (75% > 40%)": 1,
+          "No winning wallet on signal": 136,
           "Entry price too high for sports_binary (71% > 40%)": 1,
           "Entry price too high for other (85% > 40%)": 1,
-          "No winning wallet on signal": 101,
+          "Entry price too high for sports_binary (55% > 40%)": 1,
           "Entry price too high for sports_binary (76% > 40%)": 2,
-          "Event too far out (21d > 7d horizon)": 14,
+          "Event too far out (21d > 7d horizon)": 12,
           "Event too far out (20d > 7d horizon)": 41,
+          "Entry price too high for sports_binary (56% > 40%)": 3,
+          "Entry price too high for sports_binary (53% > 40%)": 1,
           "Entry price too high for sports_binary (60% > 40%)": 1,
           "Event too far out (31d > 7d horizon)": 9,
           "Event too far out (30d > 7d horizon)": 6,
           "Market already closed/resolved on Gamma": 1,
-          "Entry price too high for sports_binary (52% > 40%)": 1,
+          "Entry price too high for sports_binary (65% > 40%)": 1,
           "Entry price too high for sports_binary (62% > 40%)": 1,
+          "Entry price too high for sports_other (49% > 40%)": 1,
+          "Duplicate market (already traded)": 2,
+          "Entry price too high for sports_other (74% > 40%)": 1,
+          "Event too far out (19d > 7d horizon)": 6,
           "Signal has no market slug — cannot price or settle": 6,
+          "Event too far out (121d > 7d horizon)": 2,
           "Event too far out (62d > 7d horizon)": 1,
           "Event too far out (123d > 7d horizon)": 4,
-          "Event too far out (19d > 7d horizon)": 1,
           "Event too far out (122d > 7d horizon)": 3,
-          "Event too far out (304d > 7d horizon)": 1,
           "Event too far out (16d > 7d horizon)": 1,
           "Event too far out (302d > 7d horizon)": 1
         },
-        "exitChecks": 0,
+        "exitChecks": 1,
         "positionsExited": 0,
         "errors": [],
-        "openPositions": 0,
+        "openPositions": 1,
         "dailyPnL": 3.18,
         "totalPnL": 3133.634949494948
       },
-      "completedAt": "2026-09-01T15:01:30.467Z"
+      "completedAt": "2026-09-01T18:39:20.581Z"
     },
     "cronSchedule": "Every 5 minutes",
     "note": "Settlement runs automatically. Sports events settle ~12h after game ends."
@@ -288,14 +301,14 @@
   },
   "daily": {
     "date": "2026-09-01",
-    "tradesOpened": 1,
+    "tradesOpened": 2,
     "tradesClosed": 1,
-    "totalSpent": 3,
+    "totalSpent": 6,
     "totalReturned": 6.18,
     "realizedPnL": 3.18,
     "wins": 1,
     "losses": 0,
-    "explorationTradesOpened": 1,
+    "explorationTradesOpened": 2,
     "skippedReasons": {}
   },
   "dailyRange": {
@@ -303,14 +316,14 @@
     "days": [
       {
         "date": "2026-09-01",
-        "tradesOpened": 1,
+        "tradesOpened": 2,
         "tradesClosed": 1,
-        "totalSpent": 3,
+        "totalSpent": 6,
         "totalReturned": 6.18,
         "realizedPnL": 3.18,
         "wins": 1,
         "losses": 0,
-        "explorationTradesOpened": 1,
+        "explorationTradesOpened": 2,
         "skippedReasons": {}
       },
       {
@@ -468,7 +481,38 @@
       }
     ]
   },
-  "positions": [],
+  "positions": [
+    {
+      "id": "at_1788285268320_rvbuih",
+      "marketSlug": "el1-bro-ley-2026-09-01-bro",
+      "marketTitle": "Will Bromley FC win on 2026-09-01?",
+      "marketType": "other",
+      "signalSubType": "moneyline",
+      "direction": "Yes",
+      "directionRaw": "Yes",
+      "whaleAction": "BUY",
+      "entryPrice": 37,
+      "size": 3,
+      "walletTier": "HIGH_CONVICTION",
+      "walletWinRate": 0,
+      "walletBets": 0,
+      "score": 80,
+      "confidence": 53,
+      "hoursUntilEvent": 6.1,
+      "openedAt": "2026-09-01T17:54:28.320Z",
+      "paperTrade": true,
+      "marketCategory": "sports_binary",
+      "aiConfidence": null,
+      "strongCombo": null,
+      "isHighConviction": true,
+      "isExploration": true,
+      "agentProb": null,
+      "agentEdgePts": null,
+      "agentOpinion": null,
+      "shares": 8.108108108108109,
+      "peakPctGain": 0
+    }
+  ],
   "aiIntelligence": {
     "topFactors": [
       {
@@ -838,27 +882,6 @@
   },
   "tradeLog": [
     {
-      "type": "PAPER_TRADE",
-      "market": "Will Arsenal FC win on 2026-08-31?",
-      "size": 3,
-      "entryPrice": 36,
-      "walletTier": "HIGH_CONVICTION",
-      "walletWR": 0,
-      "betSummary": null,
-      "whaleAction": "BUY",
-      "exploration": true,
-      "marketCategory": "sports_binary",
-      "timestamp": "2026-08-31T18:21:24.031Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "Map Handicap: FAL (-1.5) vs MOUZ (+1.5)",
-      "reason": "No proven edge for entry band 61-80 (0pt)",
-      "walletTier": "ELITE",
-      "marketCategory": "other",
-      "timestamp": "2026-08-31T18:26:30.661Z"
-    },
-    {
       "type": "SKIP",
       "market": "Counter-Strike: FUT Esports vs Vitality (BO3) - BLAST Open Porto Group B",
       "reason": "No proven edge for entry band 61-80 (0pt)",
@@ -1081,6 +1104,27 @@
       "reason": "Market already closed/resolved on Gamma",
       "marketCategory": "other",
       "timestamp": "2026-09-01T14:16:14.173Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "LoL: Gen.G vs KT Rolster - Game 2 Winner",
+      "reason": "Entry price too high for sports_binary (75% > 40%)",
+      "walletTier": "ELITE",
+      "marketCategory": "other",
+      "timestamp": "2026-09-01T15:25:14.718Z"
+    },
+    {
+      "type": "PAPER_TRADE",
+      "market": "Will Bromley FC win on 2026-09-01?",
+      "size": 3,
+      "entryPrice": 37,
+      "walletTier": "HIGH_CONVICTION",
+      "walletWR": 0,
+      "betSummary": null,
+      "whaleAction": "BUY",
+      "exploration": true,
+      "marketCategory": "sports_binary",
+      "timestamp": "2026-09-01T17:54:29.221Z"
     }
   ],
   "tradeHistory": [
@@ -2230,7 +2274,7 @@
       "totalFactorsTracked": 13,
       "totalSignalsProcessed": 6218,
       "overallWinRate": 55,
-      "pendingSignals": 297
+      "pendingSignals": 330
     },
     "walletEdge": {
       "totalTracked": 500,
@@ -2470,7 +2514,7 @@
       "wins": 3417,
       "losses": 2801,
       "winRate": 55,
-      "pendingSignals": 297
+      "pendingSignals": 330
     },
     "insights": {
       "bestFactors": [
@@ -2672,12 +2716,11 @@
     "settledCount": 0,
     "winRate": null,
     "lastScan": {
-      "at": 1788274267291,
-      "scanned": 3,
+      "at": 1788287929353,
+      "scanned": 2,
       "sports": [
         "mlb",
-        "wnba",
-        "nfl"
+        "nba"
       ],
       "found": 0,
       "newCount": 0
@@ -3048,6 +3091,34 @@
   "investigations": {
     "enabled": true,
     "results": [
+      {
+        "inv_key": "investigation:highest-temperature-in-seoul-on-september-1-2026-27c::Yes",
+        "market_slug": "highest-temperature-in-seoul-on-september-1-2026-27c",
+        "direction_raw": "Yes",
+        "market_title": "Will the highest temperature in Seoul (Incheon) be 27°C on September 1?",
+        "source": "sweep",
+        "status": "done",
+        "agent_prob": 0.27,
+        "confidence": "LOW",
+        "reasoning": "Two days before the observation date, near-term aviation forecasts for RKSI (Incheon Airport) suggested daily max temperatures clustering around 28-29°C, somewhat above the September climatological average high near 25-26°C for Incheon. This makes 27°C a plausible but not clearly modal whole-degree bucket—28°C or 29°C appear at least as likely given the warm forecast trend, so 27°C likely captures a meaningful but not dominant share of the probability mass.",
+        "key_findings": "[\"AccuWeather September 2026 climate average high for Incheon is ~77°F (~25°C), with monthly range 72-84°F (22-29°C)\",\"KMA aviation weather office (amo.kma.go.kr) snippet for RKSI showed forecast 'Max. Air Temp. 29°' repeated across multiple upcoming days, suggesting a warm spell heading into early September\",\"No single authoritative day-specific (Sep 1) forecast in whole-degree Celsius was retrieved with full confidence due to search tool rate limits\",\"Whole-degree-bucket temperature markets typically have a modal bucket probability in the 25-35% range given forecast uncertainty 2 days out\"]",
+        "model": "claude-sonnet-5",
+        "web_searches": 5,
+        "market_prob": 0.31,
+        "entry_price_pct": 31,
+        "edge_pts": -4,
+        "event_date": "2026-09-01T12:00:00Z",
+        "investigated_at": "2026-08-30T07:32:51.572Z",
+        "outcome": "LOSS",
+        "y": 0,
+        "agent_brier": 0.0729,
+        "market_brier": 0.0961,
+        "settled_by": "gamma",
+        "settled_at": "2026-09-01T15:29:07.131Z",
+        "updated_at": "2026-09-01T15:29:07.131Z",
+        "market_impact": null,
+        "last_error": null
+      },
       {
         "inv_key": "investigation:highest-temperature-in-wellington-on-september-1-2026-14c::Yes",
         "market_slug": "highest-temperature-in-wellington-on-september-1-2026-14c",
@@ -3579,34 +3650,6 @@
         "updated_at": "2026-08-31T23:01:00.951Z",
         "market_impact": null,
         "last_error": null
-      },
-      {
-        "inv_key": "investigation:will-finding-emily-score-at-least-86-on-the-rotten-tomatoes-tomatometer::Yes",
-        "market_slug": "will-finding-emily-score-at-least-86-on-the-rotten-tomatoes-tomatometer",
-        "direction_raw": "Yes",
-        "market_title": "Will \"Finding Emily\" score at least 86 on the Rotten Tomatoes Tomatometer?",
-        "source": "sweep",
-        "status": "done",
-        "agent_prob": 0.62,
-        "confidence": "MEDIUM",
-        "reasoning": "Multiple recent Rotten Tomatoes browse pages (as of Aug 28-29, 2026) show 'Finding Emily' with a Tomatometer score of 87%, just above the 86% threshold. Scores for freshly released films can fluctuate slightly as more reviews are added before the Aug 31 measurement date, but the current 87% reading is close enough that it could dip below 86% with a few additional negative reviews, or stay/rise above.",
-        "key_findings": "[\"RT 'New Movies Out Now' browse page lists 'Finding Emily · Opened Aug 28, 2026' at 87% Tomatometer\",\"Cinemablend article (published around Aug 28-29, 2026) states RT has the rom-com 'premiering at 87%'\",\"Critics quotes found are largely positive (3/4, 3.5/5, 10/10) but include some more mixed notices, consistent with an 87% score that could shift with more reviews\",\"Film is very newly released (opened Aug 28, 2026), so the review count is still growing ahead of the Aug 31 resolution date, adding some volatility risk to the score\"]",
-        "model": "claude-sonnet-5",
-        "web_searches": 5,
-        "market_prob": 0.64,
-        "entry_price_pct": 64,
-        "edge_pts": -2,
-        "event_date": "2026-08-31T23:59:00Z",
-        "investigated_at": "2026-08-29T03:20:58.408Z",
-        "outcome": "WIN",
-        "y": 1,
-        "agent_brier": 0.1444,
-        "market_brier": 0.1296,
-        "settled_by": "gamma",
-        "settled_at": "2026-08-31T21:56:04.808Z",
-        "updated_at": "2026-08-31T21:56:04.808Z",
-        "market_impact": null,
-        "last_error": null
       }
     ]
   },
@@ -3619,16 +3662,16 @@
         "done": 44,
         "pending": 0,
         "error": 43,
-        "scored": 29
+        "scored": 30
       },
       "overall": {
-        "n": 29,
-        "meanAgentBrier": 0.1803,
-        "meanMarketBrier": 0.159,
-        "meanPairedDiff": -0.0213,
-        "agentBeatsMarketRate": 41,
-        "edgeDirectionHitRate": 41,
-        "edgeDirectionN": 29
+        "n": 30,
+        "meanAgentBrier": 0.1767,
+        "meanMarketBrier": 0.1569,
+        "meanPairedDiff": -0.0198,
+        "agentBeatsMarketRate": 43,
+        "edgeDirectionHitRate": 43,
+        "edgeDirectionN": 30
       },
       "byConfidence": {
         "MEDIUM": {
@@ -3642,9 +3685,9 @@
           "meanMarketBrier": 0
         },
         "LOW": {
-          "n": 5,
-          "meanAgentBrier": 0.1458,
-          "meanMarketBrier": 0.1155
+          "n": 6,
+          "meanAgentBrier": 0.1336,
+          "meanMarketBrier": 0.1122
         }
       },
       "bySource": {
@@ -3654,9 +3697,9 @@
           "meanMarketBrier": 0
         },
         "sweep": {
-          "n": 27,
-          "meanAgentBrier": 0.193,
-          "meanMarketBrier": 0.1708
+          "n": 28,
+          "meanAgentBrier": 0.1887,
+          "meanMarketBrier": 0.1681
         }
       }
     },
