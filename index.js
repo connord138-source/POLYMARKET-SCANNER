@@ -1744,8 +1744,21 @@ async function investigateSignal(env, sig, opts) {
   await bumpDailyInvestigationCost(env, result.webSearches || 0);
 
   if (!result.ok) {
-    attempts += 1;
-    var permanent = result.error === "refusal" || attempts >= maxAttempts;
+    // An out-of-credits API account is a GLOBAL outage, not this market's
+    // fault: don't burn its retry attempts or blacklist it as permanent
+    // (the Sep 5 credit outage permanently marked dozens of markets that
+    // were never investigated). Flag the outage so the cron stops paying
+    // the phase cost; the flag expires hourly to re-probe.
+    var billingDown = /credit balance is too low/i.test(result.error || "");
+    if (billingDown) {
+      try {
+        await env.SIGNALS_CACHE.put("anthropic_billing_down", JSON.stringify({ at: Date.now() }),
+          { expirationTtl: 3600 });
+      } catch (e) {}
+    } else {
+      attempts += 1;
+    }
+    var permanent = !billingDown && (result.error === "refusal" || attempts >= maxAttempts);
     var recErr = await writeInv({
       status: permanent ? "error_permanent" : "error_transient",
       attempts: attempts,
@@ -1853,6 +1866,22 @@ async function settleOpenInvestigations(env) {
     var key = idx[(cur + i) % idx.length];
     var inv;
     try { inv = await env.SIGNALS_CACHE.get(key, { type: "json" }); } catch (e) { continue; }
+    // Heal billing casualties: rows failed (even "permanently") during an
+    // out-of-credits outage were never actually investigated — reset their
+    // attempts so they retry once the account has credits again.
+    if (inv && inv.status && inv.status.indexOf("error") === 0 &&
+        (inv.attempts || 0) > 0 &&
+        /credit balance is too low/i.test(inv.lastError || "")) {
+      inv.status = "error_transient";
+      inv.attempts = 0;
+      inv.updatedAt = new Date().toISOString();
+      try {
+        await env.SIGNALS_CACHE.put(key, JSON.stringify(inv), { expirationTtl: 45 * 24 * 60 * 60 });
+        await d1UpsertInvestigation(env, inv);
+      } catch (e) {}
+      res.healed = (res.healed || 0) + 1;
+      continue;
+    }
     if (!inv || inv.status !== "done" || typeof inv.agentProb !== "number") continue;
     if (inv.agentBrier !== null && inv.agentBrier !== undefined) continue;  // already scored
     res.checked++;
@@ -2104,7 +2133,9 @@ async function runMispricingSweep(env, budget, deadlineMs) {
     var sig = pool[i];
     var invKey = investigationKeyFor(sig.marketSlug, sig.directionRaw);
     var existing = await env.SIGNALS_CACHE.get(invKey, { type: "json" });
-    if (existing) continue; // never re-investigate
+    // Never re-investigate a completed market, but transient failures with
+    // retry budget left (e.g. healed billing casualties) may try again.
+    if (existing && !(existing.status === "error_transient" && (existing.attempts || 0) < 3)) continue;
     res.attempted++;
     var r = await investigateSignal(env, sig, { source: "sweep" });
     if (r.ok && r.investigation && r.investigation.status === "done") {
@@ -6432,7 +6463,15 @@ export default {
       // cron's 15-min wall — stop STARTING new ones past this deadline.
       // Worst case = 7 min budget + one 5-min straggler = 12 min.
       const invDeadline = Date.now() + parseInt(env.INVESTIGATION_WALL_BUDGET_MS || "420000", 10);
-      if (env.ANTHROPIC_API_KEY && alertableSignals.length > 0) {
+      // Anthropic account out of credits => every call 400s. Skip both
+      // agent phases until the hourly flag expires and re-probes.
+      let anthropicDown = false;
+      try { anthropicDown = !!(await env.SIGNALS_CACHE.get("anthropic_billing_down")); } catch (e) {}
+      if (anthropicDown) {
+        cronStatus.investigations = { skipped: "anthropic credits exhausted" };
+        cronStatus.sweep = { skipped: "anthropic credits exhausted" };
+      }
+      if (!anthropicDown && env.ANTHROPIC_API_KEY && alertableSignals.length > 0) {
         try {
           const perRun = parseInt(env.INVESTIGATION_PER_RUN || "2", 10);
           const dailyCap = parseInt(env.INVESTIGATION_DAILY_CAP || "50", 10);
@@ -6471,7 +6510,7 @@ export default {
         console.error("Overround scan error:", e.message);
         cronStatus.overround = { error: e.message };
       }
-      if (env.ANTHROPIC_API_KEY && (env.SWEEP_ENABLED || "true") !== "false") {
+      if (!anthropicDown && env.ANTHROPIC_API_KEY && (env.SWEEP_ENABLED || "true") !== "false") {
         try {
           const dailyCap = parseInt(env.INVESTIGATION_DAILY_CAP || "50", 10);
           const sweepPerRun = parseInt(env.SWEEP_PER_RUN || "1", 10);
