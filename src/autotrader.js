@@ -931,9 +931,12 @@ function categorizeMarket(marketTitle) {
   if (/tennis|atp|wta|open:|championships:/.test(t) && !/counter-strike/i.test(t)) return 'tennis';
   if (/counter-strike|csgo|cs2|dota|league of legends|valorant|overwatch/.test(t)) return 'esports';
   if (/will .+ win on \d{4}|will .+ win on \d{4}-\d{2}/.test(t)) return 'sports_binary';
-  if (/nba|nfl|nhl|mlb|soccer|football|hockey|basketball|baseball|gold medal|olympic/.test(t)) return 'sports_other';
+  if (/nba|nfl|nhl|mlb|ncaa|college football|heisman|soccer|football|hockey|basketball|baseball|gold medal|olympic/.test(t)) return 'sports_other';
   if (/trump|biden|election|congress|senate|governor|tax|iran|strike|war|fed |tariff/.test(t)) return 'politics';
   if (/temperature|weather|rain|snow|degrees|celsius|fahrenheit/.test(t)) return 'weather';
+  // Last resort: "A vs. B" titles that survived every filter above are
+  // matchups (college football games carry no league keyword at all).
+  if (/ vs\.? /.test(t)) return 'sports_binary';
   return 'other';
 }
 
