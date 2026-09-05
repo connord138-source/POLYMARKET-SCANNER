@@ -16,6 +16,7 @@ var SPORT_KEY_MAP = {
   'mlb': 'baseball_mlb',
   'nhl': 'icehockey_nhl',
   'ncaaf': 'americanfootball_ncaaf',
+  'cfb': 'americanfootball_ncaaf',   // Polymarket's actual college football slug prefix
   'ncaab': 'basketball_ncaab',
   'mma': 'mma_mixed_martial_arts',
   'ufc': 'mma_mixed_martial_arts',
@@ -106,6 +107,7 @@ function detectSportFromSlug(slug) {
   if (slugLower.startsWith('nba-') || slugLower.includes('-nba-')) return 'nba';
   if (slugLower.startsWith('mlb-') || slugLower.includes('-mlb-')) return 'mlb';
   if (slugLower.startsWith('nhl-') || slugLower.includes('-nhl-')) return 'nhl';
+  if (slugLower.startsWith('cfb-')) return 'cfb';   // Polymarket slugs CFB games cfb-<away>-<home>-<date>
   if (slugLower.startsWith('ncaaf-') || slugLower.includes('college-football')) return 'ncaaf';
   if (slugLower.startsWith('ncaab-') || slugLower.includes('college-basketball')) return 'ncaab';
   if (slugLower.startsWith('ufc-') || slugLower.startsWith('mma-')) return 'mma';
@@ -121,8 +123,8 @@ function detectSportFromSlug(slug) {
 function extractTeamsFromSlug(slug) {
   if (!slug) return null;
   
-  // Pattern: nfl-ne-den-2026-01-25, nba-lal-bos-2026-01-25
-  var match = slug.match(/^(?:nfl|nba|mlb|nhl|ncaaf|ncaab)-([a-z0-9]+)-([a-z0-9]+)-\d{4}-\d{2}-\d{2}/i);
+  // Pattern: nfl-ne-den-2026-01-25, nba-lal-bos-2026-01-25, cfb-mphs-unlv-2026-08-30
+  var match = slug.match(/^(?:nfl|nba|mlb|nhl|ncaaf|ncaab|cfb|wnba)-([a-z0-9]+)-([a-z0-9]+)-\d{4}-\d{2}-\d{2}/i);
   if (match) {
     return { away: match[1].toLowerCase(), home: match[2].toLowerCase() };
   }
@@ -189,32 +191,63 @@ async function getGameOdds(env, sportKey, markets) {
   }
 }
 
-// Find matching game in Odds API results
-function findMatchingGame(games, homeTeamCode, awayTeamCode) {
+// Loose team-name equivalence. Handles the college problem: TEAM_ALIASES
+// only covers pro teams, but Polymarket titles/outcomes carry full school
+// names ("Jacksonville State") that the Odds API decorates with mascots
+// ("Jacksonville State Gamecocks"). Substring either way, or at least two
+// significant shared words (one suffices for single-word names like
+// "Memphis"). "state"/"the" are too common to count.
+function teamNamesOverlap(a, b) {
+  a = String(a || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+  b = String(b || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!a || !b) return false;
+  if (a === b || b.includes(a) || a.includes(b)) return true;
+  var words = a.split(' ').filter(function (w) {
+    return w.length >= 3 && w !== 'the' && w !== 'state' && w !== 'university';
+  });
+  if (words.length === 0) return false;
+  var hits = 0;
+  for (var i = 0; i < words.length; i++) {
+    if (b.includes(words[i])) hits++;
+  }
+  return hits >= Math.min(2, words.length);
+}
+
+// Split a "Away vs. Home" / "Away @ Home" market title into its two team
+// strings. Returns null when the title isn't a matchup.
+function teamsFromTitle(title) {
+  var m = String(title || '').split(/\s+(?:vs\.?|@)\s+/i);
+  if (m.length !== 2 || !m[0].trim() || !m[1].trim()) return null;
+  return { away: m[0].trim(), home: m[1].trim() };
+}
+
+// Find matching game in Odds API results. Slug codes resolve via
+// TEAM_ALIASES for pro leagues; for college (and any unmapped code) the
+// optional market title's team names are the fallback matcher.
+function findMatchingGame(games, homeTeamCode, awayTeamCode, marketTitle) {
   if (!games || !Array.isArray(games)) return null;
-  
+
   var homeFullName = getTeamFullName(homeTeamCode);
   var awayFullName = getTeamFullName(awayTeamCode);
-  
+  var titleTeams = teamsFromTitle(marketTitle);
+
   for (var i = 0; i < games.length; i++) {
     var game = games[i];
-    var gameHome = (game.home_team || '').toLowerCase();
-    var gameAway = (game.away_team || '').toLowerCase();
-    var homeMatch = homeFullName.toLowerCase();
-    var awayMatch = awayFullName.toLowerCase();
-    
-    // Check for match
-    if ((gameHome.includes(homeMatch) || homeMatch.includes(gameHome)) &&
-        (gameAway.includes(awayMatch) || awayMatch.includes(gameAway))) {
+    var gameHome = game.home_team || '';
+    var gameAway = game.away_team || '';
+
+    if ((teamNamesOverlap(homeFullName, gameHome) && teamNamesOverlap(awayFullName, gameAway)) ||
+        (teamNamesOverlap(homeFullName, gameAway) && teamNamesOverlap(awayFullName, gameHome))) {
       return game;
     }
-    // Try reversed (home/away might be swapped)
-    if ((gameHome.includes(awayMatch) || awayMatch.includes(gameHome)) &&
-        (gameAway.includes(homeMatch) || homeMatch.includes(gameAway))) {
-      return game;
+    if (titleTeams) {
+      if ((teamNamesOverlap(titleTeams.home, gameHome) && teamNamesOverlap(titleTeams.away, gameAway)) ||
+          (teamNamesOverlap(titleTeams.home, gameAway) && teamNamesOverlap(titleTeams.away, gameHome))) {
+        return game;
+      }
     }
   }
-  
+
   return null;
 }
 
@@ -251,21 +284,23 @@ function calculateEdge(polymarketPrice, vegasOdds) {
   };
 }
 
-// Settle sports bet using actual game results from The Odds API
-async function settleWithOddsAPI(env, marketSlug, direction) {
+// Settle sports bet using actual game results from The Odds API.
+// marketTitle (optional) enables title-based game matching for leagues
+// whose slug codes aren't in TEAM_ALIASES (college football et al).
+async function settleWithOddsAPI(env, marketSlug, direction, marketTitle) {
   var sport = detectSportFromSlug(marketSlug);
   if (!sport) return null;
-  
+
   var sportKey = SPORT_KEY_MAP[sport];
   if (!sportKey) return null;
-  
+
   var teams = extractTeamsFromSlug(marketSlug);
   if (!teams) return null;
-  
+
   var scores = await getGameScores(env, sportKey, 3);
   if (!scores) return null;
-  
-  var game = findMatchingGame(scores, teams.home, teams.away);
+
+  var game = findMatchingGame(scores, teams.home, teams.away, marketTitle);
   if (!game) {
     console.log("No matching game found for " + marketSlug);
     return null;
@@ -311,10 +346,9 @@ async function settleWithOddsAPI(env, marketSlug, direction) {
         spreadWinner = margin > spreadPoints ? game.home_team : game.away_team;
       }
       
-      // Check if direction won
+      // Check if direction won (overlap matcher covers college names)
       var dirTeam = getTeamFullName(direction);
-      var didWin = spreadWinner.toLowerCase().includes(dirTeam.toLowerCase()) ||
-                   dirTeam.toLowerCase().includes(spreadWinner.toLowerCase());
+      var didWin = teamNamesOverlap(dirTeam, spreadWinner);
       
       return {
         status: 'settled',
@@ -329,10 +363,9 @@ async function settleWithOddsAPI(env, marketSlug, direction) {
     }
   }
   
-  // Regular moneyline bet
-  var dirTeam = getTeamFullName(direction);
-  var didWin = winner.toLowerCase().includes(dirTeam.toLowerCase()) ||
-               dirTeam.toLowerCase().includes(winner.toLowerCase());
+  // Regular moneyline bet (overlap matcher covers college names)
+  var dirTeamML = getTeamFullName(direction);
+  var didWin = winner !== 'tie' && teamNamesOverlap(dirTeamML, winner);
   
   return {
     status: 'settled',
@@ -353,6 +386,7 @@ async function settleWithOddsAPI(env, marketSlug, direction) {
 export {
   ODDS_API_BASE, SPORT_KEY_MAP, TEAM_ALIASES,
   detectSportFromSlug, extractTeamsFromSlug, getTeamFullName,
+  teamNamesOverlap, teamsFromTitle,
   getGameScores, getGameOdds, findMatchingGame,
   americanToProb, probToAmerican, calculateEdge, settleWithOddsAPI
 };

@@ -2,6 +2,7 @@
 
 import {
   detectSportFromSlug, extractTeamsFromSlug, getTeamFullName,
+  teamNamesOverlap,
   getGameScores, getGameOdds, findMatchingGame,
   americanToProb, probToAmerican, calculateEdge, settleWithOddsAPI, SPORT_KEY_MAP
 } from "./src/odds.js";
@@ -895,7 +896,7 @@ async function recordSignalOutcome(env, signalKey, signalData, outcome, meta) {
       await updateComboStats(env, signalData.factors, outcome);
       await env.SIGNALS_CACHE.put(trainedKey, "1", { expirationTtl: 35 * 24 * 60 * 60 });
     }
-    var marketType = detectMarketType(signalData.marketTitle);
+    var marketType = detectMarketType(signalData.marketTitle, signalData.marketSlug);
     for (var w = 0; w < (signalData.wallets || []).length; w++) {
       await recordWalletOutcome(env, signalData.wallets[w], outcome, profitPct, marketType, signalData.largestBet || 0, signalData.id, marketKey);
     }
@@ -2343,7 +2344,7 @@ async function processSettledSignals(env) {
         const sport = detectSportFromSlug(signalData.marketSlug);
 
         if (sport && SPORT_KEY_MAP[sport] && env.ODDS_API_KEY) {
-          const oddsApiResult = await settleWithOddsAPI(env, signalData.marketSlug, settleDirection);
+          const oddsApiResult = await settleWithOddsAPI(env, signalData.marketSlug, settleDirection, signalData.marketTitle);
 
           if (oddsApiResult && oddsApiResult.status === 'settled') {
             await recordSignalOutcome(env, signalKey, signalData, oddsApiResult.outcome, {
@@ -2455,10 +2456,13 @@ async function processSettledSignals(env) {
   return results;
 }
 
-// Helper to detect market type from title
-function detectMarketType(title) {
+// Helper to detect market type from title (+ optional slug — league-prefixed
+// slugs like cfb-mphs-unlv-2026-08-30 are sports even when the title carries
+// no league keyword, e.g. "Memphis vs. UNLV").
+function detectMarketType(title, slug) {
+  if (slug && /^(nba|nfl|mlb|nhl|wnba|ncaab|ncaaf|cfb|epl|ucl|mls|ufc|mma)-/i.test(slug)) return "sports";
   const titleLower = (title || "").toLowerCase();
-  
+
   if (POLITICAL_KEYWORDS.some(k => titleLower.includes(k))) return "political";
   if (SPORTS_KEYWORDS.some(k => titleLower.includes(k))) return "sports";
   if (CRYPTO_KEYWORDS.some(k => titleLower.includes(k))) return "crypto";
@@ -3239,7 +3243,7 @@ async function generateSmartAlert(env, signal) {
 
 var POLITICAL_KEYWORDS = ["election", "trump", "biden", "president", "senate", "congress", "governor", "republican", "democrat", "vote", "primary", "inauguration", "impeach", "pardon", "executive order", "cabinet", "nominee"];
 var CRYPTO_KEYWORDS = ["bitcoin", "btc", "ethereum", "eth", "crypto", "sec", "etf", "regulation", "gensler", "solana", "sol", "doge", "xrp"];
-var SPORTS_KEYWORDS = ["nba", "nfl", "mlb", "nhl", "super bowl", "championship", "playoffs", "world series", "mvp"];
+var SPORTS_KEYWORDS = ["nba", "nfl", "mlb", "nhl", "super bowl", "championship", "playoffs", "world series", "mvp", "ncaa", "college football", "heisman", "cfb"];
 
 var corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -3534,7 +3538,7 @@ function requiresAdmin(path, url, method) {
 // ============================================================
 async function buildOddsComparison(env, sport) {
   const sportKey = SPORT_KEY_MAP[sport];
-  if (!sportKey) return { error: "Sport not supported. Try: nba, nfl, mlb, nhl" };
+  if (!sportKey) return { error: "Sport not supported. Try: nba, nfl, cfb, mlb, nhl, ncaab" };
   if (!env.ODDS_API_KEY) return { error: "Odds API not configured. Add ODDS_API_KEY to secrets." };
 
   const oddsData = await getGameOdds(env, sportKey, 'h2h,spreads');   // KV-cached
@@ -3552,7 +3556,7 @@ async function buildOddsComparison(env, sport) {
   const polyPrices = {};
   for (const trade of sportsTrades) {
     const slug = trade.eventSlug || trade.slug || '';
-    const match = slug.match(/^(nba|nfl|mlb|nhl|wnba|ncaab|ncaaf)-([a-z]+)-([a-z]+)-(\d{4}-\d{2}-\d{2})/i);
+    const match = slug.match(/^(nba|nfl|mlb|nhl|wnba|ncaab|ncaaf|cfb)-([a-z0-9]+)-([a-z0-9]+)-(\d{4}-\d{2}-\d{2})/i);
     if (!match) continue;
     const gameKey = `${match[2]}-${match[3]}-${match[4]}`.toLowerCase();
     const isSpread = slug.includes('-spread');
@@ -3581,6 +3585,14 @@ async function buildOddsComparison(env, sport) {
     const bucket = isSpread ? polyPrices[gameKey].spread : polyPrices[gameKey].moneyline;
     if (isAwayTeam) bucket.away = { price: Math.round(price), slug, team: outcome };
     else if (isHomeTeam) bucket.home = { price: Math.round(price), slug, team: outcome };
+    else {
+      // College codes (cfb-jaxst-ndkst) aren't in TEAM_ALIASES, so the
+      // outcome label can't be classified from the slug. Stash it — the
+      // Odds API game's team names resolve the side at pairing time.
+      polyPrices[gameKey].unresolved = polyPrices[gameKey].unresolved || {};
+      polyPrices[gameKey].unresolved[`${outcomeLower}:${isSpread ? 's' : 'm'}`] =
+        { price: Math.round(price), slug, team: outcome, isSpread };
+    }
   }
 
   const games = (oddsData || []).map(game => {
@@ -3598,12 +3610,31 @@ async function buildOddsComparison(env, sport) {
     const gameDate = game.commence_time ? game.commence_time.split('T')[0] : '';
     let polyData = null;
     for (const [key, data] of Object.entries(polyPrices)) {
-      const awayName = getTeamFullName(data.awayCode).toLowerCase();
-      const homeName = getTeamFullName(data.homeCode).toLowerCase();
-      const vegasAway = game.away_team.toLowerCase(), vegasHome = game.home_team.toLowerCase();
-      const awayMatch = vegasAway.includes(awayName) || awayName.includes(vegasAway);
-      const homeMatch = vegasHome.includes(homeName) || homeName.includes(vegasHome);
-      if (awayMatch && homeMatch && key.includes(gameDate)) { polyData = data; break; }
+      if (!key.includes(gameDate)) continue;
+      const awayName = getTeamFullName(data.awayCode);
+      const homeName = getTeamFullName(data.homeCode);
+      let awayMatch = teamNamesOverlap(awayName, game.away_team);
+      let homeMatch = teamNamesOverlap(homeName, game.home_team);
+      // College slug codes don't resolve to names — fall back to the traded
+      // outcome labels (full school names) stashed as unresolved.
+      if ((!awayMatch || !homeMatch) && data.unresolved) {
+        const labels = Object.values(data.unresolved).map(u => u.team);
+        awayMatch = awayMatch || labels.some(t => teamNamesOverlap(t, game.away_team));
+        homeMatch = homeMatch || labels.some(t => teamNamesOverlap(t, game.home_team));
+      }
+      if (awayMatch && homeMatch) { polyData = data; break; }
+    }
+    // With the game identified, classify any stashed outcome labels into
+    // home/away buckets using the Odds API team names.
+    if (polyData && polyData.unresolved) {
+      for (const u of Object.values(polyData.unresolved)) {
+        const bucket = u.isSpread ? polyData.spread : polyData.moneyline;
+        if (teamNamesOverlap(u.team, game.away_team)) {
+          if (!bucket.away) bucket.away = { price: u.price, slug: u.slug, team: u.team };
+        } else if (teamNamesOverlap(u.team, game.home_team)) {
+          if (!bucket.home) bucket.home = { price: u.price, slug: u.slug, team: u.team };
+        }
+      }
     }
 
     // DEVIG: normalize the two raw implied probs to sum to 100%.
@@ -3710,7 +3741,7 @@ var EDGE_ALERT_MAX = 15;  // above this the "edge" is almost always a market-mat
 var EDGE_BOOK_MAX_DAYS_OUT = 10; // don't book games further out — far-future Polymarket books are thin and unreliable
 // Team sports with the standard "<sport>-<away>-<home>-<date>" Polymarket slug
 // and a real Odds API league key. (Tennis/MMA use non-team slugs; excluded.)
-var EDGE_SCAN_SPORTS = ["mlb", "nba", "wnba", "nfl", "nhl", "ncaab", "ncaaf"];
+var EDGE_SCAN_SPORTS = ["mlb", "nba", "wnba", "nfl", "nhl", "ncaab", "ncaaf", "cfb"];
 
 // Which of our scannable sports are actively trading on Polymarket right now,
 // so we only spend odds credits on in-season leagues.
@@ -3898,7 +3929,7 @@ function adaptSignalForAutotrader(signal) {
     entryPrice: entry,
     priceAtSignal: entry,
     title: signal.marketTitle,
-    marketType: detectMarketType(signal.marketTitle),
+    marketType: detectMarketType(signal.marketTitle, signal.marketSlug),
     hoursUntilEnd: signal.hoursUntilEvent,
     whaleIsSelling: false,
     hasWinningWallet,
@@ -5472,7 +5503,7 @@ export default {
         if (!sportKey) {
           return new Response(JSON.stringify({
             success: false,
-            error: "Sport not supported. Try: nba, nfl, mlb, nhl"
+            error: "Sport not supported. Try: nba, nfl, cfb, mlb, nhl, ncaab"
           }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" }
           });
@@ -7180,7 +7211,7 @@ function formatDirectionForDisplay(direction, marketTitle, marketSlug) {
       if (tierInfo.bestTier === "ELITE") factors.push("eliteWallet");
       if (tierInfo.bestTier === "STRONG") factors.push("strongWallet");
       
-      const marketType = detectMarketType(g.marketTitle);
+      const marketType = detectMarketType(g.marketTitle, g.marketSlug);
       if (marketType === "political") factors.push("politicalMarket");
       if (marketType === "sports") factors.push("sportsMarket");
       if (marketType === "crypto") factors.push("cryptoMarket");
