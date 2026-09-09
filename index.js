@@ -1340,6 +1340,7 @@ async function callClaudeInvestigator(env, params) {
   };
 
   var webSearches = 0;
+  var usedInput = 0, usedOutput = 0;   // real token spend, summed across turns
   // Bound the server-tool resume loop so a Worker invocation can't run away
   // against the subrequest cap.
   var MAX_TURNS = 8;
@@ -1357,8 +1358,9 @@ async function callClaudeInvestigator(env, params) {
   try {
     for (var turn = 0; turn < MAX_TURNS; turn++) {
       var streamed = await streamClaudeMessage(ANTHROPIC_API, headers, body, controller.signal);
-      if (!streamed.ok) return { ok: false, error: streamed.error };
+      if (!streamed.ok) return { ok: false, error: streamed.error, usage: { input: usedInput, output: usedOutput } };
       var data = streamed.data;
+      if (data.usage) { usedInput += data.usage.input || 0; usedOutput += data.usage.output || 0; }
 
       // Count web searches for cost visibility
       for (var b = 0; b < (data.content || []).length; b++) {
@@ -1369,7 +1371,7 @@ async function callClaudeInvestigator(env, params) {
       }
 
       if (data.stop_reason === "refusal") {
-        return { ok: false, error: "refusal", stopDetails: data.stop_details || null };
+        return { ok: false, error: "refusal", stopDetails: data.stop_details || null, usage: { input: usedInput, output: usedOutput } };
       }
 
       // Server-tool loop hit its internal cap - resume by echoing the turn back.
@@ -1401,11 +1403,12 @@ async function callClaudeInvestigator(env, params) {
         marketImpact: Array.isArray(parsed.marketImpact) ? parsed.marketImpact.slice(0, 4) : [],
         model: data.model || model,
         webSearches: webSearches,
+        usage: { input: usedInput, output: usedOutput },
         stopReason: data.stop_reason
       };
     }
 
-    return { ok: false, error: "Investigation exceeded " + MAX_TURNS + " turns without finishing" };
+    return { ok: false, error: "Investigation exceeded " + MAX_TURNS + " turns without finishing", usage: { input: usedInput, output: usedOutput } };
   } catch (e) {
     if (timedOut) {
       return {
@@ -1445,11 +1448,16 @@ async function streamClaudeMessage(url, headers, body, signal) {
   var model = null;
   var streamError = null;
   var sawStop = false;
+  var inputTokens = 0;
+  var outputTokens = 0;
 
   var handleEvent = function (obj) {
     var t = obj.type;
     if (t === "message_start") {
       model = (obj.message && obj.message.model) || null;
+      if (obj.message && obj.message.usage && typeof obj.message.usage.input_tokens === "number") {
+        inputTokens = obj.message.usage.input_tokens;
+      }
     } else if (t === "content_block_start") {
       content[obj.index] = obj.content_block || {};
     } else if (t === "content_block_delta") {
@@ -1472,6 +1480,11 @@ async function streamClaudeMessage(url, headers, body, signal) {
       }
     } else if (t === "message_delta") {
       if (obj.delta && obj.delta.stop_reason) stopReason = obj.delta.stop_reason;
+      if (obj.usage) {
+        // message_delta usage is cumulative for the message; take the latest.
+        if (typeof obj.usage.output_tokens === "number") outputTokens = obj.usage.output_tokens;
+        if (typeof obj.usage.input_tokens === "number") inputTokens = obj.usage.input_tokens;
+      }
     } else if (t === "message_stop") {
       sawStop = true;
     } else if (t === "error") {
@@ -1513,7 +1526,15 @@ async function streamClaudeMessage(url, headers, body, signal) {
   if (!sawStop && !stopReason) {
     return { ok: false, error: "Anthropic stream ended prematurely (no message_stop)" };
   }
-  return { ok: true, data: { content: content.filter(Boolean), stop_reason: stopReason, model: model } };
+  return {
+    ok: true,
+    data: {
+      content: content.filter(Boolean),
+      stop_reason: stopReason,
+      model: model,
+      usage: { input: inputTokens, output: outputTokens }
+    }
+  };
 }
 
 // Annotate open (done, unsettled) investigation rows with the market's live
@@ -1597,31 +1618,58 @@ function gammaBaselineForDirection(found, directionRaw) {
   return { marketProb: (isNaN(p) ? null : p), winIndex: winIndex };
 }
 
+// Per-MTok prices for the models the investigator might run on, used to
+// convert real usage tokens into an estimated dollar spend. Web search is
+// $10 per 1000 searches on top.
+var INVESTIGATION_MODEL_PRICES = {
+  "claude-haiku-4-5": { in: 1, out: 5 },
+  "claude-sonnet-5": { in: 2, out: 10 },
+  "claude-sonnet-4-6": { in: 3, out: 15 },
+  "claude-opus": { in: 5, out: 25 }
+};
+function investigationUsd(model, usage, webSearches) {
+  var p = null;
+  var m = model || "";
+  for (var k in INVESTIGATION_MODEL_PRICES) {
+    if (m.indexOf(k) === 0) { p = INVESTIGATION_MODEL_PRICES[k]; break; }
+  }
+  if (!p) p = { in: 2, out: 10 };   // assume sonnet-tier when unknown
+  var inTok = (usage && usage.input) || 0;
+  var outTok = (usage && usage.output) || 0;
+  return (inTok * p.in + outTok * p.out) / 1e6 + (webSearches || 0) * 0.01;
+}
+
 // Daily spend counter (append-safe-ish; settlement/investigation frequency is
-// low). Bounds cost: "N per run" caps count, not tokens/searches.
-async function bumpDailyInvestigationCost(env, webSearches) {
+// low). Tracks calls, searches, and REAL dollars (from usage tokens) — the
+// dollar figure is what the daily budget gate enforces.
+async function bumpDailyInvestigationCost(env, webSearches, usd) {
   if (!env.SIGNALS_CACHE) return;
   var day = new Date().toISOString().slice(0, 10);
   var key = "invest_cost:" + day;
   try {
-    var c = await env.SIGNALS_CACHE.get(key, { type: "json" }) || { investigations: 0, webSearches: 0 };
+    var c = await env.SIGNALS_CACHE.get(key, { type: "json" }) || { investigations: 0, webSearches: 0, usd: 0 };
     c.investigations += 1;
     c.webSearches += (webSearches || 0);
+    c.usd = Math.round(((c.usd || 0) + (usd || 0)) * 10000) / 10000;
     await env.SIGNALS_CACHE.put(key, JSON.stringify(c), { expirationTtl: 7 * 24 * 60 * 60 });
   } catch (e) {
     console.log("Cost counter error:", e.message);
   }
 }
 
-async function investigationCountToday(env) {
-  if (!env.SIGNALS_CACHE) return 0;
+async function investigationSpendToday(env) {
+  if (!env.SIGNALS_CACHE) return { count: 0, usd: 0 };
   var day = new Date().toISOString().slice(0, 10);
   try {
     var c = await env.SIGNALS_CACHE.get("invest_cost:" + day, { type: "json" });
-    return c ? (c.investigations || 0) : 0;
+    return { count: c ? (c.investigations || 0) : 0, usd: c ? (c.usd || 0) : 0 };
   } catch (e) {
-    return 0;
+    return { count: 0, usd: 0 };
   }
+}
+
+async function investigationCountToday(env) {
+  return (await investigationSpendToday(env)).count;
 }
 
 // Investigate one signal: fetch the market's real resolution criteria + live
@@ -1741,7 +1789,9 @@ async function investigateSignal(env, sig, opts) {
     eventDate: sig.eventDate || found.market.endDate || null
   });
 
-  await bumpDailyInvestigationCost(env, result.webSearches || 0);
+  await bumpDailyInvestigationCost(env, result.webSearches || 0,
+    investigationUsd(result.model || env.INVESTIGATION_MODEL || DEFAULT_INVESTIGATION_MODEL,
+      result.usage, result.webSearches));
 
   if (!result.ok) {
     // An out-of-credits API account is a GLOBAL outage, not this market's
@@ -6475,8 +6525,10 @@ export default {
         try {
           const perRun = parseInt(env.INVESTIGATION_PER_RUN || "2", 10);
           const dailyCap = parseInt(env.INVESTIGATION_DAILY_CAP || "50", 10);
-          const spentToday = await investigationCountToday(env);
-          const budget = Math.max(0, Math.min(perRun, dailyCap - spentToday));
+          const usdCap = parseFloat(env.INVESTIGATION_DAILY_USD || "5");
+          const spend = await investigationSpendToday(env);
+          const spentToday = spend.count;
+          const budget = spend.usd >= usdCap ? 0 : Math.max(0, Math.min(perRun, dailyCap - spentToday));
           const candidates = alertableSignals
             .filter(isInvestigableSignal)   // no Anthropic spend on sports/esports match outcomes
             .sort((a, b) => b.score - a.score)
@@ -6491,7 +6543,9 @@ export default {
             attempted: candidates.length,
             completed: investigated,
             spentToday: spentToday + investigated,
-            dailyCap: dailyCap
+            dailyCap: dailyCap,
+            spentTodayUsd: spend.usd,
+            usdCap: usdCap
           };
           console.log(`Investigations: ${investigated}/${candidates.length} (${spentToday + investigated}/${dailyCap} today)`);
         } catch (e) {
@@ -6514,14 +6568,19 @@ export default {
         try {
           const dailyCap = parseInt(env.INVESTIGATION_DAILY_CAP || "50", 10);
           const sweepPerRun = parseInt(env.SWEEP_PER_RUN || "1", 10);
-          const spent = await investigationCountToday(env);
-          const sweepBudget = Math.max(0, Math.min(sweepPerRun, dailyCap - spent));
+          const usdCapS = parseFloat(env.INVESTIGATION_DAILY_USD || "5");
+          const spendS = await investigationSpendToday(env);
+          const spent = spendS.count;
+          const sweepBudget = spendS.usd >= usdCapS ? 0 : Math.max(0, Math.min(sweepPerRun, dailyCap - spent));
           if (sweepBudget > 0 && Date.now() <= invDeadline) {
             const sweep = await runMispricingSweep(env, sweepBudget, invDeadline);
             cronStatus.sweep = sweep;
             console.log(`Sweep: ${sweep.done} investigated, ${sweep.opportunities} opportunities`);
           } else {
-            cronStatus.sweep = { skipped: sweepBudget > 0 ? "wall budget exhausted" : "daily cap reached" };
+            cronStatus.sweep = {
+              skipped: sweepBudget > 0 ? "wall budget exhausted"
+                : (spendS.usd >= usdCapS ? "daily $ cap reached" : "daily cap reached")
+            };
           }
         } catch (e) {
           console.error("Mispricing sweep error:", e.message);
