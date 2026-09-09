@@ -35,3 +35,12 @@ crons = ["*/5 * * * *"]
 INVESTIGATION_MODEL = "claude-sonnet-5"
 INVESTIGATION_PER_RUN = "2"
 INVESTIGATION_DAILY_CAP = "20"
+# Hard dollar ceiling per day, enforced from REAL usage tokens (the count cap
+# above is only a secondary bound — call sizes vary 10x with search volume).
+INVESTIGATION_DAILY_USD = "5"
+# 3 searches covers resolution criteria + key facts; search results are the
+# dominant token cost (5 searches ran ~$1/investigation on Sep 8).
+INVESTIGATION_MAX_SEARCHES = "3"
+# One retry, not two — a market that failed twice rarely succeeds third time,
+# and each retry is a full-priced research run.
+INVESTIGATION_MAX_ATTEMPTS = "2"
