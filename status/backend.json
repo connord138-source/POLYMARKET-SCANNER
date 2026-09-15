@@ -1,26 +1,26 @@
 {
-  "fetchedAt": "2026-09-15T21:35:57Z",
+  "fetchedAt": "2026-09-15T22:43:37Z",
   "health": {
     "status": "ok",
-    "timestamp": "2026-09-15T21:35:58.816Z",
+    "timestamp": "2026-09-15T22:43:38.181Z",
     "version": "21.1.0 - Modularize: extract src/odds.js + src/gamma.js from index.js",
     "cache": {
-      "signalCount": 13548,
-      "oldestSignal": "2026-09-08T21:30:40.000Z",
-      "newestSignal": "2026-09-15T21:27:06.000Z"
+      "signalCount": 13547,
+      "oldestSignal": "2026-09-08T22:40:12.000Z",
+      "newestSignal": "2026-09-15T22:33:55.000Z"
     }
   },
   "cronStatus": {
     "success": true,
     "lastRun": {
-      "startedAt": "2026-09-15T21:30:06.438Z",
+      "startedAt": "2026-09-15T22:40:06.244Z",
       "scan": {
-        "signals": 510,
+        "signals": 524,
         "success": true
       },
       "settlement": {
-        "processed": 0,
-        "wins": 0,
+        "processed": 1,
+        "wins": 1,
         "losses": 0,
         "errors": 0
       },
@@ -33,8 +33,8 @@
         "usdCap": 5
       },
       "overround": {
-        "scanned": 74,
-        "flagged": 42
+        "scanned": 73,
+        "flagged": 40
       },
       "sweep": {
         "skipped": "daily cap reached"
@@ -44,25 +44,56 @@
         "confirmed": 0,
         "total": 0
       },
-      "optimization": null,
+      "optimization": {
+        "optimized": true,
+        "totalFactors": 13,
+        "totalOptimized": 4,
+        "optimizations": [
+          {
+            "factor": "lastMinute6h",
+            "winRate": 56,
+            "samples": 1360,
+            "oldWeight": 1.26,
+            "newWeight": 1.2,
+            "change": -0.06
+          },
+          {
+            "factor": "strongWallet",
+            "winRate": 58,
+            "samples": 1776,
+            "oldWeight": 1.29,
+            "newWeight": 1.23,
+            "change": -0.06
+          },
+          {
+            "factor": "eliteWallet",
+            "winRate": 59,
+            "samples": 648,
+            "oldWeight": 1.385,
+            "newWeight": 1.3,
+            "change": -0.08
+          },
+          {
+            "factor": "sportsMarket",
+            "winRate": 55,
+            "samples": 882,
+            "oldWeight": 1.3250000000000002,
+            "newWeight": 1.25,
+            "change": -0.08
+          }
+        ]
+      },
       "error": null,
       "edgeScan": {
-        "at": 1789507974697,
-        "scanned": 3,
-        "sports": [
-          "mlb",
-          "nfl",
-          "wnba"
-        ],
-        "found": 0,
-        "newCount": 0
+        "skipped": "throttled",
+        "nextInMin": 9
       },
       "edgeSettle": {
         "checked": 3,
         "settled": 0
       },
       "invSettle": {
-        "checked": 3,
+        "checked": 1,
         "scored": 0
       },
       "signalBackfill": {
@@ -71,21 +102,21 @@
         "expired": 0
       },
       "autotrader": {
-        "evaluated": 510,
+        "evaluated": 524,
         "tradesOpened": 0,
         "tradesPaperTraded": 0,
         "tradesQueued": 0,
-        "skipped": 510,
+        "skipped": 524,
         "skipReasons": {
-          "Entry price too high for sports_other (53% > 40%)": 4,
+          "No proven edge for entry band 21-40 (-1pt)": 51,
+          "Entry price too high for sports_other (53% > 40%)": 5,
           "Entry price too high for sports_binary (44% > 40%)": 2,
-          "No proven edge for entry band 61-80 (-1pt)": 156,
-          "No proven edge for entry band 81-99 (-1pt)": 95,
+          "No proven edge for entry band 61-80 (-1pt)": 162,
+          "No proven edge for entry band 81-99 (0pt)": 96,
           "Entry price too high for sports_binary (56% > 40%)": 3,
           "Entry price too high for sports_binary (55% > 40%)": 3,
-          "Entry price too high for sports_other (47% > 40%)": 2,
+          "Entry price too high for sports_other (47% > 40%)": 3,
           "Entry price too high for sports_binary (57% > 40%)": 4,
-          "No proven edge for entry band 21-40 (-1pt)": 54,
           "Entry price too high for sports_binary (46% > 40%)": 1,
           "Entry price too high for sports_other (48% > 40%)": 1,
           "Entry price too high for other (52% > 40%)": 1,
@@ -93,7 +124,7 @@
           "Entry price too high for sports_other (51% > 40%)": 2,
           "Entry price too high for sports_other (55% > 40%)": 1,
           "Entry price too high for sports_binary (53% > 40%)": 1,
-          "No winning wallet on signal": 142,
+          "No winning wallet on signal": 149,
           "Entry price too high for sports_binary (45% > 40%)": 2,
           "Entry price too high for sports_other (56% > 40%)": 1,
           "Entry price too high for sports_binary (58% > 40%)": 1,
@@ -101,6 +132,7 @@
           "Entry price too high for sports_other (49% > 40%)": 1,
           "Entry price too high for sports_binary (59% > 40%)": 1,
           "Entry price too high for sports_binary (50% > 40%)": 1,
+          "Entry price too high for sports_binary (42% > 40%)": 1,
           "Signal has no market slug — cannot price or settle": 1
         },
         "exitChecks": 0,
@@ -110,7 +142,7 @@
         "dailyPnL": 25.92,
         "totalPnL": 3204.4049494949486
       },
-      "completedAt": "2026-09-15T21:33:20.595Z"
+      "completedAt": "2026-09-15T22:43:16.982Z"
     },
     "cronSchedule": "Every 5 minutes",
     "note": "Settlement runs automatically. Sports events settle ~12h after game ends."
@@ -525,25 +557,25 @@
       },
       {
         "name": "eliteWallet",
-        "wins": 382,
+        "wins": 383,
         "losses": 265,
         "winRate": 59,
-        "weight": 1.24,
-        "lastUpdated": "2026-09-15T20:22:56.853Z",
-        "previousWeight": 1.3,
-        "optimizedAt": "2026-09-15T20:33:17.419Z",
-        "total": 647
+        "weight": 1.3,
+        "lastUpdated": "2026-09-15T22:42:27.931Z",
+        "previousWeight": 1.385,
+        "optimizedAt": "2026-09-15T22:43:16.625Z",
+        "total": 648
       },
       {
         "name": "strongWallet",
-        "wins": 1028,
-        "losses": 740,
+        "wins": 1032,
+        "losses": 744,
         "winRate": 58,
         "weight": 1.23,
-        "lastUpdated": "2026-09-15T20:18:09.593Z",
+        "lastUpdated": "2026-09-15T22:17:23.189Z",
         "previousWeight": 1.29,
-        "optimizedAt": "2026-09-15T20:23:37.449Z",
-        "total": 1768
+        "optimizedAt": "2026-09-15T22:43:16.625Z",
+        "total": 1776
       },
       {
         "name": "whaleSize50k",
@@ -558,14 +590,14 @@
       },
       {
         "name": "lastMinute6h",
-        "wins": 760,
-        "losses": 591,
+        "wins": 765,
+        "losses": 595,
         "winRate": 56,
         "weight": 1.2,
-        "lastUpdated": "2026-09-15T20:52:46.025Z",
+        "lastUpdated": "2026-09-15T22:17:23.189Z",
         "previousWeight": 1.26,
-        "optimizedAt": "2026-09-15T21:13:31.271Z",
-        "total": 1351
+        "optimizedAt": "2026-09-15T22:43:16.625Z",
+        "total": 1360
       },
       {
         "name": "cryptoMarket",
@@ -581,24 +613,24 @@
       {
         "name": "whaleSize15k",
         "wins": 742,
-        "losses": 604,
+        "losses": 605,
         "winRate": 55,
         "weight": 1.19,
-        "lastUpdated": "2026-09-15T20:17:33.886Z",
+        "lastUpdated": "2026-09-15T21:57:13.885Z",
         "previousWeight": 1.25,
-        "optimizedAt": "2026-09-15T20:23:37.449Z",
-        "total": 1346
+        "optimizedAt": "2026-09-15T22:18:03.553Z",
+        "total": 1347
       },
       {
         "name": "sportsMarket",
-        "wins": 487,
+        "wins": 488,
         "losses": 394,
         "winRate": 55,
-        "weight": 1.19,
-        "lastUpdated": "2026-09-15T20:32:35.990Z",
-        "previousWeight": 1.25,
-        "optimizedAt": "2026-09-15T20:53:18.669Z",
-        "total": 881
+        "weight": 1.25,
+        "lastUpdated": "2026-09-15T22:42:27.931Z",
+        "previousWeight": 1.3250000000000002,
+        "optimizedAt": "2026-09-15T22:43:16.625Z",
+        "total": 882
       }
     ],
     "bottomFactors": [
@@ -615,14 +647,14 @@
       },
       {
         "name": "concentrated",
-        "wins": 1033,
+        "wins": 1034,
         "losses": 872,
         "winRate": 54,
         "weight": 1.18,
-        "lastUpdated": "2026-09-15T20:52:46.025Z",
+        "lastUpdated": "2026-09-15T21:52:39.346Z",
         "previousWeight": 1.23,
-        "optimizedAt": "2026-09-15T21:13:31.271Z",
-        "total": 1905
+        "optimizedAt": "2026-09-15T21:57:58.618Z",
+        "total": 1906
       },
       {
         "name": "whaleSize25k",
@@ -637,25 +669,25 @@
       },
       {
         "name": "sportsMarket",
-        "wins": 487,
+        "wins": 488,
         "losses": 394,
         "winRate": 55,
-        "weight": 1.19,
-        "lastUpdated": "2026-09-15T20:32:35.990Z",
-        "previousWeight": 1.25,
-        "optimizedAt": "2026-09-15T20:53:18.669Z",
-        "total": 881
+        "weight": 1.25,
+        "lastUpdated": "2026-09-15T22:42:27.931Z",
+        "previousWeight": 1.3250000000000002,
+        "optimizedAt": "2026-09-15T22:43:16.625Z",
+        "total": 882
       },
       {
         "name": "whaleSize15k",
         "wins": 742,
-        "losses": 604,
+        "losses": 605,
         "winRate": 55,
         "weight": 1.19,
-        "lastUpdated": "2026-09-15T20:17:33.886Z",
+        "lastUpdated": "2026-09-15T21:57:13.885Z",
         "previousWeight": 1.25,
-        "optimizedAt": "2026-09-15T20:23:37.449Z",
-        "total": 1346
+        "optimizedAt": "2026-09-15T22:18:03.553Z",
+        "total": 1347
       },
       {
         "name": "cryptoMarket",
@@ -670,14 +702,14 @@
       },
       {
         "name": "lastMinute6h",
-        "wins": 760,
-        "losses": 591,
+        "wins": 765,
+        "losses": 595,
         "winRate": 56,
         "weight": 1.2,
-        "lastUpdated": "2026-09-15T20:52:46.025Z",
+        "lastUpdated": "2026-09-15T22:17:23.189Z",
         "previousWeight": 1.26,
-        "optimizedAt": "2026-09-15T21:13:31.271Z",
-        "total": 1351
+        "optimizedAt": "2026-09-15T22:43:16.625Z",
+        "total": 1360
       },
       {
         "name": "whaleSize50k",
@@ -692,25 +724,25 @@
       },
       {
         "name": "strongWallet",
-        "wins": 1028,
-        "losses": 740,
+        "wins": 1032,
+        "losses": 744,
         "winRate": 58,
         "weight": 1.23,
-        "lastUpdated": "2026-09-15T20:18:09.593Z",
+        "lastUpdated": "2026-09-15T22:17:23.189Z",
         "previousWeight": 1.29,
-        "optimizedAt": "2026-09-15T20:23:37.449Z",
-        "total": 1768
+        "optimizedAt": "2026-09-15T22:43:16.625Z",
+        "total": 1776
       },
       {
         "name": "eliteWallet",
-        "wins": 382,
+        "wins": 383,
         "losses": 265,
         "winRate": 59,
-        "weight": 1.24,
-        "lastUpdated": "2026-09-15T20:22:56.853Z",
-        "previousWeight": 1.3,
-        "optimizedAt": "2026-09-15T20:33:17.419Z",
-        "total": 647
+        "weight": 1.3,
+        "lastUpdated": "2026-09-15T22:42:27.931Z",
+        "previousWeight": 1.385,
+        "optimizedAt": "2026-09-15T22:43:16.625Z",
+        "total": 648
       }
     ],
     "recommendation": {
@@ -746,7 +778,7 @@
         {
           "name": "concentrated",
           "winRate": 54,
-          "record": "1033W-872L",
+          "record": "1034W-872L",
           "isDiscovered": false
         },
         {
@@ -856,22 +888,6 @@
     "totalFactors": 13
   },
   "tradeLog": [
-    {
-      "type": "SKIP",
-      "market": "Broncos vs. Chiefs",
-      "reason": "No proven edge for entry band 41-60 (0pt)",
-      "walletTier": "STRONG",
-      "marketCategory": "sports_binary",
-      "timestamp": "2026-09-14T21:23:01.515Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "Will Newcastle United FC win on 2026-09-14?",
-      "reason": "No proven edge for entry band 61-80 (-2pt)",
-      "walletTier": "STRONG",
-      "marketCategory": "sports_binary",
-      "timestamp": "2026-09-14T23:50:51.186Z"
-    },
     {
       "type": "SKIP",
       "market": "Broncos vs. Chiefs",
@@ -1123,6 +1139,22 @@
       "walletTier": "STRONG",
       "marketCategory": "sports_binary",
       "timestamp": "2026-09-15T20:43:10.411Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Kansas City Royals vs. Houston Astros",
+      "reason": "No proven edge for entry band 21-40 (-1pt)",
+      "walletTier": "STRONG",
+      "marketCategory": "sports_binary",
+      "timestamp": "2026-09-15T22:38:00.419Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Kansas City Royals vs. Houston Astros: O/U 8.5",
+      "reason": "Entry price too high for sports_other (47% > 40%)",
+      "walletTier": "STRONG",
+      "marketCategory": "sports_binary",
+      "timestamp": "2026-09-15T22:43:10.237Z"
     }
   ],
   "tradeHistory": [
@@ -2336,9 +2368,9 @@
     "success": true,
     "overview": {
       "totalFactorsTracked": 13,
-      "totalSignalsProcessed": 9945,
+      "totalSignalsProcessed": 9966,
       "overallWinRate": 56,
-      "pendingSignals": 450
+      "pendingSignals": 416
     },
     "walletEdge": {
       "totalTracked": 500,
@@ -2369,13 +2401,13 @@
         {
           "address": "0x0d2d845a6ff64e31e04a70afce8a573940767ff5",
           "tier": "AVERAGE",
-          "winRate": 69,
-          "record": "20W-9L",
+          "winRate": 70,
+          "record": "21W-9L",
           "totalVolume": 16349.991600011688,
           "edgeMetrics": {
             "avgOdds": 69,
             "avgBetTiming": 0,
-            "consistencyScore": 79,
+            "consistencyScore": 80,
             "bigBetWinRate": 0,
             "sportWinRate": 71,
             "politicalWinRate": 0,
@@ -2441,13 +2473,13 @@
         "optimizedAt": "2026-09-15T05:20:55.248Z"
       },
       "lastMinute6h": {
-        "wins": 760,
-        "losses": 591,
+        "wins": 765,
+        "losses": 595,
         "winRate": 56,
         "weight": 1.2,
-        "lastUpdated": "2026-09-15T20:52:46.025Z",
+        "lastUpdated": "2026-09-15T22:17:23.189Z",
         "previousWeight": 1.26,
-        "optimizedAt": "2026-09-15T21:13:31.271Z"
+        "optimizedAt": "2026-09-15T22:43:16.625Z"
       },
       "lastMinute2h": {
         "wins": 387,
@@ -2468,22 +2500,22 @@
         "optimizedAt": "2026-09-15T20:53:18.669Z"
       },
       "concentrated": {
-        "wins": 1033,
+        "wins": 1034,
         "losses": 872,
         "winRate": 54,
         "weight": 1.18,
-        "lastUpdated": "2026-09-15T20:52:46.025Z",
+        "lastUpdated": "2026-09-15T21:52:39.346Z",
         "previousWeight": 1.23,
-        "optimizedAt": "2026-09-15T21:13:31.271Z"
+        "optimizedAt": "2026-09-15T21:57:58.618Z"
       },
       "whaleSize15k": {
         "wins": 742,
-        "losses": 604,
+        "losses": 605,
         "winRate": 55,
         "weight": 1.19,
-        "lastUpdated": "2026-09-15T20:17:33.886Z",
+        "lastUpdated": "2026-09-15T21:57:13.885Z",
         "previousWeight": 1.25,
-        "optimizedAt": "2026-09-15T20:23:37.449Z"
+        "optimizedAt": "2026-09-15T22:18:03.553Z"
       },
       "freshWallet": {
         "wins": 92,
@@ -2495,31 +2527,31 @@
         "optimizedAt": "2026-09-14T05:33:02.462Z"
       },
       "strongWallet": {
-        "wins": 1028,
-        "losses": 740,
+        "wins": 1032,
+        "losses": 744,
         "winRate": 58,
         "weight": 1.23,
-        "lastUpdated": "2026-09-15T20:18:09.593Z",
+        "lastUpdated": "2026-09-15T22:17:23.189Z",
         "previousWeight": 1.29,
-        "optimizedAt": "2026-09-15T20:23:37.449Z"
+        "optimizedAt": "2026-09-15T22:43:16.625Z"
       },
       "eliteWallet": {
-        "wins": 382,
+        "wins": 383,
         "losses": 265,
         "winRate": 59,
-        "weight": 1.24,
-        "lastUpdated": "2026-09-15T20:22:56.853Z",
-        "previousWeight": 1.3,
-        "optimizedAt": "2026-09-15T20:33:17.419Z"
+        "weight": 1.3,
+        "lastUpdated": "2026-09-15T22:42:27.931Z",
+        "previousWeight": 1.385,
+        "optimizedAt": "2026-09-15T22:43:16.625Z"
       },
       "sportsMarket": {
-        "wins": 487,
+        "wins": 488,
         "losses": 394,
         "winRate": 55,
-        "weight": 1.19,
-        "lastUpdated": "2026-09-15T20:32:35.990Z",
-        "previousWeight": 1.25,
-        "optimizedAt": "2026-09-15T20:53:18.669Z"
+        "weight": 1.25,
+        "lastUpdated": "2026-09-15T22:42:27.931Z",
+        "previousWeight": 1.3250000000000002,
+        "optimizedAt": "2026-09-15T22:43:16.625Z"
       },
       "cryptoMarket": {
         "wins": 14,
@@ -2593,11 +2625,11 @@
   "learningInsights": {
     "success": true,
     "systemPerformance": {
-      "totalSignalsProcessed": 9945,
-      "wins": 5537,
-      "losses": 4408,
+      "totalSignalsProcessed": 9966,
+      "wins": 5549,
+      "losses": 4417,
       "winRate": 56,
-      "pendingSignals": 450
+      "pendingSignals": 416
     },
     "insights": {
       "bestFactors": [
@@ -2657,16 +2689,16 @@
       {
         "factor": "eliteWallet",
         "winRate": 59,
-        "wins": 382,
+        "wins": 383,
         "losses": 265,
-        "weight": 1.24,
+        "weight": 1.3,
         "performance": "AVERAGE"
       },
       {
         "factor": "strongWallet",
         "winRate": 58,
-        "wins": 1028,
-        "losses": 740,
+        "wins": 1032,
+        "losses": 744,
         "weight": 1.23,
         "performance": "AVERAGE"
       },
@@ -2681,8 +2713,8 @@
       {
         "factor": "lastMinute6h",
         "winRate": 56,
-        "wins": 760,
-        "losses": 591,
+        "wins": 765,
+        "losses": 595,
         "weight": 1.2,
         "performance": "AVERAGE"
       },
@@ -2698,16 +2730,16 @@
         "factor": "whaleSize15k",
         "winRate": 55,
         "wins": 742,
-        "losses": 604,
+        "losses": 605,
         "weight": 1.19,
         "performance": "AVERAGE"
       },
       {
         "factor": "sportsMarket",
         "winRate": 55,
-        "wins": 487,
+        "wins": 488,
         "losses": 394,
-        "weight": 1.19,
+        "weight": 1.25,
         "performance": "AVERAGE"
       },
       {
@@ -2721,7 +2753,7 @@
       {
         "factor": "concentrated",
         "winRate": 54,
-        "wins": 1033,
+        "wins": 1034,
         "losses": 872,
         "weight": 1.18,
         "performance": "AVERAGE"
@@ -2741,19 +2773,6 @@
     "provenMinSample": 30,
     "stakePerTrade": 100,
     "strategies": [
-      {
-        "key": "ai_investigator",
-        "label": "AI investigator (≥12pt disagreement)",
-        "side": "agent",
-        "settled": 11,
-        "wins": 5,
-        "losses": 6,
-        "staked": 1100,
-        "pnl": 307.44,
-        "roi": 27.9,
-        "winRate": 45,
-        "readyForAuto": false
-      },
       {
         "key": "vegas_edge",
         "label": "Vegas edge (Odds API)",
@@ -2788,14 +2807,27 @@
         "readyForAuto": true
       },
       {
+        "key": "ai_investigator",
+        "label": "AI investigator (≥12pt disagreement)",
+        "side": "agent",
+        "settled": 12,
+        "wins": 5,
+        "losses": 7,
+        "staked": 1200,
+        "pnl": 207.44,
+        "roi": 17.3,
+        "winRate": 42,
+        "readyForAuto": false
+      },
+      {
         "key": "underdog",
         "label": "Underdog entries (≤40¢)",
         "side": "follow",
-        "settled": 778,
-        "wins": 261,
-        "losses": 517,
-        "staked": 77800,
-        "pnl": 1180.59,
+        "settled": 781,
+        "wins": 262,
+        "losses": 519,
+        "staked": 78100,
+        "pnl": 1143.75,
         "roi": 1.5,
         "winRate": 34,
         "readyForAuto": true
@@ -2804,11 +2836,11 @@
         "key": "all",
         "label": "Follow all signals",
         "side": "follow",
-        "settled": 6189,
-        "wins": 3436,
-        "losses": 2753,
-        "staked": 618900,
-        "pnl": 3240.89,
+        "settled": 6202,
+        "wins": 3443,
+        "losses": 2759,
+        "staked": 620200,
+        "pnl": 3019.21,
         "roi": 0.5,
         "winRate": 56,
         "readyForAuto": true
@@ -2817,11 +2849,11 @@
         "key": "high_score",
         "label": "High score (≥100)",
         "side": "follow",
-        "settled": 1622,
-        "wins": 895,
+        "settled": 1623,
+        "wins": 896,
         "losses": 727,
-        "staked": 162200,
-        "pnl": -1686.97,
+        "staked": 162300,
+        "pnl": -1657.1,
         "roi": -1,
         "winRate": 55,
         "readyForAuto": false
@@ -2830,12 +2862,12 @@
         "key": "fade_favorites",
         "label": "Fade favorites (≥60¢)",
         "side": "fade",
-        "settled": 2208,
+        "settled": 2214,
         "wins": 663,
-        "losses": 1545,
-        "staked": 220800,
-        "pnl": -3676.57,
-        "roi": -1.7,
+        "losses": 1551,
+        "staked": 221400,
+        "pnl": -4276.57,
+        "roi": -1.9,
         "winRate": 30,
         "readyForAuto": false
       }
@@ -2848,12 +2880,12 @@
     "settledCount": 159,
     "winRate": 53,
     "lastScan": {
-      "at": 1789507974697,
+      "at": 1789511858995,
       "scanned": 3,
       "sports": [
         "mlb",
         "nfl",
-        "wnba"
+        "cfb"
       ],
       "found": 0,
       "newCount": 0
@@ -4665,6 +4697,118 @@
     "enabled": true,
     "results": [
       {
+        "inv_key": "investigation:highest-temperature-in-warsaw-on-september-15-2026-21c::Yes",
+        "market_slug": "highest-temperature-in-warsaw-on-september-15-2026-21c",
+        "direction_raw": "Yes",
+        "market_title": "Will the highest temperature in Warsaw be 21°C on September 15?",
+        "source": "sweep",
+        "status": "done",
+        "agent_prob": 0.28,
+        "confidence": "MEDIUM",
+        "reasoning": "AccuWeather's 'tomorrow' forecast (issued Sep 14 for Warsaw's Sep 15) sha high of 68°F, which is translates to 20°C, one degree below the 21°C threshold being pried. Since forecasts one day out are generally reliable but still carry roughly ±1-2°C uncertainty, and other sources (Met Office multi-day dataurations similarly hovered in the 19-21°C range aroundep on15), the 21°C bracket is plausible withest but but not the top most likely outcome, and's forecast midpoint.the of 20°C. Given typical forecast dispersion, roughly abies25-30% probability the actual peak lands exactly on 21°C.",
+        "key_findings": "[\"AccuWeather 'Tomorrow' forecast (issued Sep 14, 2026) for Warsaw shows a high of 68°F (~20°C)\",\"UK Met Office multi-day forecast for Warsaw shows daytime highs oscillating between 19°C and 24°C across upcoming days\",\"Climate normals for mid-September in Warsaw show average highs around 20°C, consistent with forecast\",\"1-day-ahead temperature forecasts typically have ±1-2°C error margins, making adjacent whole-degree brackets like 21°C plausible but not the top pick\"]",
+        "model": "claude-sonnet-5",
+        "web_searches": 3,
+        "market_prob": 0.345,
+        "entry_price_pct": 35,
+        "edge_pts": -6.5,
+        "event_date": "2026-09-15T12:00:00Z",
+        "investigated_at": "2026-09-14T17:32:55.269Z",
+        "outcome": "LOSS",
+        "y": 0,
+        "agent_brier": 0.0784,
+        "market_brier": 0.119,
+        "settled_by": "gamma",
+        "settled_at": "2026-09-15T22:27:41.601Z",
+        "updated_at": "2026-09-15T22:27:41.601Z",
+        "market_impact": null,
+        "last_error": null
+      },
+      {
+        "inv_key": "investigation:highest-temperature-in-istanbul-on-september-15-2026-26c::Yes",
+        "market_slug": "highest-temperature-in-istanbul-on-september-15-2026-26c",
+        "direction_raw": "Yes",
+        "market_title": "Will the highest temperature in Istanbul be 26°C on September 15?",
+        "source": "sweep",
+        "status": "done",
+        "agent_prob": 0.1,
+        "confidence": "LOW",
+        "reasoning": "Forecast sources diverge substantially for Sep 15, 2026 Istanbul: climatology-based sites (Meteoprog, historical averages) point to a high near 25-26°C, while near-term model-based forecasts (EaseWeather) show a warmer high around 30°C, suggesting a warming trend into mid-September. Since the market requires the exact whole-degree bracket of 26°C at the LTFM (Istanbul Airport) station, and actual short-range forecasts skew warmer than the climatological 26°C figure, the probability of landing exactly on 26°C is modest but non-trivial given it's within the plausible range across sources.",
+        "key_findings": "[\"Meteoprog 70-year climatology forecast lists Sep 15 high as +26°C (source: meteoprog.com)\",\"EaseWeather's near-term model forecast shows Sep 15 high at 30°C, notably warmer (source: easeweather.com)\",\"Climate-data.org notes mid-September (11th-20th) average highs around 24.6°C historically\",\"Weather-and-climate.com 10-day outlook description mentions temperatures 'cooler than usual' trending 26°C down to 20°C over the period\",\"Wide dispersion across forecast sources (25-30°C) increases uncertainty about which single-degree bracket will verify\"]",
+        "model": "claude-sonnet-5",
+        "web_searches": 3,
+        "market_prob": 0.075,
+        "entry_price_pct": 20,
+        "edge_pts": 2.5,
+        "event_date": "2026-09-15T12:00:00Z",
+        "investigated_at": "2026-09-13T17:27:54.851Z",
+        "outcome": "LOSS",
+        "y": 0,
+        "agent_brier": 0.01,
+        "market_brier": 0.0056,
+        "settled_by": "gamma",
+        "settled_at": "2026-09-15T22:07:40.158Z",
+        "updated_at": "2026-09-15T22:07:40.158Z",
+        "market_impact": null,
+        "last_error": null
+      },
+      {
+        "inv_key": "investigation:highest-temperature-in-istanbul-on-september-15-2026-20c::Yes",
+        "market_slug": "highest-temperature-in-istanbul-on-september-15-2026-20c",
+        "direction_raw": "Yes",
+        "market_title": "Will the highest temperature in Istanbul be 20°C on September 15?",
+        "source": "sweep",
+        "status": "done",
+        "agent_prob": 0.07,
+        "confidence": "LOW",
+        "reasoning": "Mid-September climatology for Istanbul shows average highs around 24-26°C, with recent forecasts (as of searches conducted) indicating highs near 26-31°C for the Istanbul airport area in the coming days. A high of exactly 20°C would be roughly 5-8°C below normal for this time of year, which is possible during a cold front or rain event but is not the base-rate expectation. Search tool access was limited before a precise 3-day-out forecast for Sep 15 could be retrieved, so this estimate leans on climatological averages and general short-range forecast trends.",
+        "key_findings": "[\"Climate-data.org: mid-September (11th-20th) average highs in Istanbul are around 24-25°C\",\"MyTurkeyAdventure guide: typical September daytime highs 25-28°C\",\"WeatherOnline (Sabiha Gökçen) recent forecast noted daily highs near 31°C for the upcoming days, well above 20°C\",\"No direct NOAA/LTFM station forecast for Sep 15 2026 could be retrieved due to search tool rate limits\"]",
+        "model": "claude-sonnet-5",
+        "web_searches": 3,
+        "market_prob": 0.1,
+        "entry_price_pct": 10,
+        "edge_pts": -3,
+        "event_date": "2026-09-15T12:00:00Z",
+        "investigated_at": "2026-09-13T17:26:25.695Z",
+        "outcome": "LOSS",
+        "y": 0,
+        "agent_brier": 0.0049,
+        "market_brier": 0.01,
+        "settled_by": "gamma",
+        "settled_at": "2026-09-15T22:07:38.688Z",
+        "updated_at": "2026-09-15T22:07:38.688Z",
+        "market_impact": null,
+        "last_error": null
+      },
+      {
+        "inv_key": "investigation:highest-temperature-in-jeddah-on-september-15-2026-38c::Yes",
+        "market_slug": "highest-temperature-in-jeddah-on-september-15-2026-38c",
+        "direction_raw": "Yes",
+        "market_title": "Will the highest temperature in Jeddah be 38°C on September 15?",
+        "source": "sweep",
+        "status": "done",
+        "agent_prob": 0.25,
+        "confidence": "MEDIUM",
+        "reasoning": "AccuWeather's day-by-day forecast for Jeddah in mid-September 2026 shows daily highs (converted to whole-degree Celsius) clustering mostly around 36°C (most frequent) with 38°C as the second most common value, based on the two weeks preceding the event date. The specific Sep 15 forecast value wasn't directly retrievable, but the surrounding pattern (Sep 12-14 alternating between 36°C and 38°C) suggests 38°C is a plausible but not the single most likely bracket for the exact NOAA-recorded max at King Abdulaziz Airport.",
+        "key_findings": "[\"AccuWeather forecast data for Jeddah Aug 30-Sep 14, 2026 (converted from °F) shows daily highs distributed as: 36°C (7/16 days), 38°C (5/16 days), 37°C (2/16), 39°C and 40°C (1 each)\",\"Sep 14, the day immediately before the event, was forecast at 101°F = 38.3°C, rounding to 38°C\",\"Other sources (aqi.in, easeweather) gave much lower generic 'temp' figures (~31-34°C) that appear to reflect averages/feels-like rather than airport-station daily max, making them less reliable proxies for the NOAA station reading\",\"No direct NOAA/Weather Underground data point for Sep 15, 2026 was available since the date is in the future relative to today (Sep 14, 2026)\"]",
+        "model": "claude-sonnet-5",
+        "web_searches": 3,
+        "market_prob": 0.105,
+        "entry_price_pct": 11,
+        "edge_pts": 14.5,
+        "event_date": "2026-09-15T12:00:00Z",
+        "investigated_at": "2026-09-14T00:57:03.320Z",
+        "outcome": "LOSS",
+        "y": 0,
+        "agent_brier": 0.0625,
+        "market_brier": 0.011,
+        "settled_by": "gamma",
+        "settled_at": "2026-09-15T21:42:49.248Z",
+        "updated_at": "2026-09-15T21:42:49.248Z",
+        "market_impact": null,
+        "last_error": null
+      },
+      {
         "inv_key": "investigation:will-rishi-sharma-win-the-2026-saanich-mayoral-election::Yes",
         "market_slug": "will-rishi-sharma-win-the-2026-saanich-mayoral-election",
         "direction_raw": "Yes",
@@ -4915,8 +5059,8 @@
         "updated_at": "2026-09-15T14:02:11.904Z",
         "market_impact": null,
         "last_error": null,
-        "market_prob_now": 0.63,
-        "price_checked_at": "2026-09-15T21:36:07.771Z"
+        "market_prob_now": 0.64,
+        "price_checked_at": "2026-09-15T22:43:45.984Z"
       },
       {
         "inv_key": "investigation:nvda-above-200-on-september-30-2026::Yes",
@@ -4945,8 +5089,8 @@
         "updated_at": "2026-09-15T13:57:25.139Z",
         "market_impact": "[{\"asset\":\"NVDA\",\"assetType\":\"stock\",\"direction\":\"UP\",\"conviction\":\"LOW\",\"rationale\":\"This is the underlying asset itself; a YES resolution simply confirms the stock stayed above $200, reflecting continued AI-driven demand and investor confidence rather than causing further movement.\"},{\"asset\":\"SMH\",\"assetType\":\"etf\",\"direction\":\"UP\",\"conviction\":\"LOW\",\"rationale\":\"As NVDA is a dominant holding in semiconductor ETFs like SMH, sustained strength above $200 correlates with broader semiconductor sector sentiment and fund flows.\"},{\"asset\":\"AI/chip sector\",\"assetType\":\"sector\",\"direction\":\"UP\",\"conviction\":\"LOW\",\"rationale\":\"NVDA holding above key psychological levels reinforces bullish sentiment across AI infrastructure and chip stocks (AMD, TSM) via correlated investor risk appetite.\"}]",
         "last_error": null,
-        "market_prob_now": 0.755,
-        "price_checked_at": "2026-09-15T21:36:07.771Z"
+        "market_prob_now": 0.765,
+        "price_checked_at": "2026-09-15T22:43:45.984Z"
       },
       {
         "inv_key": "investigation:will-the-median-home-value-in-los-angeles-be-between-1169000-and-1185000-20260630173101995::Yes",
@@ -4976,7 +5120,7 @@
         "market_impact": null,
         "last_error": null,
         "market_prob_now": 0.17,
-        "price_checked_at": "2026-09-15T21:36:07.771Z"
+        "price_checked_at": "2026-09-15T22:43:45.984Z"
       },
       {
         "inv_key": "investigation:highest-temperature-in-london-on-september-15-2026-22c::Yes",
@@ -5006,7 +5150,7 @@
         "market_impact": null,
         "last_error": null,
         "market_prob_now": 0.0005,
-        "price_checked_at": "2026-09-15T21:36:07.771Z"
+        "price_checked_at": "2026-09-15T22:43:45.984Z"
       },
       {
         "inv_key": "investigation:highest-temperature-in-milan-on-september-17-2026-23c::Yes",
@@ -5035,8 +5179,8 @@
         "updated_at": "2026-09-15T07:41:01.591Z",
         "market_impact": null,
         "last_error": null,
-        "market_prob_now": 0.1,
-        "price_checked_at": "2026-09-15T21:36:07.771Z"
+        "market_prob_now": 0.095,
+        "price_checked_at": "2026-09-15T22:43:45.984Z"
       },
       {
         "inv_key": "investigation:highest-temperature-in-milan-on-september-17-2026-22c::Yes",
@@ -5065,8 +5209,8 @@
         "updated_at": "2026-09-15T07:33:13.986Z",
         "market_impact": null,
         "last_error": null,
-        "market_prob_now": 0.07,
-        "price_checked_at": "2026-09-15T21:36:07.771Z"
+        "market_prob_now": 0.05,
+        "price_checked_at": "2026-09-15T22:43:45.984Z"
       },
       {
         "inv_key": "investigation:highest-temperature-in-london-on-september-15-2026-23c::Yes",
@@ -5096,7 +5240,7 @@
         "market_impact": null,
         "last_error": null,
         "market_prob_now": 0.9995,
-        "price_checked_at": "2026-09-15T21:36:07.771Z"
+        "price_checked_at": "2026-09-15T22:43:45.984Z"
       },
       {
         "inv_key": "investigation:highest-temperature-in-toronto-on-september-16-2026-23c::Yes",
@@ -5126,121 +5270,7 @@
         "market_impact": null,
         "last_error": null,
         "market_prob_now": 0.18,
-        "price_checked_at": "2026-09-15T21:36:07.771Z"
-      },
-      {
-        "inv_key": "investigation:highest-temperature-in-sao-paulo-on-september-14-2026-15c::Yes",
-        "market_slug": "highest-temperature-in-sao-paulo-on-september-14-2026-15c",
-        "direction_raw": "Yes",
-        "market_title": "Will the highest temperature in Sao Paulo be 15°C on September 14?",
-        "source": "sweep",
-        "status": "done",
-        "agent_prob": 0.27,
-        "confidence": "MEDIUM",
-        "reasoning": "Multiple forecast sources for São Paulo/Guarulhos on Sep 14, 2026 point to a cool, rainy day with morning temperatures around 15°C rising to about 16°C in the afternoon (Meteored/tempo.com), and Ventusky's forecast for the same day showed roughly 61°F (~16°C). This puts the likely daily maximum right at the boundary between the 15°C and 16°C brackets, making 15°C a plausible but not the single most likely outcome (16°C appears slightly more likely as the reported afternoon peak).",
-        "key_findings": "[\"Meteored (tempo.com) forecast for Guarulhos: morning ~15°C, afternoon ~16°C, night ~14°C, with light rain and cloudy skies\",\"Ventusky 14-day forecast shows Monday Sep 14 at 61°F (~16.1°C) for São Paulo area\",\"Winter/early spring conditions in São Paulo in mid-September typically produce cool, cloudy days in the 14-19°C range depending on frontal passages\",\"No direct NOAA/weather.gov timeseries data available yet for the exact date since it is the current observation day\"]",
-        "model": "claude-sonnet-5",
-        "web_searches": 3,
-        "market_prob": 0.16,
-        "entry_price_pct": 16,
-        "edge_pts": 11,
-        "event_date": "2026-09-14T12:00:00Z",
-        "investigated_at": "2026-09-14T02:12:47.275Z",
-        "outcome": "LOSS",
-        "y": 0,
-        "agent_brier": 0.0729,
-        "market_brier": 0.0256,
-        "settled_by": "gamma",
-        "settled_at": "2026-09-15T03:35:44.053Z",
-        "updated_at": "2026-09-15T03:35:44.053Z",
-        "market_impact": null,
-        "last_error": null
-      },
-      {
-        "inv_key": "investigation:highest-temperature-in-warsaw-on-september-15-2026-21c::Yes",
-        "market_slug": "highest-temperature-in-warsaw-on-september-15-2026-21c",
-        "direction_raw": "Yes",
-        "market_title": "Will the highest temperature in Warsaw be 21°C on September 15?",
-        "source": "sweep",
-        "status": "done",
-        "agent_prob": 0.28,
-        "confidence": "MEDIUM",
-        "reasoning": "AccuWeather's 'tomorrow' forecast (issued Sep 14 for Warsaw's Sep 15) sha high of 68°F, which is translates to 20°C, one degree below the 21°C threshold being pried. Since forecasts one day out are generally reliable but still carry roughly ±1-2°C uncertainty, and other sources (Met Office multi-day dataurations similarly hovered in the 19-21°C range aroundep on15), the 21°C bracket is plausible withest but but not the top most likely outcome, and's forecast midpoint.the of 20°C. Given typical forecast dispersion, roughly abies25-30% probability the actual peak lands exactly on 21°C.",
-        "key_findings": "[\"AccuWeather 'Tomorrow' forecast (issued Sep 14, 2026) for Warsaw shows a high of 68°F (~20°C)\",\"UK Met Office multi-day forecast for Warsaw shows daytime highs oscillating between 19°C and 24°C across upcoming days\",\"Climate normals for mid-September in Warsaw show average highs around 20°C, consistent with forecast\",\"1-day-ahead temperature forecasts typically have ±1-2°C error margins, making adjacent whole-degree brackets like 21°C plausible but not the top pick\"]",
-        "model": "claude-sonnet-5",
-        "web_searches": 3,
-        "market_prob": 0.345,
-        "entry_price_pct": 35,
-        "edge_pts": -6.5,
-        "event_date": "2026-09-15T12:00:00Z",
-        "investigated_at": "2026-09-14T17:32:55.269Z",
-        "outcome": null,
-        "y": null,
-        "agent_brier": null,
-        "market_brier": null,
-        "settled_by": null,
-        "settled_at": null,
-        "updated_at": "2026-09-14T17:32:55.269Z",
-        "market_impact": null,
-        "last_error": null,
-        "market_prob_now": 0.0005,
-        "price_checked_at": "2026-09-15T21:36:07.771Z"
-      },
-      {
-        "inv_key": "investigation:highest-temperature-in-chengdu-on-september-14-2026-24c::Yes",
-        "market_slug": "highest-temperature-in-chengdu-on-september-14-2026-24c",
-        "direction_raw": "Yes",
-        "market_title": "Will the highest temperature in Chengdu be 24°C on September 14?",
-        "source": "sweep",
-        "status": "done",
-        "agent_prob": 0.19,
-        "confidence": "LOW",
-        "reasoning": "No specific numerical forecast for Sept 14, 2026 in Chengdu was retrievable (search tool limits prevented a fresh forecast pull), but available data shows: (1) recent one-week outlooks around early-mid September 2026 for Chengdu cite a range of ~20-27°C with a 27°C average high, and (2) climatological normals for the second half of September in Chengdu run roughly 24-28°C for daytime highs. This puts 24°C plausibly near the lower-middle of the expected distribution for that date, giving it a meaningful but not dominant share of probability mass across the likely 1°C-wide resolution buckets (which likely span ~20-30°C for this time of year).",
-        "key_findings": "[\"Travelchinaguide climatology: second half of September Chengdu daytime highs typically 24-28°C\",\"tianqi24.com one-week outlook (dated ~Sept 8-9, 2026) for Chengdu: average temp 20-25°C, high of 27°C across the week\",\"AccuWeather/China Highlights suggest September highs generally 21-34°C depending on time of month, trending cooler after mid-month\",\"No day-specific NOAA/Weather Underground forecast for Sept 14, 2026 was found due to search tool constraints\"]",
-        "model": "claude-sonnet-5",
-        "web_searches": 3,
-        "market_prob": 0.27,
-        "entry_price_pct": 27,
-        "edge_pts": -8,
-        "event_date": "2026-09-14T12:00:00Z",
-        "investigated_at": "2026-09-13T08:57:56.922Z",
-        "outcome": "LOSS",
-        "y": 0,
-        "agent_brier": 0.0361,
-        "market_brier": 0.0729,
-        "settled_by": "gamma",
-        "settled_at": "2026-09-14T16:39:02.551Z",
-        "updated_at": "2026-09-14T16:39:02.551Z",
-        "market_impact": null,
-        "last_error": null
-      },
-      {
-        "inv_key": "investigation:highest-temperature-in-shenzhen-on-september-14-2026-33c::Yes",
-        "market_slug": "highest-temperature-in-shenzhen-on-september-14-2026-33c",
-        "direction_raw": "Yes",
-        "market_title": "Will the highest temperature in Shenzhen be 33°C on September 14?",
-        "source": "sweep",
-        "status": "done",
-        "agent_prob": 0.2,
-        "confidence": "MEDIUM",
-        "reasoning": "A short-range forecast (2-day lead) for Shenzhen on Sept 14, 2026 shows a high near 90°F (~32.2°C) with 80% chance of thunderstorms, which most likely rounds to 32°C on the NOAA whole-degree scale rather than 33°C. Climate normals for mid-September in Shenzhen also sit around 30-31°C average highs, slightly below the forecasted day, but rain/storms typically cap peak temps. 33°C is plausible but not the most likely single-degree bracket given current forecast data.",
-        "key_findings": "[\"theweather.com 14-day forecast (fetched ~Sept 12) shows Monday Sept 14 high of 90°F/73°F (~32.2°C/22.8°C) with 80% precipitation chance\",\"AccuWeather description for the period mentions 't-storm around in the a.m.' suggesting cloudy/rainy conditions that typically cap max temperatures\",\"Climate-data.org shows average September highs in Shenzhen around 30-31°C, below the 33°C threshold\",\"90°F forecast converts to ~32.2°C, which rounds to 32°C under NOAA's whole-degree convention rather than 33°C\"]",
-        "model": "claude-sonnet-5",
-        "web_searches": 3,
-        "market_prob": 0.1,
-        "entry_price_pct": 10,
-        "edge_pts": 10,
-        "event_date": "2026-09-14T12:00:00Z",
-        "investigated_at": "2026-09-13T01:32:17.970Z",
-        "outcome": "LOSS",
-        "y": 0,
-        "agent_brier": 0.04,
-        "market_brier": 0.01,
-        "settled_by": "gamma",
-        "settled_at": "2026-09-14T16:38:59.957Z",
-        "updated_at": "2026-09-14T16:38:59.957Z",
-        "market_impact": null,
-        "last_error": null
+        "price_checked_at": "2026-09-15T22:43:45.984Z"
       }
     ]
   },
@@ -5253,22 +5283,22 @@
         "done": 80,
         "pending": 0,
         "error": 147,
-        "scored": 52
+        "scored": 56
       },
       "overall": {
-        "n": 52,
-        "meanAgentBrier": 0.1462,
-        "meanMarketBrier": 0.1245,
-        "meanPairedDiff": -0.0217,
+        "n": 56,
+        "meanAgentBrier": 0.1385,
+        "meanMarketBrier": 0.1182,
+        "meanPairedDiff": -0.0203,
         "agentBeatsMarketRate": 46,
         "edgeDirectionHitRate": 46,
-        "edgeDirectionN": 52
+        "edgeDirectionN": 56
       },
       "byConfidence": {
         "MEDIUM": {
-          "n": 40,
-          "meanAgentBrier": 0.1482,
-          "meanMarketBrier": 0.1271
+          "n": 42,
+          "meanAgentBrier": 0.1445,
+          "meanMarketBrier": 0.1241
         },
         "HIGH": {
           "n": 2,
@@ -5276,9 +5306,9 @@
           "meanMarketBrier": 0.1013
         },
         "LOW": {
-          "n": 10,
-          "meanAgentBrier": 0.1667,
-          "meanMarketBrier": 0.1189
+          "n": 12,
+          "meanAgentBrier": 0.1402,
+          "meanMarketBrier": 0.1004
         }
       },
       "bySource": {
@@ -5288,9 +5318,9 @@
           "meanMarketBrier": 0
         },
         "sweep": {
-          "n": 50,
-          "meanAgentBrier": 0.1517,
-          "meanMarketBrier": 0.1295
+          "n": 54,
+          "meanAgentBrier": 0.1434,
+          "meanMarketBrier": 0.1226
         }
       }
     },
