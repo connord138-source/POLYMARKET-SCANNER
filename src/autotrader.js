@@ -105,6 +105,23 @@ async function lookupMarketTokens(slug) {
   }
 }
 
+// Live price for the side a signal wants to enter, from an entry-time Gamma
+// lookup. Exact outcome-label match first (covers team names), then the
+// Yes/No conventions; anything unmatchable returns null (caller keeps the
+// signal price rather than guessing a side).
+function liveEntryPriceFor(gamma, directionRaw) {
+  if (!gamma || !Array.isArray(gamma.gammaPrices) || gamma.gammaPrices.length < 2) return null;
+  const gp = gamma.gammaPrices;
+  if (typeof gp[0] !== 'number' || isNaN(gp[0])) return null;
+  const dir = String(directionRaw || 'Yes').trim();
+  const outs = Array.isArray(gamma.outcomes) ? gamma.outcomes : ['Yes', 'No'];
+  const idx = outs.findIndex(o => String(o).trim().toLowerCase() === dir.toLowerCase());
+  if (idx >= 0 && typeof gp[idx] === 'number' && !isNaN(gp[idx])) return gp[idx] * 100;
+  if (/^yes$/i.test(dir)) return gp[0] * 100;
+  if (/^no$/i.test(dir)) return (1 - gp[0]) * 100;
+  return null;
+}
+
 // A closed market is safely settle-able when one side is ~certain (>=95c,
 // same convention as src/gamma.js) or when it resolved as an explicit 50/50
 // refund. In-between prices usually mean trading closed but resolution isn't
@@ -1800,8 +1817,10 @@ export async function processSignals(env, signals) {
     //    so long-dated markets cycle forever: enter → maxHold timeout →
     //    re-enter. Apply the horizon gate using Gamma's endDate.
     const entryHorizonHours = config.maxEventHorizonHours ?? 168;
+    let entryGamma = null;   // reused below to fill at the LIVE price
     try {
       const tk = await lookupMarketTokens(signal.marketSlug);
+      entryGamma = tk;
       let skipReason = null;
       if (tk?.closed) {
         skipReason = 'Market already closed/resolved on Gamma';
@@ -1927,6 +1946,47 @@ export async function processSignals(env, signals) {
         if (evaluation.positionSize !== originalSize) {
           evaluation.reasons.push(`AI penalty: $${originalSize} → $${evaluation.positionSize} (confidence ${evaluation.aiConfidence}%)`);
         }
+      }
+    }
+
+    // --- HONEST FILL: reprice the entry at the LIVE market ---
+    // The signal's displayPrice is the whale's fill-era price; the market
+    // may have moved far past it. Entering at the stale price and exiting
+    // at the live one books profit that never existed on the exchange (the
+    // Fed market re-entered at 21c and "took profit" at the live 78c five
+    // times over Sep 14-15). Fill at Gamma's live price for OUR side; if it
+    // has run more than the slippage cap ABOVE the signal price, the
+    // whale's edge is gone — skip instead of chasing.
+    {
+      const liveP = liveEntryPriceFor(entryGamma, signal.directionRaw || signal.direction);
+      if (liveP !== null) {
+        const staleP = evaluation.entryPrice;
+        const driftUp = liveP - staleP;
+        let repriceSkip = null;
+        if (liveP <= 3 || liveP >= 97) {
+          repriceSkip = `Market effectively decided (live ${Math.round(liveP)}%)`;
+        } else if (driftUp > (config.maxEntryCentsSlippage ?? 5)) {
+          repriceSkip = `Live price ran +${Math.round(driftUp)}¢ past the signal (stale whale fill)`;
+        }
+        if (repriceSkip) {
+          results.skipped++;
+          results.skipReasons[repriceSkip] = (results.skipReasons[repriceSkip] || 0) + 1;
+          const skipKey2 = signal.marketSlug || signal.marketTitle || signal.title;
+          if ((!config.deduplicateSkipLogs || !skippedMarketsThisCycle.has(skipKey2)) && shouldLogSkip(skipKey2, repriceSkip)) {
+            skippedMarketsThisCycle.add(skipKey2);
+            await logDecision(env, {
+              type: 'SKIP',
+              market: signal.marketTitle || signal.title,
+              reason: repriceSkip,
+              marketCategory: categorizeMarket(signal.marketTitle || signal.title || ''),
+            });
+          }
+          continue;
+        }
+        if (Math.abs(liveP - staleP) >= 1) {
+          evaluation.reasons.push(`Repriced to live market: ${staleP}¢ → ${Math.round(liveP)}¢`);
+        }
+        evaluation.entryPrice = Math.round(liveP * 100) / 100;
       }
     }
 

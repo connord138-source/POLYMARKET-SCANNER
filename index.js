@@ -6473,6 +6473,16 @@ export default {
   async scheduled(event, env, ctx) {
     console.log("Cron triggered at:", new Date().toISOString());
     await ensureSchema(env);
+    // One-shot: the Sep 14-15 stale-fill phantom trades (Fed market, 5x
+    // entry 21c / instant TP at live 78c) were the ONLY settled
+    // agent-annotated trades, so the cross-check ledger they built is pure
+    // fiction. Reset it once; real live-priced fills rebuild it from zero.
+    try {
+      if (env.SIGNALS_CACHE && !(await env.SIGNALS_CACHE.get("cleanup_agent_gate_v1"))) {
+        await env.SIGNALS_CACHE.delete("agent_gate_stats");
+        await env.SIGNALS_CACHE.put("cleanup_agent_gate_v1", "1");
+      }
+    } catch (e) {}
     const cronStatus = {
       startedAt: new Date().toISOString(),
       scan: null,
