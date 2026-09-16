@@ -431,6 +431,13 @@ const DEFAULT_CONFIG = {
   maxEventHorizonHours: 168,      // Skip markets resolving further out than this (0 = disabled)
   staleVoidGraceHours: 48,        // Extra hours past maxHoldHours to wait for resolution before voiding a no-price position
   requireProvenEdge: true,        // Only trade signals whose entry band has a proven positive historical edge (signal.hasPositiveEdge)
+  // Lane-1 promotion (Sep 2026): the vegas_edge paper lane proved out at 159
+  // settled / +22.6% ROI with ALL profit in the 10-15pt divergence band
+  // (+$4,886 on 56 settled; the 4-9pt bands lose). Enter exactly that band
+  // directly (paper), full size, filled at the live Gamma price, held to
+  // resolution — the model the lane proved.
+  vegasEdgeEntries: true,
+  vegasEdgeMinEdge: 10,
   // v21.3.0 EXPLORATION FLOOR. Even with the 14d rolling edge window
   // (edge_profile_v2), a strict edgeNet>0 gate can deadlock: when every band
   // reads slightly negative, nothing trades and the operator sees "Scanning
@@ -1451,8 +1458,9 @@ export async function processSignals(env, signals) {
     // Priority: 1) Live CLOB price, 2) Signal scan price, 3) Entry price (stale)
     let currentSignal = signals.find(s => s.marketSlug === position.marketSlug);
     // Flag whale-exit so shouldExitPosition can mirror it, even when there's no
-    // fresh signal for this market this scan.
-    if (whaleExitedSlugs.has(position.marketSlug)) {
+    // fresh signal for this market this scan. Vegas-edge positions aren't
+    // whale mirrors — a whale leaving the market says nothing about them.
+    if (whaleExitedSlugs.has(position.marketSlug) && !position.holdToResolution) {
       currentSignal = { ...(currentSignal || {}), whaleIsSelling: true };
     }
     const liveData = livePriceMap.get(position.marketSlug);
@@ -1612,6 +1620,12 @@ export async function processSignals(env, signals) {
       continue;
     }
     
+    // Vegas-edge positions replicate the lane's proven hold-to-resolution
+    // model: no stop-loss / take-profit / trailing / max-hold. Everything
+    // above (Gamma-closed settlement, resolved-price settlement, the stale
+    // no-price safety valve) still applies to them.
+    if (position.holdToResolution) continue;
+
     // Track peak gain for trailing protection on deferred take profits
     const currentPctChange = ((currentPrice - position.entryPrice) / position.entryPrice) * 100;
     if (!position.peakPctGain || currentPctChange > position.peakPctGain) {
@@ -2197,6 +2211,14 @@ export async function processSignals(env, signals) {
     }
   }
   
+  // VEGAS EDGE ENTRIES: second entry source (lane-1 promotion) — shares
+  // the same daily caps, positions list, and exit engine.
+  try {
+    await enterVegasEdgeOpportunities(env, config, dailyStats, stillOpen, results);
+  } catch (e) {
+    console.error('Vegas edge entry error:', e.message);
+  }
+
   // Save updated state
   await savePositions(env, stillOpen);
   await saveDailyStats(env, dailyStats);
@@ -2210,6 +2232,118 @@ export async function processSignals(env, signals) {
     dailyPnL: dailyStats.realizedPnL,
     totalPnL: perf?.totalPnL || 0,
   };
+}
+
+// ============================================================
+// VEGAS EDGE ENTRIES (lane-1 promotion, Sep 2026)
+// ============================================================
+// Enter fresh pre-game edge opportunities where the devigged Vegas prob
+// beats Polymarket by >= vegasEdgeMinEdge points (the proven 10-15 band),
+// at full size, filled at the LIVE Gamma price, held to resolution. Paper
+// mode only — live promotion is a separate human decision.
+async function enterVegasEdgeOpportunities(env, config, dailyStats, stillOpen, results) {
+  if (config.vegasEdgeEntries === false) return;
+  if (!config.paperTradeMode) return;
+  if (config.dailyLossLimit) {
+    const lossLimit = -Math.abs(config.dailyLossLimit);
+    if ((dailyStats.realizedPnL || 0) <= lossLimit) return;
+  }
+  const minEdge = config.vegasEdgeMinEdge ?? 10;
+  const MAX_EDGE = 15;      // above the band's ceiling = stale-book artifact
+  const MAX_PER_CYCLE = 3;  // no burst-filling a big Saturday slate at once
+
+  let opps = [];
+  try { opps = await env.SIGNALS_CACHE.get('edge_opportunities', { type: 'json' }) || []; } catch (e) { return; }
+  if (!opps.length) return;
+
+  let enteredIds = [];
+  try { enteredIds = await env.SIGNALS_CACHE.get('vegas_edge_entered_ids', { type: 'json' }) || []; } catch (e) {}
+  const enteredSet = new Set(enteredIds);
+  const now = Date.now();
+  let openedThisCycle = 0;
+
+  for (const o of opps) {
+    if (openedThisCycle >= MAX_PER_CYCLE) break;
+    if (o.outcome || !o.polySlug || enteredSet.has(o.id)) continue;
+    if (typeof o.edgeNet !== 'number' || o.edgeNet < minEdge || o.edgeNet > MAX_EDGE) continue;
+    const start = o.commenceTime ? new Date(o.commenceTime).getTime() : 0;
+    if (!start || start <= now) continue;                     // pre-game only
+    const horizonH = config.maxEventHorizonHours ?? 168;
+    if (horizonH > 0 && start - now > horizonH * 3600 * 1000) continue;
+    if (stillOpen.some(p => p.marketSlug === o.polySlug)) continue;
+
+    // Shared risk caps
+    if (config.maxDailyTrades > 0 && dailyStats.tradesOpened >= config.maxDailyTrades) break;
+    const size = Math.min(config.fixedSize || 10, config.maxPositionSize || 30);
+    if (config.maxDailySpend > 0 && dailyStats.totalSpent + size > config.maxDailySpend) break;
+    if (config.maxOpenPositions > 0 && stillOpen.length >= config.maxOpenPositions) break;
+
+    // HONEST FILL: live Gamma price for this team's outcome. No confident
+    // outcome match => no trade — never fill at the scanner's cached price.
+    let gamma = null;
+    try { gamma = await lookupMarketTokens(o.polySlug); } catch (e) {}
+    if (!gamma || gamma.closed || !Array.isArray(gamma.gammaPrices)) continue;
+    const outs = (gamma.outcomes || []).map(x => String(x));
+    const teamLower = String(o.team || '').toLowerCase();
+    let idx = -1;
+    for (let i = 0; i < outs.length; i++) {
+      const oL = outs[i].toLowerCase();
+      if (oL === teamLower || teamLower.includes(oL) || oL.includes(teamLower)) { idx = i; break; }
+    }
+    if (idx < 0 || typeof gamma.gammaPrices[idx] !== 'number' || isNaN(gamma.gammaPrices[idx])) continue;
+    const livePrice = Math.round(gamma.gammaPrices[idx] * 1000) / 10;
+    if (livePrice <= 3 || livePrice >= 97) continue;
+    // The edge must survive the live fill, not just the scanner's snapshot.
+    const liveEdge = typeof o.vegasProb === 'number' ? o.vegasProb - livePrice : null;
+    if (liveEdge === null || liveEdge < minEdge) continue;
+
+    const position = {
+      id: `at_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      marketSlug: o.polySlug,
+      marketTitle: `${o.game} — ${o.team}`,
+      marketType: 'sports',
+      signalSubType: 'moneyline',
+      direction: outs[idx],
+      directionRaw: outs[idx],
+      whaleAction: 'BUY',
+      entryPrice: livePrice,
+      size,
+      walletTier: 'VEGAS_EDGE',
+      strategySource: 'vegas_edge',
+      edgeOppId: o.id,
+      vegasProbAtEntry: o.vegasProb ?? null,
+      edgeAtEntry: Math.round(liveEdge * 10) / 10,
+      openedAt: new Date().toISOString(),
+      paperTrade: true,
+      marketCategory: 'sports_binary',
+      holdToResolution: true,   // the lane's proven model: no TP/SL/trailing
+      shares: size / (livePrice / 100),
+    };
+    stillOpen.push(position);
+    enteredSet.add(o.id);
+    openedThisCycle++;
+    dailyStats.tradesOpened++;
+    dailyStats.totalSpent += size;
+    results.tradesPaperTraded = (results.tradesPaperTraded || 0) + 1;
+    results.vegasEdgeEntries = (results.vegasEdgeEntries || 0) + 1;
+
+    await logDecision(env, {
+      type: 'PAPER_TRADE',
+      market: position.marketTitle,
+      size,
+      entryPrice: livePrice,
+      walletTier: 'VEGAS_EDGE',
+      reason: `Vegas edge ${position.edgeAtEntry}pt: no-vig ${o.vegasProb}% vs live ${livePrice}¢ — hold to resolution`,
+      marketCategory: 'sports_binary',
+    });
+  }
+
+  if (enteredSet.size !== enteredIds.length) {
+    try {
+      await env.SIGNALS_CACHE.put('vegas_edge_entered_ids',
+        JSON.stringify(Array.from(enteredSet).slice(-500)), { expirationTtl: 30 * 24 * 3600 });
+    } catch (e) {}
+  }
 }
 
 // ============================================================
