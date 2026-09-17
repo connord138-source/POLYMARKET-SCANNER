@@ -14,6 +14,7 @@
 // ============================================================
 
 import { calculateConfidence, getFactorStats, hasStrongCombo } from './at-learning.js';
+import { findGammaMarket, parseGammaArray } from './gamma.js';
 
 const GAMMA_API = 'https://gamma-api.polymarket.com';
 const CLOB_API = 'https://clob.polymarket.com';
@@ -2285,6 +2286,20 @@ async function enterVegasEdgeOpportunities(env, config, dailyStats, stillOpen, r
     // outcome match => no trade — never fill at the scanner's cached price.
     let gamma = null;
     try { gamma = await lookupMarketTokens(o.polySlug); } catch (e) {}
+    if (!gamma) {
+      // Some polySlugs are event-level; the event-aware resolver handles
+      // event groups and multi-market events (moneyline preference).
+      try {
+        const found = await findGammaMarket(o.polySlug, o.team);
+        if (found && found.market && !found.market.closed) {
+          gamma = {
+            closed: false,
+            outcomes: parseGammaArray(found.market.outcomes) || [],
+            gammaPrices: (parseGammaArray(found.market.outcomePrices) || []).map(p => parseFloat(p)),
+          };
+        }
+      } catch (e) {}
+    }
     if (!gamma || gamma.closed || !Array.isArray(gamma.gammaPrices)) { veSkip(!gamma ? 'gamma lookup miss' : gamma.closed ? 'market closed' : 'no gamma prices'); continue; }
     const outs = (gamma.outcomes || []).map(x => String(x));
     const teamLower = String(o.team || '').toLowerCase();
