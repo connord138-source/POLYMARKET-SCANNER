@@ -2251,6 +2251,9 @@ async function enterVegasEdgeOpportunities(env, config, dailyStats, stillOpen, r
   const minEdge = config.vegasEdgeMinEdge ?? 10;
   const MAX_EDGE = 15;      // above the band's ceiling = stale-book artifact
   const MAX_PER_CYCLE = 3;  // no burst-filling a big Saturday slate at once
+  const veStat = { entered: 0, skips: {} };
+  results.vegasEdge = veStat;
+  const veSkip = (why) => { veStat.skips[why] = (veStat.skips[why] || 0) + 1; };
 
   let opps = [];
   try { opps = await env.SIGNALS_CACHE.get('edge_opportunities', { type: 'json' }) || []; } catch (e) { return; }
@@ -2264,13 +2267,13 @@ async function enterVegasEdgeOpportunities(env, config, dailyStats, stillOpen, r
 
   for (const o of opps) {
     if (openedThisCycle >= MAX_PER_CYCLE) break;
-    if (o.outcome || !o.polySlug || enteredSet.has(o.id)) continue;
+    if (o.outcome || !o.polySlug || enteredSet.has(o.id)) { if (!o.outcome) veSkip(!o.polySlug ? 'no polySlug' : 'already entered'); continue; }
     if (typeof o.edgeNet !== 'number' || o.edgeNet < minEdge || o.edgeNet > MAX_EDGE) continue;
     const start = o.commenceTime ? new Date(o.commenceTime).getTime() : 0;
-    if (!start || start <= now) continue;                     // pre-game only
+    if (!start || start <= now) { veSkip('game started'); continue; }   // pre-game only
     const horizonH = config.maxEventHorizonHours ?? 168;
-    if (horizonH > 0 && start - now > horizonH * 3600 * 1000) continue;
-    if (stillOpen.some(p => p.marketSlug === o.polySlug)) continue;
+    if (horizonH > 0 && start - now > horizonH * 3600 * 1000) { veSkip('beyond horizon'); continue; }
+    if (stillOpen.some(p => p.marketSlug === o.polySlug)) { veSkip('already holding market'); continue; }
 
     // Shared risk caps
     if (config.maxDailyTrades > 0 && dailyStats.tradesOpened >= config.maxDailyTrades) break;
@@ -2282,7 +2285,7 @@ async function enterVegasEdgeOpportunities(env, config, dailyStats, stillOpen, r
     // outcome match => no trade — never fill at the scanner's cached price.
     let gamma = null;
     try { gamma = await lookupMarketTokens(o.polySlug); } catch (e) {}
-    if (!gamma || gamma.closed || !Array.isArray(gamma.gammaPrices)) continue;
+    if (!gamma || gamma.closed || !Array.isArray(gamma.gammaPrices)) { veSkip(!gamma ? 'gamma lookup miss' : gamma.closed ? 'market closed' : 'no gamma prices'); continue; }
     const outs = (gamma.outcomes || []).map(x => String(x));
     const teamLower = String(o.team || '').toLowerCase();
     let idx = -1;
@@ -2290,12 +2293,12 @@ async function enterVegasEdgeOpportunities(env, config, dailyStats, stillOpen, r
       const oL = outs[i].toLowerCase();
       if (oL === teamLower || teamLower.includes(oL) || oL.includes(teamLower)) { idx = i; break; }
     }
-    if (idx < 0 || typeof gamma.gammaPrices[idx] !== 'number' || isNaN(gamma.gammaPrices[idx])) continue;
+    if (idx < 0 || typeof gamma.gammaPrices[idx] !== 'number' || isNaN(gamma.gammaPrices[idx])) { veSkip('no outcome match'); continue; }
     const livePrice = Math.round(gamma.gammaPrices[idx] * 1000) / 10;
-    if (livePrice <= 3 || livePrice >= 97) continue;
+    if (livePrice <= 3 || livePrice >= 97) { veSkip('market effectively decided'); continue; }
     // The edge must survive the live fill, not just the scanner's snapshot.
     const liveEdge = typeof o.vegasProb === 'number' ? o.vegasProb - livePrice : null;
-    if (liveEdge === null || liveEdge < minEdge) continue;
+    if (liveEdge === null || liveEdge < minEdge) { veSkip('edge gone at live price'); continue; }
 
     const position = {
       id: `at_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
@@ -2322,6 +2325,7 @@ async function enterVegasEdgeOpportunities(env, config, dailyStats, stillOpen, r
     stillOpen.push(position);
     enteredSet.add(o.id);
     openedThisCycle++;
+    veStat.entered++;
     dailyStats.tradesOpened++;
     dailyStats.totalSpent += size;
     results.tradesPaperTraded = (results.tradesPaperTraded || 0) + 1;
