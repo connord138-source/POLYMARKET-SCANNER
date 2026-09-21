@@ -3864,18 +3864,36 @@ async function scanEdges(env) {
         const edge = g.edge[side];
         const pm = g.polymarket && g.polymarket.moneyline ? g.polymarket.moneyline[side] : null;
         const vegProb = g.vegas && g.vegas.moneyline ? (g.vegas.moneyline[side] || {}).prob : null;
-        if (edge !== null && edge >= EDGE_ALERT_MIN && edge <= EDGE_ALERT_MAX && pm && pm.price) {
+        if (edge !== null && edge >= EDGE_ALERT_MIN && edge <= EDGE_ALERT_MAX && pm && pm.price && pm.slug) {
           // Skip games too far out: their Polymarket books are thin, prices
           // drift for weeks, and giant "edges" there are data errors.
           const startMs = g.commenceTime ? new Date(g.commenceTime).getTime() : 0;
           if (startMs && startMs - Date.now() > EDGE_BOOK_MAX_DAYS_OUT * 24 * 3600 * 1000) continue;
+          // HONEST BOOKING: pm.price is the last-trade print from the trades
+          // feed, which lags the live book by several points — the Sep 17-21
+          // promotion audit watched print-based "10-15pt edges" fail a live
+          // Gamma price check on every cron for four days. Book at the LIVE
+          // price so the lane's record measures edges that actually existed
+          // and the auto-trader's honest-fill gate sees the same numbers.
+          const teamName = side === "home" ? g.homeTeam : g.awayTeam;
+          let livePrice = null;
+          try {
+            const foundG = await findGammaMarket(pm.slug, teamName);
+            const baseG = gammaBaselineForDirection(foundG, teamName);
+            if (typeof baseG.marketProb === "number") livePrice = Math.round(baseG.marketProb * 100);
+          } catch (e) {}
+          if (livePrice === null || livePrice <= 3 || livePrice >= 97) continue;
+          const liveEdge = vegProb != null ? vegProb - livePrice : null;
+          if (liveEdge === null || liveEdge < EDGE_ALERT_MIN || liveEdge > EDGE_ALERT_MAX) continue;
           found.push({
             id: `${sport}:${g.id}:${side}`,
             sport, game: `${g.awayTeam} @ ${g.homeTeam}`,
             homeTeam: g.homeTeam, awayTeam: g.awayTeam, commenceTime: g.commenceTime,
-            side, team: side === "home" ? g.homeTeam : g.awayTeam,
-            vegasProb: vegProb, polyPrice: pm.price, edgeNet: edge,
-            polySlug: pm.slug || null,
+            side, team: teamName,
+            vegasProb: vegProb, polyPrice: livePrice, edgeNet: liveEdge,
+            printPrice: pm.price,     // kept for print-vs-live gap visibility
+            honestFill: true,
+            polySlug: pm.slug,
             detectedAt: new Date().toISOString(),
             outcome: null, settledAt: null, pnl: null
           });
@@ -3947,19 +3965,26 @@ async function settleEdgeOpportunities(env) {
     // bucket is the lane's durable book, split by divergence size so the
     // booking threshold can be tuned on evidence.
     try {
-      const stats = await env.SIGNALS_CACHE.get("edge_lane_stats", { type: "json" }) ||
-        { overall: { wins: 0, losses: 0, staked: 0, pnl: 0 }, byBand: {}, createdAt: new Date().toISOString() };
-      for (const o of newlySettled) {
-        const band = o.edgeNet <= 5 ? "4-5" : o.edgeNet <= 9 ? "6-9" : "10-15";
-        if (!stats.byBand[band]) stats.byBand[band] = { wins: 0, losses: 0, staked: 0, pnl: 0 };
-        for (const b of [stats.overall, stats.byBand[band]]) {
-          if (o.outcome === "WIN") b.wins++; else b.losses++;
-          b.staked += PAPER_STAKE;
-          b.pnl = Math.round((b.pnl + o.pnl) * 100) / 100;
+      // Two eras, two books: honest-fill rows (booked at live Gamma prices,
+      // Sep 21+) accumulate into _v2; older print-priced rows keep settling
+      // into the legacy bucket, whose ROI is known to be print-inflated.
+      for (const bucketKey of ["edge_lane_stats", "edge_lane_stats_v2"]) {
+        const rows = newlySettled.filter(o => bucketKey === "edge_lane_stats_v2" ? o.honestFill : !o.honestFill);
+        if (rows.length === 0) continue;
+        const stats = await env.SIGNALS_CACHE.get(bucketKey, { type: "json" }) ||
+          { overall: { wins: 0, losses: 0, staked: 0, pnl: 0 }, byBand: {}, createdAt: new Date().toISOString() };
+        for (const o of rows) {
+          const band = o.edgeNet <= 5 ? "4-5" : o.edgeNet <= 9 ? "6-9" : "10-15";
+          if (!stats.byBand[band]) stats.byBand[band] = { wins: 0, losses: 0, staked: 0, pnl: 0 };
+          for (const b of [stats.overall, stats.byBand[band]]) {
+            if (o.outcome === "WIN") b.wins++; else b.losses++;
+            b.staked += PAPER_STAKE;
+            b.pnl = Math.round((b.pnl + o.pnl) * 100) / 100;
+          }
         }
+        stats.updatedAt = new Date().toISOString();
+        await env.SIGNALS_CACHE.put(bucketKey, JSON.stringify(stats));
       }
-      stats.updatedAt = new Date().toISOString();
-      await env.SIGNALS_CACHE.put("edge_lane_stats", JSON.stringify(stats));
     } catch (e) { console.error("edge_lane_stats error:", e.message); }
   }
   return { checked, settled: settledN };
@@ -4482,29 +4507,36 @@ export default {
         // proactive odds scanner (not whale signals), tracked through Gamma
         // settlement in edge_opportunities.
         try {
-          // Prefer the persistent lane stats (survives the live list's 200-entry
-          // eviction); fall back to counting the live list before any settle.
-          let laneStats = await env.SIGNALS_CACHE.get("edge_lane_stats", { type: "json" });
-          let wins = 0, losses = 0, pnl = 0, staked = 0;
-          if (laneStats && laneStats.overall && (laneStats.overall.wins + laneStats.overall.losses) > 0) {
-            ({ wins, losses, staked, pnl } = laneStats.overall);
-          } else {
-            const opps = await env.SIGNALS_CACHE.get("edge_opportunities", { type: "json" }) || [];
-            for (const o of opps.filter(o => o.outcome === "WIN" || o.outcome === "LOSS")) {
-              if (o.outcome === "WIN") wins++; else losses++;
-              staked += PAPER_STAKE; pnl += (o.pnl || 0);
-            }
-          }
-          const settledCount = wins + losses;
-          if (settledCount > 0) {
-            pnl = Math.round(pnl * 100) / 100;
+          // Two eras: _v2 (booked at live Gamma prices, Sep 21+) is the
+          // honest record and the only one that can earn readyForAuto; the
+          // legacy print-priced record is shown demoted — its fills were
+          // last-trade prints that lagged the live book, inflating ROI (the
+          // Sep 17-21 promotion audit proved those edges rarely existed at
+          // live prices).
+          const laneV2 = await env.SIGNALS_CACHE.get("edge_lane_stats_v2", { type: "json" });
+          if (laneV2 && laneV2.overall && (laneV2.overall.wins + laneV2.overall.losses) > 0) {
+            const { wins, losses, staked, pnl } = laneV2.overall;
+            const settledCount = wins + losses;
             const roi = staked > 0 ? Math.round((pnl / staked) * 1000) / 10 : null;
             strategies.push({
-              key: "vegas_edge", label: "Vegas edge (Odds API)", side: "follow",
-              settled: settledCount, wins, losses, staked, pnl, roi,
+              key: "vegas_edge", label: "Vegas edge (live fills)", side: "follow",
+              settled: settledCount, wins, losses, staked, pnl: Math.round(pnl * 100) / 100, roi,
               winRate: settledCount ? Math.round((wins / settledCount) * 100) : null,
-              byBand: (laneStats && laneStats.byBand) || null,
+              byBand: laneV2.byBand || null,
               readyForAuto: settledCount >= PROVEN_MIN && (roi || 0) > 0
+            });
+          }
+          const laneStats = await env.SIGNALS_CACHE.get("edge_lane_stats", { type: "json" });
+          if (laneStats && laneStats.overall && (laneStats.overall.wins + laneStats.overall.losses) > 0) {
+            const { wins, losses, staked, pnl } = laneStats.overall;
+            const settledCount = wins + losses;
+            const roi = staked > 0 ? Math.round((pnl / staked) * 1000) / 10 : null;
+            strategies.push({
+              key: "vegas_edge_print", label: "Vegas edge (print fills — superseded)", side: "follow",
+              settled: settledCount, wins, losses, staked, pnl: Math.round(pnl * 100) / 100, roi,
+              winRate: settledCount ? Math.round((wins / settledCount) * 100) : null,
+              byBand: laneStats.byBand || null,
+              readyForAuto: false
             });
           }
         } catch (e) { /* leave strategies as-is */ }
