@@ -1974,6 +1974,27 @@ export async function processSignals(env, signals) {
     // whale's edge is gone — skip instead of chasing.
     {
       const liveP = liveEntryPriceFor(entryGamma, signal.directionRaw || signal.direction);
+      if (liveP === null) {
+        // No live price for our side (Gamma miss or unmatchable direction)
+        // means we can't fill honestly — and the exit engine couldn't price
+        // the position honestly either. No fill without a live price. (The
+        // Sep 20 United Russia entry filled at a stale 20c because a null
+        // reprice silently fell through to the signal price.)
+        const noLiveReason = 'No live price for entry (Gamma miss/unmatched direction)';
+        results.skipped++;
+        results.skipReasons[noLiveReason] = (results.skipReasons[noLiveReason] || 0) + 1;
+        const skipKeyNL = signal.marketSlug || signal.marketTitle || signal.title;
+        if ((!config.deduplicateSkipLogs || !skippedMarketsThisCycle.has(skipKeyNL)) && shouldLogSkip(skipKeyNL, noLiveReason)) {
+          skippedMarketsThisCycle.add(skipKeyNL);
+          await logDecision(env, {
+            type: 'SKIP',
+            market: signal.marketTitle || signal.title,
+            reason: noLiveReason,
+            marketCategory: categorizeMarket(signal.marketTitle || signal.title || ''),
+          });
+        }
+        continue;
+      }
       if (liveP !== null) {
         const staleP = evaluation.entryPrice;
         const driftUp = liveP - staleP;
