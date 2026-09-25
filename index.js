@@ -14,7 +14,8 @@ import {
   getTradeHistory, getTradeLog, getBotPerformance, getDailyStats,
   getPnLSummary, getCategoryPerformance, getExecQueue, addToExecQueue,
   handleExecConfirm, manualClosePosition, emergencyStopAll,
-  processSignals, getBotLearning, recalcPerformance, recordClosedTrade
+  processSignals, getBotLearning, recalcPerformance, recordClosedTrade,
+  computeExplorationGraduation
 } from "./src/autotrader.js";
 import {
   getFactorStats as atGetFactorStats, getAIRecommendation,
@@ -4700,6 +4701,13 @@ export default {
           const gsRaw = await env.SIGNALS_CACHE.get('agent_gate_stats');
           perf.agentGate = gsRaw ? JSON.parse(gsRaw) : null;
         } catch (e) { perf.agentGate = null; }
+        // Exploration graduation: the bot's own settled probe record and
+        // whether it has earned full-size entries through the edge gate.
+        try {
+          const cfgForGrad = await getAutotraderConfig(env);
+          perf.explorationGraduation = computeExplorationGraduation(
+            await getTradeHistory(env, 1000), cfgForGrad);
+        } catch (e) { perf.explorationGraduation = null; }
         return atJson(perf);
       }
 
