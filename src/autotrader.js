@@ -664,6 +664,31 @@ function computeExplorationGraduation(history, config) {
   };
 }
 
+// GO-LIVE MILESTONE: the record real-money authorization waits on. Counts
+// only settled FULL-SIZE graduated entries (graduatedEntry flag, which only
+// exists since the graduation deploy — honest live-priced fills by
+// construction). Met = >= target settled with positive total PnL. The flip
+// to live trading remains a human decision; this just says when the
+// evidence bar is cleared.
+function computeGoLiveMilestone(history) {
+  const target = 30;
+  let wins = 0, losses = 0, pnl = 0, staked = 0;
+  for (const t of history || []) {
+    if (!t || t.graduatedEntry !== true) continue;
+    if (t.outcome !== 'win' && t.outcome !== 'loss') continue;
+    if (t.outcome === 'win') wins++; else losses++;
+    pnl += (t.pnl || 0);
+    staked += (t.size || 0);
+  }
+  const settled = wins + losses;
+  pnl = Math.round(pnl * 100) / 100;
+  return {
+    target, settled, wins, losses, pnl, staked,
+    roi: staked > 0 ? Math.round((pnl / staked) * 1000) / 10 : null,
+    met: settled >= target && pnl > 0,
+  };
+}
+
 async function addToHistory(env, trade) {
   if (trade.openedAt) trade.entryHourUTC = new Date(trade.openedAt).getUTCHours();
   if (trade.closedAt) trade.exitHourUTC = new Date(trade.closedAt).getUTCHours();
@@ -1243,9 +1268,11 @@ function evaluateSignal(signal, config, dailyStats, openPositions, perf, explora
     reasons.push(`HC size: $${positionSize}`);
   }
 
+  let isGraduatedFullSize = false;
   if (isExploration) {
     if (explorationGrad && explorationGrad.graduated) {
       // GRADUATED: the bot's own settled probe ledger proved out — full size.
+      isGraduatedFullSize = true;
       reasons.push(`🎓 Graduated exploration: full size (${explorationGrad.wins}W-${explorationGrad.losses}L, $${explorationGrad.pnl} over ${explorationGrad.windowDays}d)`);
     } else {
       const exMultiplier = config.edgeExplorationSizeMultiplier ?? 0.5;
@@ -1274,6 +1301,7 @@ function evaluateSignal(signal, config, dailyStats, openPositions, perf, explora
     whaleAction: signal.whaleAction || 'BUY',
     isHighConviction,
     isExploration,
+    isGraduatedFullSize,
     reasons,
     aiConfidence: null,
     aiComponents: null,
@@ -2124,6 +2152,7 @@ export async function processSignals(env, signals) {
       strongCombo: evaluation.strongCombo || null,
       isHighConviction: evaluation.isHighConviction || false,
       isExploration: evaluation.isExploration || false,
+      graduatedEntry: evaluation.isGraduatedFullSize || false,  // full-size probe: counts toward the go-live ledger
       // Investigator's independent view of this entry (advisory)
       agentProb: agentView ? agentView.agentProb : null,
       agentEdgePts: agentView ? agentView.agentEdgePts : null,
@@ -2962,6 +2991,7 @@ export {
   addToExecQueue,
   calculatePositionSize,
   computeExplorationGraduation,
+  computeGoLiveMilestone,
   evaluateSignal,
   getDailyStats,
   getPnLSummary,
