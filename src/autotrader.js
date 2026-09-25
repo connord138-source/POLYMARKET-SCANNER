@@ -432,6 +432,18 @@ const DEFAULT_CONFIG = {
   maxEventHorizonHours: 168,      // Skip markets resolving further out than this (0 = disabled)
   staleVoidGraceHours: 48,        // Extra hours past maxHoldHours to wait for resolution before voiding a no-price position
   requireProvenEdge: true,        // Only trade signals whose entry band has a proven positive historical edge (signal.hasPositiveEdge)
+  // v22 EXPLORATION GRADUATION. The proven-edge gate keys on the WHOLE
+  // signal population's band edge, but the bot only trades its top-scored
+  // picks — and those probes can be profitable while the population reads
+  // cold (Sep 2026: probes ~2:1 weekly while every band sat at 0 to -5pt).
+  // When the bot's OWN settled exploration ledger proves out — at least
+  // MinSample settled probes inside WindowDays with positive total PnL —
+  // exploration entries graduate to FULL size. Still capped per day, still
+  // flagged exploration (the ledger keeps measuring), and graduation
+  // auto-revokes if the trailing record turns negative.
+  explorationGraduation: true,
+  explorationGraduationMinSample: 30,
+  explorationGraduationWindowDays: 30,
   // Lane-1 promotion (Sep 2026): the vegas_edge paper lane proved out at 159
   // settled / +22.6% ROI with ALL profit in the 10-15pt divergence band
   // (+$4,886 on 56 settled; the 4-9pt bands lose). Enter exactly that band
@@ -616,6 +628,36 @@ export async function getTradeHistory(env, limit = 50) {
     const history = await env.SIGNALS_CACHE.get(AT_KEYS.HISTORY, { type: 'json' }) || [];
     return history.slice(-limit);
   } catch (e) { return []; }
+}
+
+// Exploration graduation (see DEFAULT_CONFIG): the bot's own settled probe
+// record over the trailing window. Pure over trade history so it needs no
+// separate ledger and heals itself as the window slides.
+function computeExplorationGraduation(history, config) {
+  const minSample = (config && config.explorationGraduationMinSample) ?? 30;
+  const windowDays = (config && config.explorationGraduationWindowDays) ?? 30;
+  const enabled = !config || config.explorationGraduation !== false;
+  const cutoff = Date.now() - windowDays * 24 * 3600 * 1000;
+  let wins = 0, losses = 0, pnl = 0, staked = 0;
+  for (const t of history || []) {
+    if (!t || t.isExploration !== true) continue;
+    if (t.outcome !== 'win' && t.outcome !== 'loss') continue;   // pushes/stales aren't evidence
+    const closed = t.closedAt ? new Date(t.closedAt).getTime() : 0;
+    if (!closed || closed < cutoff) continue;
+    if (t.outcome === 'win') wins++; else losses++;
+    pnl += (t.pnl || 0);
+    staked += (t.size || 0);
+  }
+  const settled = wins + losses;
+  pnl = Math.round(pnl * 100) / 100;
+  return {
+    enabled,
+    graduated: enabled && settled >= minSample && pnl > 0,
+    settled, wins, losses, pnl,
+    staked,
+    roi: staked > 0 ? Math.round((pnl / staked) * 1000) / 10 : null,
+    minSample, windowDays,
+  };
 }
 
 async function addToHistory(env, trade) {
@@ -995,7 +1037,7 @@ function getAutotraderCategory(signal) {
 // ============================================================
 // SIGNAL EVALUATION (should we trade this signal?)
 // ============================================================
-function evaluateSignal(signal, config, dailyStats, openPositions, perf) {
+function evaluateSignal(signal, config, dailyStats, openPositions, perf, explorationGrad) {
   const reasons = [];
 
   // ========== GATE 1: Can we trade at all? ==========
@@ -1198,9 +1240,14 @@ function evaluateSignal(signal, config, dailyStats, openPositions, perf) {
   }
 
   if (isExploration) {
-    const exMultiplier = config.edgeExplorationSizeMultiplier ?? 0.5;
-    positionSize = Math.max(config.minPositionSize, Math.round(positionSize * exMultiplier));
-    reasons.push(`Exploration size: $${positionSize}`);
+    if (explorationGrad && explorationGrad.graduated) {
+      // GRADUATED: the bot's own settled probe ledger proved out — full size.
+      reasons.push(`🎓 Graduated exploration: full size (${explorationGrad.wins}W-${explorationGrad.losses}L, $${explorationGrad.pnl} over ${explorationGrad.windowDays}d)`);
+    } else {
+      const exMultiplier = config.edgeExplorationSizeMultiplier ?? 0.5;
+      positionSize = Math.max(config.minPositionSize, Math.round(positionSize * exMultiplier));
+      reasons.push(`Exploration size: $${positionSize}`);
+    }
   }
 
   positionSize = Math.min(positionSize, config.maxPositionSize || 30);
@@ -1372,6 +1419,13 @@ export async function processSignals(env, signals) {
   const dailyStats = await getDailyStats(env);
   const openPositions = await getOpenPositions(env);
   const perf = await getBotPerformance(env);
+
+  // Exploration graduation: computed once per run from the bot's own settled
+  // probe record; when graduated, exploration entries run at full size.
+  let explorationGrad = null;
+  try {
+    explorationGrad = computeExplorationGraduation(await getTradeHistory(env, 1000), config);
+  } catch (e) { /* sizing falls back to half-size probes */ }
 
   const lastEntryTime = await env.SIGNALS_CACHE.get('autotrader_last_entry_time');
   const timeSinceLastEntry = lastEntryTime ? (Date.now() - parseInt(lastEntryTime, 10)) / 1000 : Infinity;
@@ -1799,7 +1853,7 @@ export async function processSignals(env, signals) {
       continue;
     }
     
-    const evaluation = evaluateSignal(signal, config, dailyStats, stillOpen, perf);
+    const evaluation = evaluateSignal(signal, config, dailyStats, stillOpen, perf, explorationGrad);
     
     if (!evaluation.shouldTrade) {
       results.skipped++;
@@ -2233,6 +2287,8 @@ export async function processSignals(env, signals) {
     }
   }
   
+  results.explorationGraduation = explorationGrad;
+
   // VEGAS EDGE ENTRIES: second entry source (lane-1 promotion) — shares
   // the same daily caps, positions list, and exit engine.
   try {
@@ -2901,6 +2957,7 @@ export {
   DEFAULT_CONFIG,
   addToExecQueue,
   calculatePositionSize,
+  computeExplorationGraduation,
   evaluateSignal,
   getDailyStats,
   getPnLSummary,
