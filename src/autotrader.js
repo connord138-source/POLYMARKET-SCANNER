@@ -637,7 +637,11 @@ function computeExplorationGraduation(history, config) {
   const minSample = (config && config.explorationGraduationMinSample) ?? 30;
   const windowDays = (config && config.explorationGraduationWindowDays) ?? 30;
   const enabled = !config || config.explorationGraduation !== false;
-  const cutoff = Date.now() - windowDays * 24 * 3600 * 1000;
+  // Trades closed before the honest-fill deploy filled at stale signal
+  // prices (incl. the Sep 14-15 phantom Fed wins) — not valid evidence.
+  // Moot once the rolling window passes this date on its own.
+  const HONEST_FILL_ERA = Date.parse('2026-09-15T18:00:00Z');
+  const cutoff = Math.max(Date.now() - windowDays * 24 * 3600 * 1000, HONEST_FILL_ERA);
   let wins = 0, losses = 0, pnl = 0, staked = 0;
   for (const t of history || []) {
     if (!t || t.isExploration !== true) continue;
