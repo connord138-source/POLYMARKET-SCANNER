@@ -15,7 +15,7 @@ import {
   getPnLSummary, getCategoryPerformance, getExecQueue, addToExecQueue,
   handleExecConfirm, manualClosePosition, emergencyStopAll,
   processSignals, getBotLearning, recalcPerformance, recordClosedTrade,
-  computeExplorationGraduation
+  computeExplorationGraduation, computeGoLiveMilestone
 } from "./src/autotrader.js";
 import {
   getFactorStats as atGetFactorStats, getAIRecommendation,
@@ -4705,9 +4705,11 @@ export default {
         // whether it has earned full-size entries through the edge gate.
         try {
           const cfgForGrad = await getAutotraderConfig(env);
-          perf.explorationGraduation = computeExplorationGraduation(
-            await getTradeHistory(env, 1000), cfgForGrad);
-        } catch (e) { perf.explorationGraduation = null; }
+          const histForGrad = await getTradeHistory(env, 1000);
+          perf.explorationGraduation = computeExplorationGraduation(histForGrad, cfgForGrad);
+          // Go-live milestone: full-size settled record real money waits on.
+          perf.goLiveMilestone = computeGoLiveMilestone(histForGrad);
+        } catch (e) { perf.explorationGraduation = null; perf.goLiveMilestone = null; }
         return atJson(perf);
       }
 
