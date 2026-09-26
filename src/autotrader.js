@@ -726,8 +726,13 @@ async function getDailyStats(env) {
 }
 
 async function saveDailyStats(env, stats) {
-  const today = new Date().toISOString().split('T')[0];
-  await env.SIGNALS_CACHE.put(`${AT_KEYS.DAILY_STATS}_${today}`, JSON.stringify(stats), {
+  // Key by the stats object's OWN day, not save time: a cron cycle that
+  // loads stats at 23:59 UTC and saves at 00:00 was writing yesterday's
+  // object into today's key — duplicating one day in the range, erasing
+  // the other, and seeding the new day with leftover totals that throttle
+  // the daily caps.
+  const day = stats.date || new Date().toISOString().split('T')[0];
+  await env.SIGNALS_CACHE.put(`${AT_KEYS.DAILY_STATS}_${day}`, JSON.stringify(stats), {
     expirationTtl: 90 * 24 * 60 * 60  // 90 days
   });
 }
