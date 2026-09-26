@@ -1,27 +1,27 @@
 {
-  "fetchedAt": "2026-09-26T18:57:43Z",
+  "fetchedAt": "2026-09-26T21:54:06Z",
   "health": {
     "status": "ok",
-    "timestamp": "2026-09-26T18:57:44.645Z",
+    "timestamp": "2026-09-26T21:54:07.839Z",
     "version": "21.1.0 - Modularize: extract src/odds.js + src/gamma.js from index.js",
     "cache": {
-      "signalCount": 13524,
-      "oldestSignal": "2026-09-19T18:56:47.000Z",
-      "newestSignal": "2026-09-26T18:52:41.000Z"
+      "signalCount": 13745,
+      "oldestSignal": "2026-09-19T21:51:24.000Z",
+      "newestSignal": "2026-09-26T21:49:51.000Z"
     }
   },
   "cronStatus": {
     "success": true,
     "lastRun": {
-      "startedAt": "2026-09-26T18:50:38.556Z",
+      "startedAt": "2026-09-26T21:50:54.048Z",
       "scan": {
-        "signals": 610,
+        "signals": 762,
         "success": true
       },
       "settlement": {
-        "processed": 0,
+        "processed": 1,
         "wins": 0,
-        "losses": 0,
+        "losses": 1,
         "errors": 0
       },
       "investigations": {
@@ -44,18 +44,74 @@
         "confirmed": 0,
         "total": 0
       },
-      "optimization": null,
+      "optimization": {
+        "optimized": true,
+        "totalFactors": 13,
+        "totalOptimized": 5,
+        "optimizations": [
+          {
+            "factor": "lastMinute6h",
+            "winRate": 56,
+            "samples": 1647,
+            "oldWeight": 1.34,
+            "newWeight": 1.26,
+            "change": -0.08
+          },
+          {
+            "factor": "concentrated",
+            "winRate": 54,
+            "samples": 2385,
+            "oldWeight": 1.23,
+            "newWeight": 1.18,
+            "change": -0.05
+          },
+          {
+            "factor": "freshWallet",
+            "winRate": 58,
+            "samples": 184,
+            "oldWeight": 1.29,
+            "newWeight": 1.23,
+            "change": -0.06
+          },
+          {
+            "factor": "eliteWallet",
+            "winRate": 59,
+            "samples": 797,
+            "oldWeight": 1.3,
+            "newWeight": 1.24,
+            "change": -0.06
+          },
+          {
+            "factor": "sportsMarket",
+            "winRate": 53,
+            "samples": 1694,
+            "oldWeight": 1.295,
+            "newWeight": 1.22,
+            "change": -0.07
+          }
+        ]
+      },
       "error": null,
       "edgeScan": {
-        "skipped": "throttled",
-        "nextInMin": 5
+        "at": 1790459573028,
+        "scanned": 5,
+        "sports": [
+          "cfb",
+          "mlb",
+          "nfl",
+          "nhl",
+          "wnba",
+          "nba"
+        ],
+        "found": 0,
+        "newCount": 0
       },
       "edgeSettle": {
         "checked": 3,
         "settled": 0
       },
       "invSettle": {
-        "checked": 1,
+        "checked": 0,
         "scored": 0
       },
       "signalBackfill": {
@@ -64,17 +120,17 @@
         "expired": 0
       },
       "autotrader": {
-        "evaluated": 610,
+        "evaluated": 762,
         "tradesOpened": 0,
         "tradesPaperTraded": 0,
         "tradesQueued": 0,
-        "skipped": 610,
+        "skipped": 762,
         "skipReasons": {
-          "No proven edge for entry band 41-60 (-3pt)": 326,
-          "Duplicate market (already traded)": 19,
-          "No proven edge for entry band 81-99 (-2pt)": 39,
-          "No proven edge for entry band 61-80 (-1pt)": 164,
-          "No proven edge for entry band 21-40 (-2pt)": 57,
+          "No proven edge for entry band 41-60 (-3pt)": 394,
+          "No proven edge for entry band 81-99 (-2pt)": 53,
+          "No proven edge for entry band 61-80 (-1pt)": 221,
+          "Duplicate market (already traded)": 21,
+          "No proven edge for entry band 21-40 (-3pt)": 68,
           "No winning wallet on signal": 4,
           "Event too far out (96d > 7d horizon)": 1
         },
@@ -96,7 +152,7 @@
         "vegasEdge": {
           "entered": 0,
           "skips": {
-            "game started": 7,
+            "game started": 6,
             "edge gone at live price": 2
           }
         },
@@ -104,7 +160,7 @@
         "dailyPnL": 24.16,
         "totalPnL": 3325.804949494948
       },
-      "completedAt": "2026-09-26T18:56:29.969Z"
+      "completedAt": "2026-09-26T21:53:08.094Z"
     },
     "cronSchedule": "Every 5 minutes",
     "note": "Settlement runs automatically. Sports events settle ~12h after game ends."
@@ -603,36 +659,36 @@
       },
       {
         "name": "eliteWallet",
-        "wins": 468,
+        "wins": 471,
         "losses": 326,
         "winRate": 59,
-        "weight": 1.3,
-        "lastUpdated": "2026-09-26T17:16:39.236Z",
-        "previousWeight": 1.385,
-        "optimizedAt": "2026-09-26T17:18:05.023Z",
-        "total": 794
+        "weight": 1.24,
+        "lastUpdated": "2026-09-26T21:47:42.538Z",
+        "previousWeight": 1.3,
+        "optimizedAt": "2026-09-26T21:53:07.799Z",
+        "total": 797
       },
       {
         "name": "freshWallet",
-        "wins": 106,
+        "wins": 107,
         "losses": 77,
         "winRate": 58,
         "weight": 1.23,
-        "lastUpdated": "2026-09-26T12:25:51.666Z",
+        "lastUpdated": "2026-09-26T21:47:42.538Z",
         "previousWeight": 1.29,
-        "optimizedAt": "2026-09-26T12:57:10.355Z",
-        "total": 183
+        "optimizedAt": "2026-09-26T21:53:07.799Z",
+        "total": 184
       },
       {
         "name": "strongWallet",
-        "wins": 1302,
-        "losses": 956,
+        "wins": 1309,
+        "losses": 962,
         "winRate": 58,
         "weight": 1.23,
-        "lastUpdated": "2026-09-26T17:11:05.449Z",
+        "lastUpdated": "2026-09-26T21:32:33.991Z",
         "previousWeight": 1.29,
-        "optimizedAt": "2026-09-26T17:18:05.023Z",
-        "total": 2258
+        "optimizedAt": "2026-09-26T21:43:01.664Z",
+        "total": 2271
       },
       {
         "name": "cryptoMarket",
@@ -647,47 +703,47 @@
       },
       {
         "name": "whaleSize50k",
-        "wins": 215,
-        "losses": 165,
+        "wins": 216,
+        "losses": 166,
         "winRate": 57,
         "weight": 1.21,
-        "lastUpdated": "2026-09-26T02:54:38.426Z",
+        "lastUpdated": "2026-09-26T21:12:30.216Z",
         "previousWeight": 1.27,
-        "optimizedAt": "2026-09-26T03:05:20.460Z",
-        "total": 380
+        "optimizedAt": "2026-09-26T21:18:04.021Z",
+        "total": 382
       },
       {
         "name": "lastMinute6h",
-        "wins": 916,
-        "losses": 724,
+        "wins": 920,
+        "losses": 727,
         "winRate": 56,
-        "weight": 1.2,
-        "lastUpdated": "2026-09-26T06:19:03.367Z",
-        "previousWeight": 1.26,
-        "optimizedAt": "2026-09-26T09:55:59.631Z",
-        "total": 1640
+        "weight": 1.26,
+        "lastUpdated": "2026-09-26T21:52:42.802Z",
+        "previousWeight": 1.34,
+        "optimizedAt": "2026-09-26T21:53:07.799Z",
+        "total": 1647
       },
       {
         "name": "whaleSize25k",
-        "wins": 489,
-        "losses": 403,
+        "wins": 493,
+        "losses": 404,
         "winRate": 55,
         "weight": 1.19,
-        "lastUpdated": "2026-09-26T12:15:06.795Z",
+        "lastUpdated": "2026-09-26T20:26:22.618Z",
         "previousWeight": 1.25,
-        "optimizedAt": "2026-09-26T12:26:53.645Z",
-        "total": 892
+        "optimizedAt": "2026-09-26T20:47:39.373Z",
+        "total": 897
       },
       {
         "name": "whaleSize15k",
-        "wins": 903,
-        "losses": 740,
+        "wins": 907,
+        "losses": 744,
         "winRate": 55,
         "weight": 1.19,
-        "lastUpdated": "2026-09-26T16:12:17.077Z",
+        "lastUpdated": "2026-09-26T21:42:31.517Z",
         "previousWeight": 1.25,
-        "optimizedAt": "2026-09-26T16:19:05.439Z",
-        "total": 1643
+        "optimizedAt": "2026-09-26T21:48:15.948Z",
+        "total": 1651
       }
     ],
     "bottomFactors": [
@@ -704,69 +760,69 @@
       },
       {
         "name": "sportsMarket",
-        "wins": 883,
-        "losses": 776,
+        "wins": 902,
+        "losses": 792,
         "winRate": 53,
         "weight": 1.22,
-        "lastUpdated": "2026-09-26T17:16:39.236Z",
+        "lastUpdated": "2026-09-26T21:52:42.802Z",
         "previousWeight": 1.295,
-        "optimizedAt": "2026-09-26T17:18:05.023Z",
-        "total": 1659
+        "optimizedAt": "2026-09-26T21:53:07.799Z",
+        "total": 1694
       },
       {
         "name": "concentrated",
-        "wins": 1267,
-        "losses": 1100,
+        "wins": 1277,
+        "losses": 1108,
         "winRate": 54,
         "weight": 1.18,
-        "lastUpdated": "2026-09-26T16:28:25.959Z",
+        "lastUpdated": "2026-09-26T21:47:30.669Z",
         "previousWeight": 1.23,
-        "optimizedAt": "2026-09-26T16:57:39.373Z",
-        "total": 2367
+        "optimizedAt": "2026-09-26T21:53:07.799Z",
+        "total": 2385
       },
       {
         "name": "whaleSize15k",
-        "wins": 903,
-        "losses": 740,
+        "wins": 907,
+        "losses": 744,
         "winRate": 55,
         "weight": 1.19,
-        "lastUpdated": "2026-09-26T16:12:17.077Z",
+        "lastUpdated": "2026-09-26T21:42:31.517Z",
         "previousWeight": 1.25,
-        "optimizedAt": "2026-09-26T16:19:05.439Z",
-        "total": 1643
+        "optimizedAt": "2026-09-26T21:48:15.948Z",
+        "total": 1651
       },
       {
         "name": "whaleSize25k",
-        "wins": 489,
-        "losses": 403,
+        "wins": 493,
+        "losses": 404,
         "winRate": 55,
         "weight": 1.19,
-        "lastUpdated": "2026-09-26T12:15:06.795Z",
+        "lastUpdated": "2026-09-26T20:26:22.618Z",
         "previousWeight": 1.25,
-        "optimizedAt": "2026-09-26T12:26:53.645Z",
-        "total": 892
+        "optimizedAt": "2026-09-26T20:47:39.373Z",
+        "total": 897
       },
       {
         "name": "lastMinute6h",
-        "wins": 916,
-        "losses": 724,
+        "wins": 920,
+        "losses": 727,
         "winRate": 56,
-        "weight": 1.2,
-        "lastUpdated": "2026-09-26T06:19:03.367Z",
-        "previousWeight": 1.26,
-        "optimizedAt": "2026-09-26T09:55:59.631Z",
-        "total": 1640
+        "weight": 1.26,
+        "lastUpdated": "2026-09-26T21:52:42.802Z",
+        "previousWeight": 1.34,
+        "optimizedAt": "2026-09-26T21:53:07.799Z",
+        "total": 1647
       },
       {
         "name": "whaleSize50k",
-        "wins": 215,
-        "losses": 165,
+        "wins": 216,
+        "losses": 166,
         "winRate": 57,
         "weight": 1.21,
-        "lastUpdated": "2026-09-26T02:54:38.426Z",
+        "lastUpdated": "2026-09-26T21:12:30.216Z",
         "previousWeight": 1.27,
-        "optimizedAt": "2026-09-26T03:05:20.460Z",
-        "total": 380
+        "optimizedAt": "2026-09-26T21:18:04.021Z",
+        "total": 382
       },
       {
         "name": "cryptoMarket",
@@ -781,25 +837,25 @@
       },
       {
         "name": "strongWallet",
-        "wins": 1302,
-        "losses": 956,
+        "wins": 1309,
+        "losses": 962,
         "winRate": 58,
         "weight": 1.23,
-        "lastUpdated": "2026-09-26T17:11:05.449Z",
+        "lastUpdated": "2026-09-26T21:32:33.991Z",
         "previousWeight": 1.29,
-        "optimizedAt": "2026-09-26T17:18:05.023Z",
-        "total": 2258
+        "optimizedAt": "2026-09-26T21:43:01.664Z",
+        "total": 2271
       },
       {
         "name": "freshWallet",
-        "wins": 106,
+        "wins": 107,
         "losses": 77,
         "winRate": 58,
         "weight": 1.23,
-        "lastUpdated": "2026-09-26T12:25:51.666Z",
+        "lastUpdated": "2026-09-26T21:47:42.538Z",
         "previousWeight": 1.29,
-        "optimizedAt": "2026-09-26T12:57:10.355Z",
-        "total": 183
+        "optimizedAt": "2026-09-26T21:53:07.799Z",
+        "total": 184
       }
     ],
     "recommendation": {
@@ -821,7 +877,7 @@
         {
           "name": "eliteWallet",
           "winRate": 59,
-          "record": "468W-326L",
+          "record": "471W-326L",
           "isDiscovered": false
         }
       ],
@@ -835,13 +891,13 @@
         {
           "name": "sportsMarket",
           "winRate": 53,
-          "record": "883W-776L",
+          "record": "902W-792L",
           "isDiscovered": false
         },
         {
           "name": "concentrated",
           "winRate": 54,
-          "record": "1267W-1100L",
+          "record": "1277W-1108L",
           "isDiscovered": false
         }
       ],
@@ -945,14 +1001,6 @@
     "totalFactors": 13
   },
   "tradeLog": [
-    {
-      "type": "SKIP",
-      "market": "Falcons vs. Packers",
-      "reason": "No proven edge for entry band 81-99 (-2pt)",
-      "walletTier": "ELITE",
-      "marketCategory": "sports_binary",
-      "timestamp": "2026-09-25T19:00:55.136Z"
-    },
     {
       "type": "SKIP",
       "market": "Spread: Packers (-4.5)",
@@ -1211,6 +1259,14 @@
       "pnl": 5,
       "paperTrade": true,
       "timestamp": "2026-09-26T18:46:24.300Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Utah vs. Iowa State",
+      "reason": "No proven edge for entry band 61-80 (-1pt)",
+      "walletTier": "STRONG",
+      "marketCategory": "sports_binary",
+      "timestamp": "2026-09-26T19:37:21.302Z"
     }
   ],
   "tradeHistory": [
@@ -2426,15 +2482,15 @@
     "success": true,
     "overview": {
       "totalFactorsTracked": 13,
-      "totalSignalsProcessed": 12823,
+      "totalSignalsProcessed": 12915,
       "overallWinRate": 55,
-      "pendingSignals": 488
+      "pendingSignals": 496
     },
     "walletEdge": {
       "totalTracked": 500,
       "insiderCount": 0,
       "eliteCount": 0,
-      "strongCount": 2,
+      "strongCount": 1,
       "fadeCount": 1,
       "topPerformers": [
         {
@@ -2457,6 +2513,25 @@
           }
         },
         {
+          "address": "0xedbbdd8110aff4e77421df3bd1d7c5c8d4cc63b8",
+          "tier": "STRONG",
+          "winRate": 73,
+          "record": "8W-3L",
+          "totalVolume": 31906.3391,
+          "edgeMetrics": {
+            "avgOdds": 62,
+            "avgBetTiming": 0,
+            "consistencyScore": 79,
+            "bigBetWinRate": 500,
+            "sportWinRate": 67,
+            "politicalWinRate": 0,
+            "cryptoWinRate": 0,
+            "totalBigBets": 1,
+            "roi": 1,
+            "bigBetWins": 5
+          }
+        },
+        {
           "address": "0xef7c60dbebeb76789fbd47a339e7102f6300159f",
           "tier": "AVERAGE",
           "winRate": 71,
@@ -2473,44 +2548,6 @@
             "totalBigBets": 0,
             "roi": 4,
             "bigBetWins": 2
-          }
-        },
-        {
-          "address": "0xedbbdd8110aff4e77421df3bd1d7c5c8d4cc63b8",
-          "tier": "STRONG",
-          "winRate": 70,
-          "record": "7W-3L",
-          "totalVolume": 31906.3391,
-          "edgeMetrics": {
-            "avgOdds": 62,
-            "avgBetTiming": 0,
-            "consistencyScore": 75,
-            "bigBetWinRate": 400,
-            "sportWinRate": 67,
-            "politicalWinRate": 0,
-            "cryptoWinRate": 0,
-            "totalBigBets": 1,
-            "roi": 1,
-            "bigBetWins": 4
-          }
-        },
-        {
-          "address": "0xf8fdc4067784d70f7828149d009a519b6bd5876f",
-          "tier": "STRONG",
-          "winRate": 60,
-          "record": "15W-10L",
-          "totalVolume": 257312.0489997898,
-          "edgeMetrics": {
-            "avgOdds": 64,
-            "avgBetTiming": 0,
-            "consistencyScore": 70,
-            "bigBetWinRate": 300,
-            "sportWinRate": 58,
-            "politicalWinRate": 0,
-            "cryptoWinRate": 0,
-            "totalBigBets": 2,
-            "roi": 0,
-            "bigBetWins": 6
           }
         }
       ]
@@ -2536,22 +2573,22 @@
     },
     "factors": {
       "whaleSize50k": {
-        "wins": 215,
-        "losses": 165,
+        "wins": 216,
+        "losses": 166,
         "winRate": 57,
         "weight": 1.21,
-        "lastUpdated": "2026-09-26T02:54:38.426Z",
+        "lastUpdated": "2026-09-26T21:12:30.216Z",
         "previousWeight": 1.27,
-        "optimizedAt": "2026-09-26T03:05:20.460Z"
+        "optimizedAt": "2026-09-26T21:18:04.021Z"
       },
       "lastMinute6h": {
-        "wins": 916,
-        "losses": 724,
+        "wins": 920,
+        "losses": 727,
         "winRate": 56,
-        "weight": 1.2,
-        "lastUpdated": "2026-09-26T06:19:03.367Z",
-        "previousWeight": 1.26,
-        "optimizedAt": "2026-09-26T09:55:59.631Z"
+        "weight": 1.26,
+        "lastUpdated": "2026-09-26T21:52:42.802Z",
+        "previousWeight": 1.34,
+        "optimizedAt": "2026-09-26T21:53:07.799Z"
       },
       "lastMinute2h": {
         "wins": 477,
@@ -2563,67 +2600,67 @@
         "optimizedAt": "2026-09-26T09:55:59.631Z"
       },
       "whaleSize25k": {
-        "wins": 489,
-        "losses": 403,
+        "wins": 493,
+        "losses": 404,
         "winRate": 55,
         "weight": 1.19,
-        "lastUpdated": "2026-09-26T12:15:06.795Z",
+        "lastUpdated": "2026-09-26T20:26:22.618Z",
         "previousWeight": 1.25,
-        "optimizedAt": "2026-09-26T12:26:53.645Z"
+        "optimizedAt": "2026-09-26T20:47:39.373Z"
       },
       "concentrated": {
-        "wins": 1267,
-        "losses": 1100,
+        "wins": 1277,
+        "losses": 1108,
         "winRate": 54,
         "weight": 1.18,
-        "lastUpdated": "2026-09-26T16:28:25.959Z",
+        "lastUpdated": "2026-09-26T21:47:30.669Z",
         "previousWeight": 1.23,
-        "optimizedAt": "2026-09-26T16:57:39.373Z"
+        "optimizedAt": "2026-09-26T21:53:07.799Z"
       },
       "whaleSize15k": {
-        "wins": 903,
-        "losses": 740,
+        "wins": 907,
+        "losses": 744,
         "winRate": 55,
         "weight": 1.19,
-        "lastUpdated": "2026-09-26T16:12:17.077Z",
+        "lastUpdated": "2026-09-26T21:42:31.517Z",
         "previousWeight": 1.25,
-        "optimizedAt": "2026-09-26T16:19:05.439Z"
+        "optimizedAt": "2026-09-26T21:48:15.948Z"
       },
       "freshWallet": {
-        "wins": 106,
+        "wins": 107,
         "losses": 77,
         "winRate": 58,
         "weight": 1.23,
-        "lastUpdated": "2026-09-26T12:25:51.666Z",
+        "lastUpdated": "2026-09-26T21:47:42.538Z",
         "previousWeight": 1.29,
-        "optimizedAt": "2026-09-26T12:57:10.355Z"
+        "optimizedAt": "2026-09-26T21:53:07.799Z"
       },
       "strongWallet": {
-        "wins": 1302,
-        "losses": 956,
+        "wins": 1309,
+        "losses": 962,
         "winRate": 58,
         "weight": 1.23,
-        "lastUpdated": "2026-09-26T17:11:05.449Z",
+        "lastUpdated": "2026-09-26T21:32:33.991Z",
         "previousWeight": 1.29,
-        "optimizedAt": "2026-09-26T17:18:05.023Z"
+        "optimizedAt": "2026-09-26T21:43:01.664Z"
       },
       "eliteWallet": {
-        "wins": 468,
+        "wins": 471,
         "losses": 326,
         "winRate": 59,
-        "weight": 1.3,
-        "lastUpdated": "2026-09-26T17:16:39.236Z",
-        "previousWeight": 1.385,
-        "optimizedAt": "2026-09-26T17:18:05.023Z"
+        "weight": 1.24,
+        "lastUpdated": "2026-09-26T21:47:42.538Z",
+        "previousWeight": 1.3,
+        "optimizedAt": "2026-09-26T21:53:07.799Z"
       },
       "sportsMarket": {
-        "wins": 883,
-        "losses": 776,
+        "wins": 902,
+        "losses": 792,
         "winRate": 53,
         "weight": 1.22,
-        "lastUpdated": "2026-09-26T17:16:39.236Z",
+        "lastUpdated": "2026-09-26T21:52:42.802Z",
         "previousWeight": 1.295,
-        "optimizedAt": "2026-09-26T17:18:05.023Z"
+        "optimizedAt": "2026-09-26T21:53:07.799Z"
       },
       "cryptoMarket": {
         "wins": 22,
@@ -2697,11 +2734,11 @@
   "learningInsights": {
     "success": true,
     "systemPerformance": {
-      "totalSignalsProcessed": 12823,
-      "wins": 7078,
-      "losses": 5745,
+      "totalSignalsProcessed": 12915,
+      "wins": 7131,
+      "losses": 5784,
       "winRate": 55,
-      "pendingSignals": 488
+      "pendingSignals": 496
     },
     "insights": {
       "bestFactors": [
@@ -2745,15 +2782,15 @@
       {
         "factor": "eliteWallet",
         "winRate": 59,
-        "wins": 468,
+        "wins": 471,
         "losses": 326,
-        "weight": 1.3,
+        "weight": 1.24,
         "performance": "AVERAGE"
       },
       {
         "factor": "freshWallet",
         "winRate": 58,
-        "wins": 106,
+        "wins": 107,
         "losses": 77,
         "weight": 1.23,
         "performance": "AVERAGE"
@@ -2761,8 +2798,8 @@
       {
         "factor": "strongWallet",
         "winRate": 58,
-        "wins": 1302,
-        "losses": 956,
+        "wins": 1309,
+        "losses": 962,
         "weight": 1.23,
         "performance": "AVERAGE"
       },
@@ -2777,48 +2814,48 @@
       {
         "factor": "whaleSize50k",
         "winRate": 57,
-        "wins": 215,
-        "losses": 165,
+        "wins": 216,
+        "losses": 166,
         "weight": 1.21,
         "performance": "AVERAGE"
       },
       {
         "factor": "lastMinute6h",
         "winRate": 56,
-        "wins": 916,
-        "losses": 724,
-        "weight": 1.2,
+        "wins": 920,
+        "losses": 727,
+        "weight": 1.26,
         "performance": "AVERAGE"
       },
       {
         "factor": "whaleSize25k",
         "winRate": 55,
-        "wins": 489,
-        "losses": 403,
+        "wins": 493,
+        "losses": 404,
         "weight": 1.19,
         "performance": "AVERAGE"
       },
       {
         "factor": "whaleSize15k",
         "winRate": 55,
-        "wins": 903,
-        "losses": 740,
+        "wins": 907,
+        "losses": 744,
         "weight": 1.19,
         "performance": "AVERAGE"
       },
       {
         "factor": "concentrated",
         "winRate": 54,
-        "wins": 1267,
-        "losses": 1100,
+        "wins": 1277,
+        "losses": 1108,
         "weight": 1.18,
         "performance": "AVERAGE"
       },
       {
         "factor": "sportsMarket",
         "winRate": 53,
-        "wins": 883,
-        "losses": 776,
+        "wins": 902,
+        "losses": 792,
         "weight": 1.22,
         "performance": "AVERAGE"
       },
@@ -2874,12 +2911,12 @@
         "key": "underdog",
         "label": "Underdog entries (≤40¢)",
         "side": "follow",
-        "settled": 958,
+        "settled": 960,
         "wins": 319,
-        "losses": 639,
-        "staked": 95800,
-        "pnl": 935.48,
-        "roi": 1,
+        "losses": 641,
+        "staked": 96000,
+        "pnl": 735.48,
+        "roi": 0.8,
         "winRate": 33,
         "readyForAuto": true
       },
@@ -2887,11 +2924,11 @@
         "key": "all",
         "label": "Follow all signals",
         "side": "follow",
-        "settled": 7615,
-        "wins": 4207,
-        "losses": 3408,
-        "staked": 761500,
-        "pnl": 1538.95,
+        "settled": 7659,
+        "wins": 4232,
+        "losses": 3427,
+        "staked": 765900,
+        "pnl": 1376.73,
         "roi": 0.2,
         "winRate": 55,
         "readyForAuto": true
@@ -2900,12 +2937,12 @@
         "key": "high_score",
         "label": "High score (≥100)",
         "side": "follow",
-        "settled": 1968,
-        "wins": 1076,
-        "losses": 892,
-        "staked": 196800,
-        "pnl": -3498.57,
-        "roi": -1.8,
+        "settled": 1976,
+        "wins": 1080,
+        "losses": 896,
+        "staked": 197600,
+        "pnl": -3668.21,
+        "roi": -1.9,
         "winRate": 55,
         "readyForAuto": false
       },
@@ -2913,12 +2950,12 @@
         "key": "fade_favorites",
         "label": "Fade favorites (≥60¢)",
         "side": "fade",
-        "settled": 2659,
-        "wins": 793,
-        "losses": 1866,
-        "staked": 265900,
-        "pnl": -5692.24,
-        "roi": -2.1,
+        "settled": 2673,
+        "wins": 796,
+        "losses": 1877,
+        "staked": 267300,
+        "pnl": -6034.54,
+        "roi": -2.3,
         "winRate": 30,
         "readyForAuto": false
       },
@@ -2939,31 +2976,31 @@
         "key": "vegas_edge",
         "label": "Vegas edge (live fills)",
         "side": "follow",
-        "settled": 19,
-        "wins": 7,
-        "losses": 12,
-        "staked": 1900,
-        "pnl": -761.92,
-        "roi": -40.1,
-        "winRate": 37,
+        "settled": 34,
+        "wins": 16,
+        "losses": 18,
+        "staked": 3400,
+        "pnl": -335.07,
+        "roi": -9.9,
+        "winRate": 47,
         "byBand": {
           "10-15": {
-            "wins": 2,
-            "losses": 3,
-            "staked": 500,
-            "pnl": -123.88
+            "wins": 4,
+            "losses": 5,
+            "staked": 900,
+            "pnl": -217.09
           },
           "4-5": {
-            "wins": 0,
-            "losses": 4,
-            "staked": 400,
-            "pnl": -400
+            "wins": 3,
+            "losses": 6,
+            "staked": 900,
+            "pnl": -90.89
           },
           "6-9": {
-            "wins": 5,
-            "losses": 5,
-            "staked": 1000,
-            "pnl": -238.04
+            "wins": 9,
+            "losses": 7,
+            "staked": 1600,
+            "pnl": -27.09
           }
         },
         "readyForAuto": false
@@ -2973,22 +3010,184 @@
   "edgeOpportunities": {
     "success": true,
     "count": 200,
-    "openCount": 20,
-    "settledCount": 180,
-    "winRate": 47,
+    "openCount": 13,
+    "settledCount": 187,
+    "winRate": 48,
     "lastScan": {
-      "at": 1790448346903,
-      "scanned": 4,
+      "at": 1790459573028,
+      "scanned": 5,
       "sports": [
         "cfb",
         "mlb",
         "nfl",
-        "nhl"
+        "nhl",
+        "wnba",
+        "nba"
       ],
-      "found": 1,
+      "found": 0,
       "newCount": 0
     },
     "opportunities": [
+      {
+        "id": "cfb:fc7c77e060e8ba29a61de994be1497c0:away",
+        "sport": "cfb",
+        "game": "Hawaii Rainbow Warriors @ Wyoming Cowboys",
+        "homeTeam": "Wyoming Cowboys",
+        "awayTeam": "Hawaii Rainbow Warriors",
+        "commenceTime": "2026-09-26T19:10:00Z",
+        "side": "away",
+        "team": "Hawaii Rainbow Warriors",
+        "vegasProb": 11,
+        "polyPrice": 6,
+        "edgeNet": 5,
+        "printPrice": 6,
+        "honestFill": true,
+        "polySlug": "cfb-hawaii-wyom-2026-09-26",
+        "detectedAt": "2026-09-26T21:37:40.980Z",
+        "outcome": null,
+        "settledAt": null,
+        "pnl": null
+      },
+      {
+        "id": "cfb:023386f1b92db2259c7d52b2f244182f:home",
+        "sport": "cfb",
+        "game": "Nebraska Cornhuskers @ Michigan State Spartans",
+        "homeTeam": "Michigan State Spartans",
+        "awayTeam": "Nebraska Cornhuskers",
+        "commenceTime": "2026-09-26T21:06:40Z",
+        "side": "home",
+        "team": "Michigan State Spartans",
+        "vegasProb": 40,
+        "polyPrice": 36,
+        "edgeNet": 4,
+        "printPrice": 28,
+        "honestFill": true,
+        "polySlug": "cfb-nebr-mst-2026-09-26",
+        "detectedAt": "2026-09-26T21:22:43.058Z",
+        "outcome": null,
+        "settledAt": null,
+        "pnl": null
+      },
+      {
+        "id": "mlb:93809969d7d5e6b21cc1e8a6070121e9:away",
+        "sport": "mlb",
+        "game": "Los Angeles Dodgers @ San Francisco Giants",
+        "homeTeam": "San Francisco Giants",
+        "awayTeam": "Los Angeles Dodgers",
+        "commenceTime": "2026-09-26T20:06:00Z",
+        "side": "away",
+        "team": "Los Angeles Dodgers",
+        "vegasProb": 83,
+        "polyPrice": 74,
+        "edgeNet": 9,
+        "printPrice": 71,
+        "honestFill": true,
+        "polySlug": "mlb-lad-sf-2026-09-26",
+        "detectedAt": "2026-09-26T21:06:18.568Z",
+        "outcome": null,
+        "settledAt": null,
+        "pnl": null
+      },
+      {
+        "id": "mlb:93809969d7d5e6b21cc1e8a6070121e9:home",
+        "sport": "mlb",
+        "game": "Los Angeles Dodgers @ San Francisco Giants",
+        "homeTeam": "San Francisco Giants",
+        "awayTeam": "Los Angeles Dodgers",
+        "commenceTime": "2026-09-26T20:06:00Z",
+        "side": "home",
+        "team": "San Francisco Giants",
+        "vegasProb": 36,
+        "polyPrice": 24,
+        "edgeNet": 12,
+        "printPrice": 31,
+        "honestFill": true,
+        "polySlug": "mlb-lad-sf-2026-09-26",
+        "detectedAt": "2026-09-26T20:50:52.680Z",
+        "outcome": null,
+        "settledAt": null,
+        "pnl": null
+      },
+      {
+        "id": "cfb:b77eb4a9bc3086105491e736c1458112:away",
+        "sport": "cfb",
+        "game": "UConn Huskies @ Miami (OH) RedHawks",
+        "homeTeam": "Miami (OH) RedHawks",
+        "awayTeam": "UConn Huskies",
+        "commenceTime": "2026-09-26T19:35:00Z",
+        "side": "away",
+        "team": "UConn Huskies",
+        "vegasProb": 79,
+        "polyPrice": 69,
+        "edgeNet": 10,
+        "printPrice": 72,
+        "honestFill": true,
+        "polySlug": "cfb-uconn-miaoh-2026-09-26",
+        "detectedAt": "2026-09-26T20:36:38.764Z",
+        "outcome": null,
+        "settledAt": null,
+        "pnl": null
+      },
+      {
+        "id": "cfb:0dcea769daace0b6c76434589c639b11:away",
+        "sport": "cfb",
+        "game": "Utah Utes @ Iowa State Cyclones",
+        "homeTeam": "Iowa State Cyclones",
+        "awayTeam": "Utah Utes",
+        "commenceTime": "2026-09-26T19:35:48Z",
+        "side": "away",
+        "team": "Utah Utes",
+        "vegasProb": 84,
+        "polyPrice": 79,
+        "edgeNet": 5,
+        "printPrice": 75,
+        "honestFill": true,
+        "polySlug": "cfb-utah-iowast-2026-09-26",
+        "detectedAt": "2026-09-26T19:46:39.070Z",
+        "outcome": null,
+        "settledAt": null,
+        "pnl": null
+      },
+      {
+        "id": "cfb:32171e03f5df71b5c9057bcba40030a7:home",
+        "sport": "cfb",
+        "game": "TCU Horned Frogs @ UCF Knights",
+        "homeTeam": "UCF Knights",
+        "awayTeam": "TCU Horned Frogs",
+        "commenceTime": "2026-09-26T19:30:00Z",
+        "side": "home",
+        "team": "UCF Knights",
+        "vegasProb": 59,
+        "polyPrice": 50,
+        "edgeNet": 9,
+        "printPrice": 40,
+        "honestFill": true,
+        "polySlug": "cfb-tcu-ucf-2026-09-26",
+        "detectedAt": "2026-09-26T19:46:39.057Z",
+        "outcome": null,
+        "settledAt": null,
+        "pnl": null
+      },
+      {
+        "id": "cfb:fc7c77e060e8ba29a61de994be1497c0:home",
+        "sport": "cfb",
+        "game": "Hawaii Rainbow Warriors @ Wyoming Cowboys",
+        "homeTeam": "Wyoming Cowboys",
+        "awayTeam": "Hawaii Rainbow Warriors",
+        "commenceTime": "2026-09-26T19:10:00Z",
+        "side": "home",
+        "team": "Wyoming Cowboys",
+        "vegasProb": 55,
+        "polyPrice": 43,
+        "edgeNet": 12,
+        "printPrice": 41,
+        "honestFill": true,
+        "polySlug": "cfb-hawaii-wyom-2026-09-26",
+        "detectedAt": "2026-09-26T19:31:12.464Z",
+        "outcome": null,
+        "settledAt": null,
+        "pnl": null
+      },
       {
         "id": "cfb:c48f042c91328d4d0c6351fc82286879:away",
         "sport": "cfb",
@@ -3005,9 +3204,9 @@
         "honestFill": true,
         "polySlug": "cfb-ucla-mary-2026-09-26",
         "detectedAt": "2026-09-26T18:16:13.315Z",
-        "outcome": null,
-        "settledAt": null,
-        "pnl": null
+        "outcome": "WIN",
+        "settledAt": "2026-09-26T21:32:51.901Z",
+        "pnl": 63.93
       },
       {
         "id": "cfb:11c5e9c2cf899388abd0dae30ea71db9:away",
@@ -3025,9 +3224,9 @@
         "honestFill": true,
         "polySlug": "cfb-sala-uk-2026-09-26",
         "detectedAt": "2026-09-26T18:16:13.309Z",
-        "outcome": null,
-        "settledAt": null,
-        "pnl": null
+        "outcome": "LOSS",
+        "settledAt": "2026-09-26T20:46:53.852Z",
+        "pnl": -100
       },
       {
         "id": "cfb:c48f042c91328d4d0c6351fc82286879:home",
@@ -3045,9 +3244,9 @@
         "honestFill": true,
         "polySlug": "cfb-ucla-mary-2026-09-26",
         "detectedAt": "2026-09-26T17:41:31.202Z",
-        "outcome": null,
-        "settledAt": null,
-        "pnl": null
+        "outcome": "LOSS",
+        "settledAt": "2026-09-26T21:32:51.923Z",
+        "pnl": -100
       },
       {
         "id": "cfb:f6b6590d0b66bbb4fcbb391289794963:home",
@@ -3065,9 +3264,9 @@
         "honestFill": true,
         "polySlug": "cfb-wake-lou-2026-09-26",
         "detectedAt": "2026-09-26T17:41:31.196Z",
-        "outcome": null,
-        "settledAt": null,
-        "pnl": null
+        "outcome": "LOSS",
+        "settledAt": "2026-09-26T20:22:05.158Z",
+        "pnl": -100
       },
       {
         "id": "cfb:e257aae5483bbfc89e2c570fc9304e1c:home",
@@ -3085,9 +3284,9 @@
         "honestFill": true,
         "polySlug": "cfb-sdst-toledo-2026-09-26",
         "detectedAt": "2026-09-26T17:26:34.470Z",
-        "outcome": null,
-        "settledAt": null,
-        "pnl": null
+        "outcome": "WIN",
+        "settledAt": "2026-09-26T20:02:29.565Z",
+        "pnl": 25
       },
       {
         "id": "cfb:90cacdc25f25e1f13b13e031a7fee9b7:away",
@@ -3105,9 +3304,9 @@
         "honestFill": true,
         "polySlug": "cfb-col-bayl-2026-09-26",
         "detectedAt": "2026-09-26T17:11:29.087Z",
-        "outcome": null,
-        "settledAt": null,
-        "pnl": null
+        "outcome": "LOSS",
+        "settledAt": "2026-09-26T20:27:45.480Z",
+        "pnl": -100
       },
       {
         "id": "cfb:f6b6590d0b66bbb4fcbb391289794963:away",
@@ -3119,15 +3318,15 @@
         "side": "away",
         "team": "Wake Forest Demon Deacons",
         "vegasProb": 33,
-        "polyPrice": 19,
-        "edgeNet": 14,
+        "polyPrice": 25,
+        "edgeNet": 8,
         "printPrice": 19,
         "honestFill": true,
         "polySlug": "cfb-wake-lou-2026-09-26",
         "detectedAt": "2026-09-26T16:56:45.707Z",
-        "outcome": null,
-        "settledAt": null,
-        "pnl": null
+        "outcome": "WIN",
+        "settledAt": "2026-09-26T20:22:05.175Z",
+        "pnl": 300
       },
       {
         "id": "mlb:287e49b158c6a0b40e1ca1a98f81cee8:away",
@@ -3145,9 +3344,9 @@
         "honestFill": true,
         "polySlug": "mlb-nym-wsh-2026-09-26",
         "detectedAt": "2026-09-26T16:56:42.196Z",
-        "outcome": null,
-        "settledAt": null,
-        "pnl": null
+        "outcome": "WIN",
+        "settledAt": "2026-09-26T20:36:42.828Z",
+        "pnl": 185.71
       },
       {
         "id": "cfb:fb1e2c999364a411be347389aec1d827:home",
@@ -3165,9 +3364,9 @@
         "honestFill": true,
         "polySlug": "cfb-colst-utsa-2026-09-26",
         "detectedAt": "2026-09-26T16:38:18.347Z",
-        "outcome": null,
-        "settledAt": null,
-        "pnl": null
+        "outcome": "WIN",
+        "settledAt": "2026-09-26T20:22:05.438Z",
+        "pnl": 47.06
       },
       {
         "id": "cfb:69b1a0ff5fb2c67c6627b5c8cf8368cb:away",
@@ -3178,16 +3377,16 @@
         "commenceTime": "2026-09-26T16:10:39Z",
         "side": "away",
         "team": "Texas Longhorns",
-        "vegasProb": 71,
-        "polyPrice": 66,
-        "edgeNet": 5,
+        "vegasProb": 81,
+        "polyPrice": 70,
+        "edgeNet": 11,
         "printPrice": 66,
         "honestFill": true,
         "polySlug": "cfb-tx-tenn-2026-09-26",
         "detectedAt": "2026-09-26T16:17:59.347Z",
-        "outcome": null,
-        "settledAt": null,
-        "pnl": null
+        "outcome": "WIN",
+        "settledAt": "2026-09-26T20:27:45.747Z",
+        "pnl": 42.86
       },
       {
         "id": "cfb:a14ae60e9aac7b91d0acbdae745873b4:home",
@@ -3205,9 +3404,9 @@
         "honestFill": true,
         "polySlug": "cfb-ballst-kentst-2026-09-26",
         "detectedAt": "2026-09-26T16:17:59.322Z",
-        "outcome": null,
-        "settledAt": null,
-        "pnl": null
+        "outcome": "WIN",
+        "settledAt": "2026-09-26T20:07:15.278Z",
+        "pnl": 78.57
       },
       {
         "id": "cfb:fb1e2c999364a411be347389aec1d827:away",
@@ -3225,9 +3424,9 @@
         "honestFill": true,
         "polySlug": "cfb-colst-utsa-2026-09-26",
         "detectedAt": "2026-09-26T16:17:59.315Z",
-        "outcome": null,
-        "settledAt": null,
-        "pnl": null
+        "outcome": "LOSS",
+        "settledAt": "2026-09-26T20:22:05.456Z",
+        "pnl": -100
       },
       {
         "id": "cfb:e257aae5483bbfc89e2c570fc9304e1c:away",
@@ -3245,9 +3444,9 @@
         "honestFill": true,
         "polySlug": "cfb-sdst-toledo-2026-09-26",
         "detectedAt": "2026-09-26T16:17:58.988Z",
-        "outcome": null,
-        "settledAt": null,
-        "pnl": null
+        "outcome": "LOSS",
+        "settledAt": "2026-09-26T20:02:29.577Z",
+        "pnl": -100
       },
       {
         "id": "cfb:9d564a10d7bc7b546b2b0cf4ec3c589e:away",
@@ -3265,9 +3464,9 @@
         "honestFill": true,
         "polySlug": "cfb-vtech-boscol-2026-09-26",
         "detectedAt": "2026-09-26T16:17:58.981Z",
-        "outcome": null,
-        "settledAt": null,
-        "pnl": null
+        "outcome": "WIN",
+        "settledAt": "2026-09-26T20:02:29.914Z",
+        "pnl": 244.83
       },
       {
         "id": "cfb:11ea90adf014a268d12caa9978b05bd8:away",
@@ -3285,9 +3484,9 @@
         "honestFill": true,
         "polySlug": "cfb-unlv-akron-2026-09-26",
         "detectedAt": "2026-09-26T16:17:58.780Z",
-        "outcome": null,
-        "settledAt": null,
-        "pnl": null
+        "outcome": "WIN",
+        "settledAt": "2026-09-26T20:02:30.628Z",
+        "pnl": 38.89
       },
       {
         "id": "mlb:e47efe97f629cae0287ca6f3ea6d6794:away",
@@ -4713,150 +4912,6 @@
         "detectedAt": "2026-09-19T13:57:03.296Z",
         "outcome": "LOSS",
         "settledAt": "2026-09-20T01:55:16.228Z",
-        "pnl": -100
-      },
-      {
-        "id": "cfb:3fe3d77e009a7f205cce737523609a86:home",
-        "sport": "cfb",
-        "game": "North Carolina Tar Heels @ Clemson Tigers",
-        "homeTeam": "Clemson Tigers",
-        "awayTeam": "North Carolina Tar Heels",
-        "commenceTime": "2026-09-19T16:00:00Z",
-        "side": "home",
-        "team": "Clemson Tigers",
-        "vegasProb": 29,
-        "polyPrice": 22,
-        "edgeNet": 7,
-        "polySlug": "cfb-ncar-clmsn-2026-09-19",
-        "detectedAt": "2026-09-19T11:49:45.755Z",
-        "outcome": "WIN",
-        "settledAt": "2026-09-19T22:55:50.449Z",
-        "pnl": 354.55
-      },
-      {
-        "id": "cfb:2e9835b129f8b8055d4a24f736547363:home",
-        "sport": "cfb",
-        "game": "NC State Wolfpack @ Vanderbilt Commodores",
-        "homeTeam": "Vanderbilt Commodores",
-        "awayTeam": "NC State Wolfpack",
-        "commenceTime": "2026-09-19T16:45:00Z",
-        "side": "home",
-        "team": "Vanderbilt Commodores",
-        "vegasProb": 74,
-        "polyPrice": 60,
-        "edgeNet": 14,
-        "polySlug": "cfb-ncst-vand-2026-09-19",
-        "detectedAt": "2026-09-19T09:29:44.400Z",
-        "outcome": "WIN",
-        "settledAt": "2026-09-19T21:15:04.665Z",
-        "pnl": 66.67
-      },
-      {
-        "id": "cfb:da4cee8b35281f4528d3dd939d42814d:away",
-        "sport": "cfb",
-        "game": "Florida International Panthers @ Florida Atlantic Owls",
-        "homeTeam": "Florida Atlantic Owls",
-        "awayTeam": "Florida International Panthers",
-        "commenceTime": "2026-09-19T22:00:00Z",
-        "side": "away",
-        "team": "Florida International Panthers",
-        "vegasProb": 35,
-        "polyPrice": 26,
-        "edgeNet": 9,
-        "polySlug": "cfb-flint-flatl-2026-09-19",
-        "detectedAt": "2026-09-19T05:13:25.820Z",
-        "outcome": "LOSS",
-        "settledAt": "2026-09-20T02:04:24.953Z",
-        "pnl": -100
-      },
-      {
-        "id": "cfb:529a333381665c34d05b290d2c9eb5b9:home",
-        "sport": "cfb",
-        "game": "Coastal Carolina Chanticleers @ Delaware Blue Hens",
-        "homeTeam": "Delaware Blue Hens",
-        "awayTeam": "Coastal Carolina Chanticleers",
-        "commenceTime": "2026-09-19T15:30:00Z",
-        "side": "home",
-        "team": "Delaware Blue Hens",
-        "vegasProb": 58,
-        "polyPrice": 46,
-        "edgeNet": 12,
-        "polySlug": "cfb-coast-del-2026-09-19",
-        "detectedAt": "2026-09-19T04:59:10.069Z",
-        "outcome": "WIN",
-        "settledAt": "2026-09-19T19:34:28.355Z",
-        "pnl": 117.39
-      },
-      {
-        "id": "cfb:03297aa8a399c223aa1cc6aa923d9bc6:home",
-        "sport": "cfb",
-        "game": "Colorado Buffaloes @ Northwestern Wildcats",
-        "homeTeam": "Northwestern Wildcats",
-        "awayTeam": "Colorado Buffaloes",
-        "commenceTime": "2026-09-19T23:30:00Z",
-        "side": "home",
-        "team": "Northwestern Wildcats",
-        "vegasProb": 61,
-        "polyPrice": 51,
-        "edgeNet": 10,
-        "polySlug": "cfb-col-nw-2026-09-19",
-        "detectedAt": "2026-09-19T04:13:22.922Z",
-        "outcome": "WIN",
-        "settledAt": "2026-09-20T03:44:09.029Z",
-        "pnl": 96.08
-      },
-      {
-        "id": "cfb:03297aa8a399c223aa1cc6aa923d9bc6:away",
-        "sport": "cfb",
-        "game": "Colorado Buffaloes @ Northwestern Wildcats",
-        "homeTeam": "Northwestern Wildcats",
-        "awayTeam": "Colorado Buffaloes",
-        "commenceTime": "2026-09-19T23:30:00Z",
-        "side": "away",
-        "team": "Colorado Buffaloes",
-        "vegasProb": 10,
-        "polyPrice": 5,
-        "edgeNet": 5,
-        "polySlug": "cfb-col-nw-2026-09-19",
-        "detectedAt": "2026-09-19T04:13:22.922Z",
-        "outcome": "LOSS",
-        "settledAt": "2026-09-20T03:44:09.050Z",
-        "pnl": -100
-      },
-      {
-        "id": "cfb:b7cdc05f280bede1f19b996cc9b95753:away",
-        "sport": "cfb",
-        "game": "Virginia Tech Hokies @ Maryland Terrapins",
-        "homeTeam": "Maryland Terrapins",
-        "awayTeam": "Virginia Tech Hokies",
-        "commenceTime": "2026-09-19T23:30:00Z",
-        "side": "away",
-        "team": "Virginia Tech Hokies",
-        "vegasProb": 84,
-        "polyPrice": 76,
-        "edgeNet": 8,
-        "polySlug": "cfb-vtech-mary-2026-09-19",
-        "detectedAt": "2026-09-19T02:39:01.075Z",
-        "outcome": "WIN",
-        "settledAt": "2026-09-20T04:09:15.018Z",
-        "pnl": 31.58
-      },
-      {
-        "id": "cfb:2e9835b129f8b8055d4a24f736547363:away",
-        "sport": "cfb",
-        "game": "NC State Wolfpack @ Vanderbilt Commodores",
-        "homeTeam": "Vanderbilt Commodores",
-        "awayTeam": "NC State Wolfpack",
-        "commenceTime": "2026-09-19T16:45:00Z",
-        "side": "away",
-        "team": "NC State Wolfpack",
-        "vegasProb": 89,
-        "polyPrice": 84,
-        "edgeNet": 5,
-        "polySlug": "cfb-ncst-vand-2026-09-19",
-        "detectedAt": "2026-09-18T21:38:31.119Z",
-        "outcome": "LOSS",
-        "settledAt": "2026-09-19T21:15:04.682Z",
         "pnl": -100
       }
     ]
