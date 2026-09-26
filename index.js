@@ -6525,6 +6525,29 @@ export default {
         await env.SIGNALS_CACHE.put("cleanup_agent_gate_v1", "1");
       }
     } catch (e) {}
+    // One-shot: heal the Sep 24/25 midnight carry-over (the pre-fix
+    // saveDailyStats wrote Sep 24's closing stats into the Sep 25 key, so
+    // Sep 25 double-counts Sep 24's totals and self-labels as Sep 24).
+    // Subtract the carried numeric fields and restore the date.
+    try {
+      if (env.SIGNALS_CACHE && !(await env.SIGNALS_CACHE.get("heal_daily_carryover_v1"))) {
+        const k24 = "autotrader_daily_stats_2026-09-24";
+        const k25 = "autotrader_daily_stats_2026-09-25";
+        const d24 = await env.SIGNALS_CACHE.get(k24, { type: "json" });
+        const d25 = await env.SIGNALS_CACHE.get(k25, { type: "json" });
+        if (d24 && d25 && d25.date === "2026-09-24") {
+          for (const f of Object.keys(d25)) {
+            if (typeof d25[f] === "number" && typeof d24[f] === "number") {
+              const v = Math.round((d25[f] - d24[f]) * 100) / 100;
+              d25[f] = f === "realizedPnL" ? v : Math.max(0, v);  // pnl may be legitimately negative
+            }
+          }
+          d25.date = "2026-09-25";
+          await env.SIGNALS_CACHE.put(k25, JSON.stringify(d25), { expirationTtl: 90 * 24 * 60 * 60 });
+        }
+        await env.SIGNALS_CACHE.put("heal_daily_carryover_v1", "1");
+      }
+    } catch (e) {}
     const cronStatus = {
       startedAt: new Date().toISOString(),
       scan: null,
