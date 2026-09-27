@@ -15,7 +15,7 @@ import {
   getPnLSummary, getCategoryPerformance, getExecQueue, addToExecQueue,
   handleExecConfirm, manualClosePosition, emergencyStopAll,
   processSignals, getBotLearning, recalcPerformance, recordClosedTrade,
-  computeExplorationGraduation, computeGoLiveMilestone
+  computeExplorationGraduation, computeGoLiveMilestone, voidPhantomComplementExits
 } from "./src/autotrader.js";
 import {
   getFactorStats as atGetFactorStats, getAIRecommendation,
@@ -6548,6 +6548,14 @@ export default {
         await env.SIGNALS_CACHE.put("heal_daily_carryover_v1", "1");
       }
     } catch (e) {}
+    // One-shot: void the phantom complement-price exits (Sep 2026 audit)
+    // and rebuild daily stats / agent ledger / performance from the fix.
+    try {
+      if (env.SIGNALS_CACHE && !(await env.SIGNALS_CACHE.get("void_phantom_complement_v1"))) {
+        const r = await voidPhantomComplementExits(env);
+        await env.SIGNALS_CACHE.put("void_phantom_complement_v1", JSON.stringify({ at: new Date().toISOString(), ...r }));
+      }
+    } catch (e) { console.error("phantom void migration error:", e.message); }
     const cronStatus = {
       startedAt: new Date().toISOString(),
       scan: null,

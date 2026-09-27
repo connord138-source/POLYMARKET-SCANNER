@@ -159,7 +159,39 @@ function priceForPosition(liveData, position) {
     if (p0 && !p1) return yes;
     if (p1 && !p0) return 100 - yes;
   }
-  return norm(position.direction) === 'no' ? 100 - yes : yes;
+  // No confident side match: return null rather than guessing. The old
+  // fallback returned the FIRST outcome's price for any unmatched label —
+  // for a position holding the second outcome that is the complement, a
+  // phantom +100% under the entry-odds cap.
+  return null;
+}
+
+// Exit-side complement tripwire. An exit price almost exactly 100 minus the
+// entry, reached within minutes of entry, is the signature of pricing the
+// OTHER outcome (Sep 2026: 8 phantom take-profits, +$37, 4-13 min after
+// entry, entry+exit ~ 100). A genuine 20+ point move landing exactly on the
+// complement that fast is rare enough to defer a cycle for.
+function isComplementPhantom(entryPrice, exitPrice, holdMinutes, maxMinutes = 30) {
+  if (typeof entryPrice !== 'number' || typeof exitPrice !== 'number') return false;
+  if (!(holdMinutes >= 0) || holdMinutes > maxMinutes) return false;
+  return Math.abs(exitPrice - entryPrice) >= 20 && Math.abs(entryPrice + exitPrice - 100) <= 3;
+}
+
+// Mark-to-market price for an open position — shared by the exit loop and
+// the still-open filter so both always agree. Only real market prices
+// count: live CLOB/Gamma data resolved to the side we hold. The old
+// fallback to "the current signal's displayPrice" matched signals by slug
+// alone — a later whale on the OTHER side (Texas after our Tennessee entry)
+// priced our position at their fill, and it is the whale's average entry,
+// not a market price, in any case.
+function resolveExitPrice(position, liveData) {
+  if (liveData) {
+    const p = priceForPosition(liveData, position);
+    if (p !== null && typeof p === 'number' && !isNaN(p)) {
+      return { currentPrice: p, priceSource: liveData.source, hasLivePrice: true };
+    }
+  }
+  return { currentPrice: position.entryPrice, priceSource: 'stale', hasLivePrice: false };
 }
 
 /**
@@ -275,6 +307,40 @@ async function fetchLivePrices(env, positions) {
     } catch (e) {
       console.error('CLOB midpoint batch fetch error:', e.message);
     }
+
+    // The documented batch endpoint is POST /midpoints; per-token GET
+    // /midpoint is the last resort. The GET batch above has been returning
+    // nothing for many tokens, which silently pushed open positions onto
+    // the (now removed) signal-price fallback.
+    const missingTokens = allTokenIds.filter(id => !priceMap.has(tokenIdToSlug.get(id).slug));
+    if (missingTokens.length > 0) {
+      try {
+        const res = await fetch(`${CLOB_API}/midpoints`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(missingTokens.slice(0, 50).map(id => ({ token_id: id }))),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          for (const [tokenId, midStr] of Object.entries(data || {})) {
+            const mid = parseFloat(midStr);
+            const info = tokenIdToSlug.get(tokenId);
+            if (!info || isNaN(mid)) continue;
+            priceMap.set(info.slug, { price: Math.round(mid * 100), source: 'clob_midpoint', closed: false, outcomes: info.outcomes });
+          }
+        }
+      } catch (e) {}
+      const stillMissing = missingTokens.filter(id => !priceMap.has(tokenIdToSlug.get(id).slug)).slice(0, 15);
+      await Promise.allSettled(stillMissing.map(async (id) => {
+        const r = await fetch(`${CLOB_API}/midpoint?token_id=${id}`);
+        if (!r.ok) return;
+        const j = await r.json();
+        const mid = parseFloat(j && j.mid);
+        const info = tokenIdToSlug.get(id);
+        if (!info || isNaN(mid)) return;
+        priceMap.set(info.slug, { price: Math.round(mid * 100), source: 'clob_midpoint', closed: false, outcomes: info.outcomes });
+      }));
+    }
   }
 
   // Step 4: Any slug still without a price usually means the order book is
@@ -300,6 +366,16 @@ async function fetchLivePrices(env, positions) {
           closed: true,
           outcomes: fresh.outcomes
         });
+      } else if (!fresh.closed && gp && typeof gp[0] === 'number' && !isNaN(gp[0])) {
+        // Open market with no CLOB midpoint: Gamma's live outcome price —
+        // the same source the honest-fill entry uses, so entry and exit are
+        // priced consistently.
+        priceMap.set(slug, {
+          price: Math.round(gp[0] * 1000) / 10,
+          source: 'gamma_live',
+          closed: false,
+          outcomes: fresh.outcomes
+        });
       }
     }));
   }
@@ -308,6 +384,13 @@ async function fetchLivePrices(env, positions) {
   if (cacheUpdated) {
     await saveTokenCache(env, tokenCache);
   }
+  const sourceStats = { missing: 0 };
+  for (const t of tokenLookups) {
+    const hit = priceMap.get(t.slug);
+    if (!hit) { sourceStats.missing++; continue; }
+    sourceStats[hit.source] = (sourceStats[hit.source] || 0) + 1;
+  }
+  priceMap.sourceStats = sourceStats;
 
   return priceMap;
 }
@@ -1517,6 +1600,7 @@ export async function processSignals(env, signals) {
 
   // --- STEP 1: Fetch live prices for all open positions from Polymarket ---
   const livePriceMap = await fetchLivePrices(env, openPositions);
+  results.priceSources = livePriceMap.sourceStats || null;
 
   // Which positions' whales have already sold (mirror-exit signal).
   const whaleExitedSlugs = config.mirrorExits !== false
@@ -1556,24 +1640,12 @@ export async function processSignals(env, signals) {
       currentSignal = { ...(currentSignal || {}), whaleIsSelling: true };
     }
     const liveData = livePriceMap.get(position.marketSlug);
-    
-    let currentPrice;
-    let priceSource;
-    
-    if (liveData) {
-      // We have a real price from Polymarket CLOB or Gamma.
-      // liveData.price is the YES-outcome price; convert to the side we hold.
-      currentPrice = priceForPosition(liveData, position);
-      priceSource = liveData.source;
-    } else if (currentSignal?.displayPrice) {
-      currentPrice = currentSignal.displayPrice;
-      priceSource = 'signal_scan';
-    } else {
-      currentPrice = position.entryPrice;
-      priceSource = 'stale';
-    }
-    
-    const hasLivePrice = priceSource !== 'stale';
+
+    // Real market price for the side we hold, or 'stale' (see resolveExitPrice).
+    const px = resolveExitPrice(position, liveData);
+    const currentPrice = px.currentPrice;
+    const priceSource = px.priceSource;
+    const hasLivePrice = px.hasLivePrice;
     const holdHours = (Date.now() - new Date(position.openedAt).getTime()) / (1000 * 60 * 60);
 
     // Warn about suspicious prices (low liquidity markets returning extreme values)
@@ -1595,7 +1667,8 @@ export async function processSignals(env, signals) {
     }
 
     // RESOLVED MARKET CHECK: If Gamma says market is closed, force exit with real price
-    if (liveData?.closed) {
+    // (only when our side was actually priced — never settle at the stale entry)
+    if (liveData?.closed && hasLivePrice) {
       const pnl = calculatePnL(position, currentPrice);
       
       const closedTrade = {
@@ -1718,6 +1791,22 @@ export async function processSignals(env, signals) {
     // no-price safety valve) still applies to them.
     if (position.holdToResolution) continue;
 
+    // Complement tripwire: defer (don't exit, don't update the peak) when
+    // the price looks like the other outcome's. A real move persists and
+    // clears the 30-minute window; a pricing glitch doesn't get booked.
+    const heldMinutes = (Date.now() - new Date(position.openedAt).getTime()) / 60000;
+    if (isComplementPhantom(position.entryPrice, currentPrice, heldMinutes)) {
+      results.complementDeferred = (results.complementDeferred || 0) + 1;
+      await logDecision(env, {
+        type: 'HOLD',
+        market: position.marketTitle,
+        reason: `Exit deferred: ${currentPrice}¢ looks like the other outcome's price (entry ${position.entryPrice}¢, ${Math.round(heldMinutes)}m held)`,
+        pnl: null,
+        paperTrade: config.paperTradeMode,
+      });
+      continue;
+    }
+
     // Track peak gain for trailing protection on deferred take profits
     const currentPctChange = ((currentPrice - position.entryPrice) / position.entryPrice) * 100;
     if (!position.peakPctGain || currentPctChange > position.peakPctGain) {
@@ -1822,19 +1911,16 @@ export async function processSignals(env, signals) {
     const currentSignal = signals.find(s => s.marketSlug === p.marketSlug);
     const liveData = livePriceMap.get(p.marketSlug);
     const holdHours = (Date.now() - new Date(p.openedAt).getTime()) / (1000 * 60 * 60);
-    
-    let currentPrice;
-    let hasLivePrice = true;
-    
-    if (liveData) {
-      currentPrice = priceForPosition(liveData, p);
-      if (liveData.closed) return false; // Resolved market — already exited above
-    } else if (currentSignal?.displayPrice) {
-      currentPrice = currentSignal.displayPrice;
-    } else {
-      currentPrice = p.entryPrice;
-      hasLivePrice = false;
+
+    // Must mirror the exit loop exactly — a mismatch here drops a position
+    // without recording its close.
+    const { currentPrice, hasLivePrice } = resolveExitPrice(p, liveData);
+    if (liveData?.closed && hasLivePrice) return false; // Resolved — exited above
+    if (p.holdToResolution) {
+      // Hold-to-resolution positions only leave via the paths above.
+      return !(!hasLivePrice && config.maxHoldHours && holdHours > config.maxHoldHours + (config.staleVoidGraceHours ?? 48));
     }
+    if (isComplementPhantom(p.entryPrice, currentPrice, holdHours * 60)) return true; // deferred above
     
     // Stale fallback — must mirror the stale-void condition above (incl. grace)
     if (!hasLivePrice && config.maxHoldHours && holdHours > config.maxHoldHours + (config.staleVoidGraceHours ?? 48)) return false;
@@ -2656,6 +2742,62 @@ export async function getBotLearning(env) {
 // RECALCULATE PERFORMANCE from trade history
 // Use this to fix corrupted stats (e.g. after $0 trades were counted as losses)
 // ============================================================
+// One-shot repair: void closed trades carrying the complement-exit
+// signature (discretionary exit within 90 min, 20+ pt move, entry+exit ~
+// 100). Their "exit" priced the other outcome, so neither the win nor its
+// size is real — they become $0 voids (the true outcome of a position
+// closed on a phantom price is unknowable). Daily stats, the agent
+// cross-check ledger, and lifetime performance are rebuilt to match.
+async function voidPhantomComplementExits(env) {
+  const history = await env.SIGNALS_CACHE.get(AT_KEYS.HISTORY, { type: 'json' }) || [];
+  const DISCRETIONARY = new Set(['take_profit', 'trailing_stop', 'stop_loss']);
+  const voided = [];
+  for (const t of history) {
+    if (!t || t.voidReason || !DISCRETIONARY.has(t.exitType)) continue;
+    const held = (Date.parse(t.closedAt) - Date.parse(t.openedAt)) / 60000;
+    if (!isComplementPhantom(t.entryPrice, t.exitPrice, held, 90)) continue;
+    t.phantomPnl = t.pnl;
+    t.phantomOutcome = t.outcome;
+    t.pnl = 0;
+    t.pnlPercent = 0;
+    t.outcome = 'void';
+    t.voidReason = 'phantom_complement_exit';
+    voided.push(t);
+  }
+  if (voided.length === 0) return { voided: 0, pnlRemoved: 0 };
+  await env.SIGNALS_CACHE.put(AT_KEYS.HISTORY, JSON.stringify(history), { expirationTtl: 180 * 24 * 60 * 60 });
+
+  const byDay = {};
+  for (const t of voided) (byDay[t.closedAt.slice(0, 10)] = byDay[t.closedAt.slice(0, 10)] || []).push(t);
+  for (const [day, trades] of Object.entries(byDay)) {
+    const key = `${AT_KEYS.DAILY_STATS}_${day}`;
+    const s = await env.SIGNALS_CACHE.get(key, { type: 'json' });
+    if (!s) continue;
+    for (const t of trades) {
+      const p = t.phantomPnl || 0;
+      s.realizedPnL = Math.round(((s.realizedPnL || 0) - p) * 100) / 100;
+      s.totalReturned = Math.max(0, Math.round(((s.totalReturned || 0) - p) * 100) / 100);
+      if (p > 0) s.wins = Math.max(0, (s.wins || 0) - 1);
+      else if (p < 0) s.losses = Math.max(0, (s.losses || 0) - 1);
+    }
+    await env.SIGNALS_CACHE.put(key, JSON.stringify(s), { expirationTtl: 90 * 24 * 60 * 60 });
+  }
+
+  const gs = {};
+  for (const t of history) {
+    if (!t || !t.agentOpinion || (t.outcome !== 'win' && t.outcome !== 'loss')) continue;
+    const b = gs[t.agentOpinion] || (gs[t.agentOpinion] = { trades: 0, wins: 0, losses: 0, pnl: 0 });
+    b.trades++;
+    if (t.outcome === 'win') b.wins++; else b.losses++;
+    b.pnl = Math.round((b.pnl + (t.pnl || 0)) * 100) / 100;
+  }
+  await env.SIGNALS_CACHE.put('agent_gate_stats', JSON.stringify(gs));
+
+  await recalcPerformance(env);
+  const pnlRemoved = Math.round(voided.reduce((a, t) => a + (t.phantomPnl || 0), 0) * 100) / 100;
+  return { voided: voided.length, pnlRemoved };
+}
+
 async function recalcPerformance(env) {
   const history = await getTradeHistory(env, 500);
   
@@ -2998,6 +3140,9 @@ export {
   computeExplorationGraduation,
   computeGoLiveMilestone,
   evaluateSignal,
+  isComplementPhantom,
+  resolveExitPrice,
+  voidPhantomComplementExits,
   getDailyStats,
   getPnLSummary,
   recalcPerformance,
