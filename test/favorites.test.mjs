@@ -133,5 +133,49 @@ const histOf = (env) => JSON.parse(env.store.autotrader_history || "[]");
   check("H: ledger", L.settled === 2 && L.wins === 1 && L.pnl === -4.05 && L.open === 1 && L.roi === -40.5, JSON.stringify(L));
 }
 
+// I: one favorites position per EVENT (Oct 5: Bolsonaro-Yes + Lula-No opened together)
+function installMultiFetch(markets) {
+  globalThis.fetch = async (url) => {
+    const u = String(url);
+    const json = (body, ok = true) => ({ ok, status: ok ? 200 : 404, json: async () => body, text: async () => JSON.stringify(body) });
+    for (const [slug, m] of Object.entries(markets)) {
+      if (u.includes("gamma-api") && u.includes(encodeURIComponent(slug))) {
+        return json([{ slug, clobTokenIds: JSON.stringify([slug + "-y", slug + "-n"]), outcomes: '["Yes","No"]',
+          outcomePrices: JSON.stringify([String(m.yes), String(1 - m.yes)]), closed: false,
+          endDate: new Date(Date.now() + 5 * 3600e3).toISOString(), events: [{ slug: m.event }] }]);
+      }
+    }
+    if (u.includes("/midpoint")) return json({});
+    return json([]);
+  };
+}
+{
+  const A = "will-bolsonaro-win-x", B = "will-lula-win-x", C = "will-chiefs-win-x";
+  installMultiFetch({ [A]: { yes: 0.83, event: "brazil-2026" }, [B]: { yes: 0.165, event: "brazil-2026" }, [C]: { yes: 0.85, event: "nfl-kc" } });
+  const env = makeEnv();
+  await processSignals(env, [
+    favSignal({ marketSlug: A, marketTitle: "Will Bolsonaro win?", displayPrice: 83, avgEntryPrice: 83, entryPrice: 83, priceAtSignal: 83 }),
+    favSignal({ marketSlug: B, marketTitle: "Will Lula win?", direction: "No", directionRaw: "No", displayPrice: 83.5, avgEntryPrice: 83.5, entryPrice: 83.5, priceAtSignal: 83.5 }),
+    favSignal({ marketSlug: C, marketTitle: "Will the Chiefs win?", displayPrice: 85, avgEntryPrice: 85, entryPrice: 85, priceAtSignal: 85 }),
+  ]);
+  const ps = posOf(env);
+  check("I: same-event second favorite skipped", ps.length === 2 && ps.some(p => p.marketSlug === A) && !ps.some(p => p.marketSlug === B), JSON.stringify(ps.map(p => p.marketSlug)));
+  check("I: different event still opens", ps.some(p => p.marketSlug === C));
+  check("I: eventKey stored", ps.find(p => p.marketSlug === A)?.eventKey === "brazil-2026");
+}
+// J: legacy open favorite without eventKey gets backfilled and still blocks
+{
+  const A = "will-bolsonaro-win-x", B = "will-lula-win-x";
+  installMultiFetch({ [A]: { yes: 0.83, event: "brazil-2026" }, [B]: { yes: 0.165, event: "brazil-2026" } });
+  const legacy = { id: "old1", marketSlug: A, marketTitle: "Will Bolsonaro win?", direction: "Yes", directionRaw: "Yes",
+    entryPrice: 83, size: 5, shares: 5 / 0.83, openedAt: new Date(Date.now() - 3600e3).toISOString(),
+    paperTrade: true, experiment: "favorites", holdToResolution: true };
+  const env = makeEnv({ positions: [legacy] });
+  await processSignals(env, [favSignal({ marketSlug: B, marketTitle: "Will Lula win?", direction: "No", directionRaw: "No", displayPrice: 83.5, avgEntryPrice: 83.5, entryPrice: 83.5, priceAtSignal: 83.5 })]);
+  const ps = posOf(env);
+  check("J: legacy blocks same event", ps.length === 1 && ps[0].id === "old1", JSON.stringify(ps.map(p => p.marketSlug)));
+  check("J: legacy backfilled", ps[0].eventKey === "brazil-2026", ps[0].eventKey);
+}
+
 console.log(`${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

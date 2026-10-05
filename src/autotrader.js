@@ -96,6 +96,10 @@ async function lookupMarketTokens(slug) {
       closed: market.closed || false,
       resolved: market.closed || false,
       endDate: market.endDate || null,
+      // Markets in the same event ("Will Lula win" / "Will Bolsonaro win")
+      // share an event slug and, for multi-outcome events, a neg-risk group.
+      eventKey: (Array.isArray(market.events) && market.events[0] && market.events[0].slug)
+        || market.negRiskMarketID || null,
       outcomes: outcomes || ['Yes', 'No'],
       // Include Gamma's own prices as fallback
       gammaPrices: outcomePrices ? outcomePrices.map(p => parseFloat(p)) : null,
@@ -2260,6 +2264,32 @@ export async function processSignals(env, signals) {
       }
     }
 
+    // Favorites experiment: one position per EVENT. "Bolsonaro wins: Yes"
+    // and "Lula wins: No" are the same bet on two market slugs (Oct 5: both
+    // opened in one cycle) — stacking doubles the exposure and counts one
+    // outcome twice in the experiment's ledger. Open favorites missing an
+    // event key (entered before keys were stored) get one looked up here.
+    if (evaluation.isFavorite) {
+      const eventKey = entryGamma && entryGamma.eventKey;
+      let sameEvent = false;
+      if (eventKey) {
+        for (const p of stillOpen) {
+          if (p.experiment !== 'favorites') continue;
+          if (!p.eventKey) {
+            try { const g = await lookupMarketTokens(p.marketSlug); p.eventKey = (g && g.eventKey) || null; } catch (e) {}
+          }
+          if (p.eventKey === eventKey) { sameEvent = true; break; }
+        }
+      }
+      if (sameEvent) {
+        const why = 'Favorites: already holding a position on this event';
+        results.skipped++;
+        results.skipReasons[why] = (results.skipReasons[why] || 0) + 1;
+        continue;
+      }
+      evaluation.eventKey = eventKey || null;
+    }
+
     // Agent second opinion (advisory — never blocks the entry): if the
     // investigator has independently priced this market, record its view so
     // the settled ledger can show how agent-liked vs -disliked trades do.
@@ -2302,6 +2332,7 @@ export async function processSignals(env, signals) {
       isExploration: evaluation.isExploration || false,
       graduatedEntry: evaluation.isGraduatedFullSize || false,  // full-size probe: counts toward the go-live ledger
       experiment: evaluation.isFavorite ? 'favorites' : undefined,
+      eventKey: evaluation.isFavorite ? (evaluation.eventKey || null) : undefined,
       holdToResolution: evaluation.isFavorite ? true : undefined,
       // Investigator's independent view of this entry (advisory)
       agentProb: agentView ? agentView.agentProb : null,
