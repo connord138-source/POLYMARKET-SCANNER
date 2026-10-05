@@ -524,6 +524,18 @@ const DEFAULT_CONFIG = {
   // exploration entries graduate to FULL size. Still capped per day, still
   // flagged exploration (the ledger keeps measuring), and graduation
   // auto-revokes if the trailing record turns negative.
+  // FAVORITES EXPERIMENT (Oct 2026). The bot was benched for a week with
+  // its only allowed band (21-40c) at -7pt while 81-99c favorites read +8pt
+  // (92% WR on 62 settled). This lets the bot test that band directly: only
+  // while the band's own rolling edge is positive (auto-stops otherwise),
+  // small size, capped per day, held to resolution (the band's edge is
+  // measured at resolution; TP/SL on an 85c entry are meaningless). Its
+  // ledger is separate — it never feeds graduation or the go-live milestone.
+  favoritesExperiment: true,
+  favoritesMinPrice: 81,
+  favoritesMaxPrice: 90,      // above 90c a single loss erases 9+ wins
+  favoritesSize: 5,
+  favoritesMaxPerDay: 3,
   explorationGraduation: true,
   explorationGraduationMinSample: 30,
   explorationGraduationWindowDays: 30,
@@ -769,6 +781,27 @@ function computeGoLiveMilestone(history) {
     target, settled, wins, losses, pnl, staked,
     roi: staked > 0 ? Math.round((pnl / staked) * 1000) / 10 : null,
     met: settled >= target && pnl > 0,
+  };
+}
+
+// Favorites experiment ledger: settled experiment trades only (voids and
+// pushes excluded). Kept apart from graduation and the go-live milestone.
+function computeFavoritesExperiment(history, openPositions) {
+  let wins = 0, losses = 0, pnl = 0, staked = 0;
+  for (const t of history || []) {
+    if (!t || t.experiment !== 'favorites') continue;
+    if (t.outcome !== 'win' && t.outcome !== 'loss') continue;
+    if (t.outcome === 'win') wins++; else losses++;
+    pnl += (t.pnl || 0);
+    staked += (t.size || 0);
+  }
+  const settled = wins + losses;
+  pnl = Math.round(pnl * 100) / 100;
+  return {
+    settled, wins, losses, pnl, staked,
+    open: (openPositions || []).filter(p => p && p.experiment === 'favorites').length,
+    winRate: settled ? Math.round((wins / settled) * 100) : null,
+    roi: staked > 0 ? Math.round((pnl / staked) * 1000) / 10 : null,
   };
 }
 
@@ -1318,14 +1351,28 @@ function evaluateSignal(signal, config, dailyStats, openPositions, perf, explora
     categoryMinOdds = config.derivativeMinOdds ?? 20;
   }
 
-  if (effectivePrice < categoryMinOdds) {
-    return { shouldTrade: false, reason: `Entry price too low for ${oddsCategory} (${effectivePrice}% < ${categoryMinOdds}%)` };
-  }
-  if (effectivePrice > categoryMaxOdds) {
-    return { shouldTrade: false, reason: `Entry price too high for ${oddsCategory} (${effectivePrice}% > ${categoryMaxOdds}%)` };
+  // Favorites experiment: an 81-90c entry whose band currently shows a
+  // proven positive edge bypasses the normal price cap (see DEFAULT_CONFIG).
+  const isFavorite = config.favoritesExperiment === true &&
+    signal.edgeBand === '81-99' && signal.hasPositiveEdge === true && !isExploration &&
+    effectivePrice >= (config.favoritesMinPrice ?? 81) &&
+    effectivePrice <= (config.favoritesMaxPrice ?? 90);
+  if (isFavorite) {
+    const favCap = config.favoritesMaxPerDay ?? 3;
+    if ((dailyStats.favoritesOpened || 0) >= favCap) {
+      return { shouldTrade: false, reason: `Favorites experiment daily cap reached (${favCap})` };
+    }
+    reasons.push(`⭐ Favorites experiment: band 81-99 at +${signal.historicalEdgeNet}pt (${signal.historicalWinRate}% WR), hold to resolution`);
+  } else {
+    if (effectivePrice < categoryMinOdds) {
+      return { shouldTrade: false, reason: `Entry price too low for ${oddsCategory} (${effectivePrice}% < ${categoryMinOdds}%)` };
+    }
+    if (effectivePrice > categoryMaxOdds) {
+      return { shouldTrade: false, reason: `Entry price too high for ${oddsCategory} (${effectivePrice}% > ${categoryMaxOdds}%)` };
+    }
   }
 
-  if (isHighConviction && effectivePrice > (config.highConvictionMaxOdds ?? 60)) {
+  if (isHighConviction && !isFavorite && effectivePrice > (config.highConvictionMaxOdds ?? 60)) {
     return { shouldTrade: false, reason: `High conviction odds too high (${effectivePrice}% > ${config.highConvictionMaxOdds ?? 60}% cap)` };
   }
 
@@ -1369,6 +1416,11 @@ function evaluateSignal(signal, config, dailyStats, openPositions, perf, explora
     }
   }
 
+  if (isFavorite) {
+    positionSize = config.favoritesSize ?? 5;
+    reasons.push(`Favorites size: $${positionSize}`);
+  }
+
   positionSize = Math.min(positionSize, config.maxPositionSize || 30);
 
   if (positionSize < (config.minPositionSize || 2)) {
@@ -1390,6 +1442,7 @@ function evaluateSignal(signal, config, dailyStats, openPositions, perf, explora
     isHighConviction,
     isExploration,
     isGraduatedFullSize,
+    isFavorite,
     reasons,
     aiConfidence: null,
     aiComponents: null,
@@ -2120,7 +2173,8 @@ export async function processSignals(env, signals) {
     }
 
     // AI Learning-based position size adjustment
-    if (evaluation.aiConfidence && config.useLearningData !== false) {
+    // Experiment entries keep a flat size so their ledger stays comparable.
+    if (evaluation.aiConfidence && config.useLearningData !== false && !evaluation.isFavorite) {
       const originalSize = evaluation.positionSize;
       if (evaluation.aiConfidence >= (config.learningBoostThreshold ?? 65)) {
         evaluation.positionSize = Math.min(
@@ -2178,6 +2232,9 @@ export async function processSignals(env, signals) {
         let repriceSkip = null;
         if (liveP <= 3 || liveP >= 97) {
           repriceSkip = `Market effectively decided (live ${Math.round(liveP)}%)`;
+        } else if (evaluation.isFavorite &&
+                   (liveP < (config.favoritesMinPrice ?? 81) - 1 || liveP > (config.favoritesMaxPrice ?? 90) + 2)) {
+          repriceSkip = `Favorite out of range at live price (${Math.round(liveP)}¢)`;
         } else if (driftUp > (config.maxEntryCentsSlippage ?? 5)) {
           repriceSkip = `Live price ran +${Math.round(driftUp)}¢ past the signal (stale whale fill)`;
         }
@@ -2244,6 +2301,8 @@ export async function processSignals(env, signals) {
       isHighConviction: evaluation.isHighConviction || false,
       isExploration: evaluation.isExploration || false,
       graduatedEntry: evaluation.isGraduatedFullSize || false,  // full-size probe: counts toward the go-live ledger
+      experiment: evaluation.isFavorite ? 'favorites' : undefined,
+      holdToResolution: evaluation.isFavorite ? true : undefined,
       // Investigator's independent view of this entry (advisory)
       agentProb: agentView ? agentView.agentProb : null,
       agentEdgePts: agentView ? agentView.agentEdgePts : null,
@@ -2261,6 +2320,9 @@ export async function processSignals(env, signals) {
     dailyStats.totalSpent += evaluation.positionSize;
     if (evaluation.isExploration) {
       dailyStats.explorationTradesOpened = (dailyStats.explorationTradesOpened || 0) + 1;
+    }
+    if (evaluation.isFavorite) {
+      dailyStats.favoritesOpened = (dailyStats.favoritesOpened || 0) + 1;
     }
 
     if (config.paperTradeMode) {
@@ -3138,6 +3200,7 @@ export {
   addToExecQueue,
   calculatePositionSize,
   computeExplorationGraduation,
+  computeFavoritesExperiment,
   computeGoLiveMilestone,
   evaluateSignal,
   isComplementPhantom,
