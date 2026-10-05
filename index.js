@@ -15,7 +15,8 @@ import {
   getPnLSummary, getCategoryPerformance, getExecQueue, addToExecQueue,
   handleExecConfirm, manualClosePosition, emergencyStopAll,
   processSignals, getBotLearning, recalcPerformance, recordClosedTrade,
-  computeExplorationGraduation, computeGoLiveMilestone, voidPhantomComplementExits
+  computeExplorationGraduation, computeGoLiveMilestone, voidPhantomComplementExits,
+  computeFavoritesExperiment
 } from "./src/autotrader.js";
 import {
   getFactorStats as atGetFactorStats, getAIRecommendation,
@@ -4709,7 +4710,8 @@ export default {
           perf.explorationGraduation = computeExplorationGraduation(histForGrad, cfgForGrad);
           // Go-live milestone: full-size settled record real money waits on.
           perf.goLiveMilestone = computeGoLiveMilestone(histForGrad);
-        } catch (e) { perf.explorationGraduation = null; perf.goLiveMilestone = null; }
+          perf.favoritesExperiment = computeFavoritesExperiment(histForGrad, await getOpenPositions(env));
+        } catch (e) { perf.explorationGraduation = null; perf.goLiveMilestone = null; perf.favoritesExperiment = null; }
         return atJson(perf);
       }
 
