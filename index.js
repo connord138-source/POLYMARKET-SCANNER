@@ -15,7 +15,7 @@ import {
   getPnLSummary, getCategoryPerformance, getExecQueue, addToExecQueue,
   handleExecConfirm, manualClosePosition, emergencyStopAll,
   processSignals, getBotLearning, recalcPerformance, recordClosedTrade,
-  computeExplorationGraduation, computeGoLiveMilestone, voidPhantomComplementExits,
+  computeExplorationGraduation, computeGoLiveMilestone, voidPhantomComplementExits, dedupeSettledHistory,
   computeFavoritesExperiment
 } from "./src/autotrader.js";
 import {
@@ -6558,6 +6558,14 @@ export default {
         await env.SIGNALS_CACHE.put("void_phantom_complement_v1", JSON.stringify({ at: new Date().toISOString(), ...r }));
       }
     } catch (e) { console.error("phantom void migration error:", e.message); }
+    // One-shot: drop repeat settlements of the same position (Oct 6 2026:
+    // a resolved favorite re-settled every cycle until Gamma closed it).
+    try {
+      if (env.SIGNALS_CACHE && !(await env.SIGNALS_CACHE.get("dedupe_settlements_v1"))) {
+        const r = await dedupeSettledHistory(env);
+        await env.SIGNALS_CACHE.put("dedupe_settlements_v1", JSON.stringify({ at: new Date().toISOString(), ...r }));
+      }
+    } catch (e) { console.error("settlement dedupe migration error:", e.message); }
     const cronStatus = {
       startedAt: new Date().toISOString(),
       scan: null,

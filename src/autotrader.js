@@ -1685,6 +1685,11 @@ export async function processSignals(env, signals) {
       }
     }
   }
+  // Positions closed this cycle. stillOpen is built from this set instead of
+  // re-deriving the exit decision: a re-check that missed one close path kept
+  // a settled position open and settled it again every cycle (Oct 6: one
+  // Falcons favorite booked 13x before Gamma marked the market closed).
+  const closedThisCycle = new Set();
   for (const position of openPositions) {
     results.exitChecks++;
     
@@ -1740,6 +1745,7 @@ export async function processSignals(env, signals) {
         outcome: pnl.amount > 0 ? 'win' : pnl.amount < 0 ? 'loss' : 'push',
       };
       
+      closedThisCycle.add(position);
       await addToHistory(env, closedTrade);
       await updatePerformance(env, closedTrade);
       
@@ -1785,6 +1791,7 @@ export async function processSignals(env, signals) {
         pnlPercent: Math.round(pnlPercent * 100) / 100,
         outcome: isWin ? 'win' : 'loss',
       };
+      closedThisCycle.add(position);
       await addToHistory(env, closedTrade);
       await updatePerformance(env, closedTrade);
       dailyStats.tradesClosed = (dailyStats.tradesClosed || 0) + 1;
@@ -1823,6 +1830,7 @@ export async function processSignals(env, signals) {
         outcome: 'stale',
       };
       
+      closedThisCycle.add(position);
       await addToHistory(env, closedTrade);
       await updatePerformance(env, closedTrade);
       
@@ -1941,6 +1949,7 @@ export async function processSignals(env, signals) {
         outcome: pnl.amount > 0 ? 'win' : pnl.amount < 0 ? 'loss' : 'push',
       };
       
+      closedThisCycle.add(position);
       await addToHistory(env, closedTrade);
       await updatePerformance(env, closedTrade);
       
@@ -1962,28 +1971,9 @@ export async function processSignals(env, signals) {
     }
   }
   
-  // Remove exited positions from open list (keep pendingExit positions until executor confirms)
-  const stillOpen = openPositions.filter(p => {
-    if (p.pendingExit) return true; // Keep — waiting for executor to confirm
-    const currentSignal = signals.find(s => s.marketSlug === p.marketSlug);
-    const liveData = livePriceMap.get(p.marketSlug);
-    const holdHours = (Date.now() - new Date(p.openedAt).getTime()) / (1000 * 60 * 60);
-
-    // Must mirror the exit loop exactly — a mismatch here drops a position
-    // without recording its close.
-    const { currentPrice, hasLivePrice } = resolveExitPrice(p, liveData);
-    if (liveData?.closed && hasLivePrice) return false; // Resolved — exited above
-    if (p.holdToResolution) {
-      // Hold-to-resolution positions only leave via the paths above.
-      return !(!hasLivePrice && config.maxHoldHours && holdHours > config.maxHoldHours + (config.staleVoidGraceHours ?? 48));
-    }
-    if (isComplementPhantom(p.entryPrice, currentPrice, holdHours * 60)) return true; // deferred above
-    
-    // Stale fallback — must mirror the stale-void condition above (incl. grace)
-    if (!hasLivePrice && config.maxHoldHours && holdHours > config.maxHoldHours + (config.staleVoidGraceHours ?? 48)) return false;
-    
-    return !shouldExitPosition(p, currentPrice, config, currentSignal, hasLivePrice).shouldExit;
-  });
+  // Remove exited positions from open list. pendingExit positions waiting on
+  // the executor were never added to closedThisCycle, so they stay.
+  const stillOpen = openPositions.filter(p => !closedThisCycle.has(p));
 
   // Save updated positions (peak gain tracking updates)
   await savePositions(env, stillOpen);
@@ -2876,6 +2866,13 @@ async function voidPhantomComplementExits(env) {
     await env.SIGNALS_CACHE.put(key, JSON.stringify(s), { expirationTtl: 90 * 24 * 60 * 60 });
   }
 
+  await rebuildAgentGateStats(env, history);
+  await recalcPerformance(env);
+  const pnlRemoved = Math.round(voided.reduce((a, t) => a + (t.phantomPnl || 0), 0) * 100) / 100;
+  return { voided: voided.length, pnlRemoved };
+}
+
+async function rebuildAgentGateStats(env, history) {
   const gs = {};
   for (const t of history) {
     if (!t || !t.agentOpinion || (t.outcome !== 'win' && t.outcome !== 'loss')) continue;
@@ -2885,10 +2882,65 @@ async function voidPhantomComplementExits(env) {
     b.pnl = Math.round((b.pnl + (t.pnl || 0)) * 100) / 100;
   }
   await env.SIGNALS_CACHE.put('agent_gate_stats', JSON.stringify(gs));
+}
 
+// One-shot repair for the still-open-filter bug (fixed alongside): a position
+// settled on a >= 98 / <= 2 price while Gamma still had the market open was
+// kept open and settled again every cycle. Keeps each position's first
+// settlement, drops the repeats, and backs them out of every running tally
+// updatePerformance fed (daily stats, odds buckets, agent ledger, perf).
+async function dedupeSettledHistory(env) {
+  const history = await env.SIGNALS_CACHE.get(AT_KEYS.HISTORY, { type: 'json' }) || [];
+  const seen = new Set();
+  const kept = [];
+  const removed = [];
+  for (const t of history) {
+    const key = t && (t.id || `${t.marketSlug}|${t.openedAt}|${t.direction}`);
+    if (t && seen.has(key)) { removed.push(t); continue; }
+    if (t) seen.add(key);
+    kept.push(t);
+  }
+  if (removed.length === 0) return { removed: 0, pnlRemoved: 0 };
+  await env.SIGNALS_CACHE.put(AT_KEYS.HISTORY, JSON.stringify(kept), { expirationTtl: 180 * 24 * 60 * 60 });
+
+  const r2 = (x) => Math.round(x * 100) / 100;
+  const byDay = {};
+  for (const t of removed) if (t.closedAt) (byDay[t.closedAt.slice(0, 10)] = byDay[t.closedAt.slice(0, 10)] || []).push(t);
+  for (const [day, trades] of Object.entries(byDay)) {
+    const key = `${AT_KEYS.DAILY_STATS}_${day}`;
+    const s = await env.SIGNALS_CACHE.get(key, { type: 'json' });
+    if (!s) continue;
+    for (const t of trades) {
+      const p = t.pnl || 0;
+      s.tradesClosed = Math.max(0, (s.tradesClosed || 0) - 1);
+      s.realizedPnL = r2((s.realizedPnL || 0) - p);
+      s.totalReturned = Math.max(0, r2((s.totalReturned || 0) - (t.size || 0) - p));
+      if (p > 0) s.wins = Math.max(0, (s.wins || 0) - 1);
+      else if (p < 0) s.losses = Math.max(0, (s.losses || 0) - 1);
+    }
+    await env.SIGNALS_CACHE.put(key, JSON.stringify(s), { expirationTtl: 90 * 24 * 60 * 60 });
+  }
+
+  try {
+    const raw = await env.SIGNALS_CACHE.get('autotrader_odds_performance');
+    if (raw) {
+      const oddsPerf = JSON.parse(raw);
+      for (const t of removed) {
+        const e = t.entryPrice ?? 50;
+        const b = oddsPerf[e <= 30 ? '20-30%' : e <= 45 ? '30-45%' : e <= 60 ? '45-60%' : e <= 75 ? '60-75%' : '75%+'];
+        if (!b) continue;
+        b.trades = Math.max(0, b.trades - 1);
+        if (t.pnl > 0) b.wins = Math.max(0, b.wins - 1);
+        else if (t.pnl < 0) b.losses = Math.max(0, b.losses - 1);
+        b.totalPnl = r2(b.totalPnl - (t.pnl || 0));
+      }
+      await env.SIGNALS_CACHE.put('autotrader_odds_performance', JSON.stringify(oddsPerf));
+    }
+  } catch (e) {}
+
+  await rebuildAgentGateStats(env, kept);
   await recalcPerformance(env);
-  const pnlRemoved = Math.round(voided.reduce((a, t) => a + (t.phantomPnl || 0), 0) * 100) / 100;
-  return { voided: voided.length, pnlRemoved };
+  return { removed: removed.length, pnlRemoved: r2(removed.reduce((a, t) => a + (t.pnl || 0), 0)) };
 }
 
 async function recalcPerformance(env) {
@@ -3237,6 +3289,7 @@ export {
   isComplementPhantom,
   resolveExitPrice,
   voidPhantomComplementExits,
+  dedupeSettledHistory,
   getDailyStats,
   getPnLSummary,
   recalcPerformance,
