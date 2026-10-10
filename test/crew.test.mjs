@@ -195,6 +195,11 @@ const deps = (signals = []) => ({
   const chat = J(env, CREW_KEYS.CHAT);
   check("hunt: report posted to chat", /CFB sweep: 2 pregame games/.test(chat[chat.length - 1].text), chat[chat.length - 1].text);
   check("hunt: throttled on the next cron", (await runCrewHunt(env, deps(), NOW + 5 * 60e3)).skipped === "throttled");
+  const chatN = J(env, CREW_KEYS.CHAT).length;
+  await runCrewHunt(env, deps(), NOW + 15 * 60e3);
+  check("hunt: quiet sweep within the hour posts nothing", J(env, CREW_KEYS.CHAT).length === chatN);
+  await runCrewHunt(env, deps(), NOW + 61 * 60e3);
+  check("hunt: hourly report keeps the chat fresh", J(env, CREW_KEYS.CHAT).length === chatN + 1, J(env, CREW_KEYS.CHAT).length - chatN);
 
   // entry through the real auto-trader
   const res = await processSignals(env, []);
