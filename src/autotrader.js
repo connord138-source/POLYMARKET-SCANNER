@@ -15,6 +15,10 @@
 
 import { calculateConfidence, getFactorStats, hasStrongCombo } from './at-learning.js';
 import { findGammaMarket, parseGammaArray } from './gamma.js';
+import {
+  conveneCouncil, llmTiebreak, getCouncilStats, recordCouncilSession,
+  compactSession, recordCouncilOutcome, applyOutcomeToStats,
+} from './council.js';
 
 const GAMMA_API = 'https://gamma-api.polymarket.com';
 const CLOB_API = 'https://clob.polymarket.com';
@@ -614,6 +618,16 @@ const DEFAULT_CONFIG = {
   learningPenaltyMultiplier: 0.6, // Size multiplier when confidence is low
   minFactorWinRate: 40,           // Block entry if signal's market type factor WR is below this
   useFactorCombos: true,          // Check factor combo data for edge validation
+
+  // Council (src/council.js): six rule-based personas vote on every entry
+  // that clears the gates; the chair returns APPROVE / TRIM / VETO.
+  councilEnabled: true,
+  councilMode: 'shadow',          // 'shadow' record only | 'advisory' apply TRIM | 'gate' enforce VETO+TRIM
+  councilCloseMargin: 0.2,        // |weighted margin| below this = split vote (TRIM / tiebreak)
+  councilTrimMultiplier: 0.5,     // size multiplier on TRIM when mode applies it
+  councilLlmTiebreak: false,      // one Claude call on split votes (needs credits)
+  councilLlmDailyCap: 10,
+  councilLlmModel: 'claude-haiku-4-5',
 };
 
 // ============================================================
@@ -1035,6 +1049,11 @@ async function updatePerformance(env, closedTrade) {
   // Agent counterfactual ledger: settle how trades the investigator agreed /
   // disagreed with actually performed. This is the evidence base for ever
   // promoting the agent's opinion from advisory into a real entry gate.
+  // Council ledger: credit each persona's YES/NO call and the chair's verdict.
+  if (closedTrade.council && !isBreakeven) {
+    await recordCouncilOutcome(env, closedTrade, pnl);
+  }
+
   if (closedTrade.agentOpinion && !isBreakeven) {
     try {
       const gsRaw = await env.SIGNALS_CACHE.get('agent_gate_stats');
@@ -1993,6 +2012,7 @@ export async function processSignals(env, signals) {
     }
   }
   
+  let councilStats = null;   // loaded lazily, once per cycle
   for (const signal of signals) {
     results.evaluated++;
     
@@ -2298,9 +2318,56 @@ export async function processSignals(env, signals) {
       );
     }
 
+    // --- COUNCIL ---
+    // Personas vote on the entry the gates passed. In 'shadow' mode (default)
+    // this only records; see src/council.js for modes and promotion rules.
+    let councilRec = null;
+    if (config.councilEnabled !== false) {
+      try {
+        if (!councilStats) councilStats = await getCouncilStats(env);
+        const session = conveneCouncil({
+          signal, evaluation, config, dailyStats, openPositions: stillOpen, perf, agentView,
+          category: categorizeMarket(signal.marketTitle || signal.title || ''),
+        }, councilStats);
+        if (session.close) session.tiebreak = await llmTiebreak(env, config, signal, session);
+        const mode = config.councilMode || 'shadow';
+        const finalVerdict = session.tiebreak ? session.tiebreak.verdict : session.verdict;
+        let applied = 'recorded';
+        if (mode === 'gate' && finalVerdict === 'VETO') {
+          applied = 'vetoed';
+          await recordCouncilSession(env, signal, session, mode, applied);
+          const why = `Council VETO: ${session.reason}`;
+          results.skipped++;
+          results.skipReasons[why] = (results.skipReasons[why] || 0) + 1;
+          await logDecision(env, {
+            type: 'SKIP',
+            market: signal.marketTitle || signal.title,
+            reason: why,
+            marketCategory: categorizeMarket(signal.marketTitle || signal.title || ''),
+          });
+          continue;
+        }
+        if ((mode === 'gate' || mode === 'advisory') && finalVerdict === 'TRIM' && !evaluation.isFavorite) {
+          const before = evaluation.positionSize;
+          evaluation.positionSize = Math.max(config.minPositionSize || 2,
+            Math.round(before * (config.councilTrimMultiplier ?? 0.5)));
+          if (evaluation.positionSize !== before) {
+            applied = 'trimmed';
+            evaluation.reasons.push(`Council TRIM: $${before} → $${evaluation.positionSize}`);
+          }
+        }
+        evaluation.reasons.push(`Council ${finalVerdict} ${session.yes}-${session.no} (${mode})`);
+        await recordCouncilSession(env, signal, session, mode, applied);
+        councilRec = compactSession(session, mode);
+      } catch (e) {
+        console.log(`Council error for ${signal.marketTitle}: ${e.message}`);
+      }
+    }
+
     // --- CREATE POSITION ---
     const position = {
       id: `at_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      council: councilRec || undefined,
       marketSlug: signal.marketSlug,
       marketTitle: signal.marketTitle,
       marketType: signal.marketType,
@@ -2888,6 +2955,15 @@ async function rebuildAgentGateStats(env, history) {
     b.pnl = Math.round((b.pnl + (t.pnl || 0)) * 100) / 100;
   }
   await env.SIGNALS_CACHE.put('agent_gate_stats', JSON.stringify(gs));
+
+  // Council ledger is rebuilt from the same deduped history so a recalc
+  // never leaves it double-counting.
+  let cs = { agents: {}, chair: {} };
+  for (const t of history) {
+    if (!t || !t.council || (t.outcome !== 'win' && t.outcome !== 'loss')) continue;
+    cs = applyOutcomeToStats(cs, t.council, t.outcome === 'win' ? Math.max(t.pnl || 0, 0.01) : Math.min(t.pnl || 0, -0.01));
+  }
+  await env.SIGNALS_CACHE.put('council_agent_stats', JSON.stringify(cs));
 }
 
 // One-shot repair for the still-open-filter bug (fixed alongside): a position
