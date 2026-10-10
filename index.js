@@ -21,6 +21,7 @@ import {
 import { runForge, maybeRunForge, getForgeReport } from "./src/forge.js";
 import { logSignalWallets, backfillWalletLedger, topWallets } from "./src/wallet-ledger.js";
 import { trackSpeed, updateSpeed, speedReport } from "./src/speed.js";
+import { buildAgentHub } from "./src/agent-hub.js";
 import {
   getCouncilStats, getCouncilFeed, leaderboard as councilLeaderboard
 } from "./src/council.js";
@@ -4753,6 +4754,13 @@ export default {
         let overrides = {};
         try { overrides = await request.json(); } catch (e) {}
         return atJson(await runForge(env, overrides || {}));
+      }
+
+      // Agent Hub: one payload for the frontend's Hub / Council / Orbit views.
+      if (path === "/agents/hub" && request.method === "GET") {
+        return atJson(await buildAgentHub(env, {
+          getBotPerformance, getOpenPositions, getTradeLog, getTradeHistory, getDailyStats, getAutotraderConfig,
+        }));
       }
 
       // Speed telemetry: what the cron lag costs vs post-detection drift.
