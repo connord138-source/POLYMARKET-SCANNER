@@ -1,27 +1,27 @@
 {
-  "fetchedAt": "2026-10-10T20:13:17Z",
+  "fetchedAt": "2026-10-10T20:27:21Z",
   "health": {
     "status": "ok",
-    "timestamp": "2026-10-10T20:13:19.074Z",
+    "timestamp": "2026-10-10T20:27:22.368Z",
     "version": "21.1.0 - Modularize: extract src/odds.js + src/gamma.js from index.js",
     "cache": {
-      "signalCount": 14115,
-      "oldestSignal": "2026-10-03T20:11:16.000Z",
-      "newestSignal": "2026-10-10T20:08:31.000Z"
+      "signalCount": 14120,
+      "oldestSignal": "2026-10-03T20:22:22.000Z",
+      "newestSignal": "2026-10-10T20:18:28.000Z"
     }
   },
   "cronStatus": {
     "success": true,
     "lastRun": {
-      "startedAt": "2026-10-10T20:05:46.477Z",
+      "startedAt": "2026-10-10T20:20:53.608Z",
       "scan": {
-        "signals": 694,
+        "signals": 713,
         "success": true
       },
       "settlement": {
         "processed": 1,
-        "wins": 1,
-        "losses": 0,
+        "wins": 0,
+        "losses": 1,
         "errors": 0
       },
       "investigations": {
@@ -50,33 +50,33 @@
         "totalOptimized": 4,
         "optimizations": [
           {
-            "factor": "lastMinute6h",
-            "winRate": 56,
-            "samples": 2026,
-            "oldWeight": 1.34,
-            "newWeight": 1.26,
-            "change": -0.08
-          },
-          {
-            "factor": "whaleSize25k",
-            "winRate": 55,
-            "samples": 1111,
-            "oldWeight": 1.3250000000000002,
-            "newWeight": 1.25,
-            "change": -0.08
-          },
-          {
             "factor": "concentrated",
             "winRate": 54,
-            "samples": 3028,
+            "samples": 3029,
             "oldWeight": 1.23,
             "newWeight": 1.18,
             "change": -0.05
           },
           {
+            "factor": "whaleSize15k",
+            "winRate": 56,
+            "samples": 2043,
+            "oldWeight": 1.26,
+            "newWeight": 1.2,
+            "change": -0.06
+          },
+          {
+            "factor": "strongWallet",
+            "winRate": 58,
+            "samples": 2813,
+            "oldWeight": 1.3699999999999999,
+            "newWeight": 1.29,
+            "change": -0.08
+          },
+          {
             "factor": "sportsMarket",
             "winRate": 54,
-            "samples": 2635,
+            "samples": 2637,
             "oldWeight": 1.23,
             "newWeight": 1.18,
             "change": -0.05
@@ -87,7 +87,7 @@
       "edgeScan": {
         "skipped": "throttled (credit saver)",
         "remaining": 490,
-        "nextInMin": 46
+        "nextInMin": 31
       },
       "crewHunt": {
         "priced": 16,
@@ -101,8 +101,8 @@
         },
         "perSport": {
           "cfb": {
-            "markets": 27,
-            "oddsGames": 41,
+            "markets": 25,
+            "oddsGames": 39,
             "dkGames": 0,
             "matched": 16,
             "dkMatched": 0,
@@ -132,13 +132,13 @@
         "settled": 0
       },
       "invSettle": {
-        "checked": 0,
+        "checked": 1,
         "scored": 0
       },
       "signalBackfill": {
         "checked": 25,
         "updated": 0,
-        "expired": 0
+        "expired": 1
       },
       "walletLedger": {
         "logged": 0,
@@ -147,22 +147,24 @@
         "phase": "B"
       },
       "autotrader": {
-        "evaluated": 694,
+        "evaluated": 713,
         "tradesOpened": 0,
         "tradesPaperTraded": 0,
         "tradesQueued": 0,
-        "skipped": 694,
+        "skipped": 713,
         "skipReasons": {
+          "Entry price too high for sports_binary (78% > 40%)": 1,
           "Entry price too high for other (51% > 40%)": 2,
           "Entry price too high for other (52% > 40%)": 3,
           "Entry price too high for sports_binary (74% > 40%)": 3,
           "Entry price too high for sports_binary (71% > 40%)": 2,
           "Entry price too high for sports_binary (76% > 40%)": 3,
-          "No winning wallet on signal": 474,
+          "No winning wallet on signal": 487,
           "Entry price too high for sports_binary (63% > 40%)": 2,
           "Entry price too high for sports_binary (68% > 40%)": 2,
           "Entry price too high for sports_binary (73% > 40%)": 3,
           "Entry price too high for sports_binary (72% > 40%)": 3,
+          "AI confidence too low: 26% (min 35%, time:26%)": 1,
           "Entry price too high for sports_binary (44% > 40%)": 4,
           "Entry price too high for sports_binary (77% > 40%)": 4,
           "Entry price too high for sports_binary (59% > 40%)": 7,
@@ -173,14 +175,14 @@
           "Duplicate market (already traded)": 2,
           "Market already closed/resolved on Gamma": 5,
           "Entry price too high for sports_binary (61% > 40%)": 6,
-          "No proven edge for entry band 21-40 (-6pt)": 77,
+          "No proven edge for entry band 21-40 (-6pt)": 78,
           "Entry price too high for other (49% > 40%)": 6,
           "Entry price too high for other (50% > 40%)": 6,
           "Entry price too high for sports_binary (58% > 40%)": 2,
           "Entry price too high for sports_binary (45% > 40%)": 2,
           "Entry price too high for sports_binary (67% > 40%)": 2,
+          "Entry price too high for sports_binary (48% > 40%)": 3,
           "Entry price too high for sports_binary (69% > 40%)": 3,
-          "Entry price too high for sports_binary (48% > 40%)": 2,
           "Entry price too high for sports_binary (56% > 40%)": 1,
           "Entry price too high for sports_binary (60% > 40%)": 1,
           "Event too far out (21d > 7d horizon)": 4,
@@ -192,6 +194,7 @@
           "Event too far out (83d > 7d horizon)": 1,
           "Entry price too high for other (53% > 40%)": 2,
           "Event too far out (813d > 7d horizon)": 1,
+          "Entry price too high for other (54% > 40%)": 1,
           "Entry price too high for sports_binary (43% > 40%)": 1,
           "Entry price too high for sports_binary (62% > 40%)": 1,
           "Entry price too high for sports_binary (47% > 40%)": 3,
@@ -202,6 +205,7 @@
           "Entry price too high for other (67% > 40%)": 1,
           "Entry price too high for other (74% > 40%)": 2,
           "Entry price too high for sports_binary (75% > 40%)": 1,
+          "Entry price too high for sports_other (45% > 40%)": 1,
           "Entry price too high for other (68% > 40%)": 1,
           "Entry price too high for sports_binary (42% > 40%)": 1,
           "Entry price too high for other (47% > 40%)": 1,
@@ -252,15 +256,15 @@
         "totalPnL": -38.72999999999998
       },
       "speed": {
-        "watching": 25,
-        "priced": 6,
-        "dropped": 1
+        "watching": 18,
+        "priced": 5,
+        "dropped": 4
       },
       "forge": {
         "skipped": "ran recently",
         "lastRun": "2026-10-10T05:40:39.562Z"
       },
-      "completedAt": "2026-10-10T20:11:28.180Z"
+      "completedAt": "2026-10-10T20:26:22.345Z"
     },
     "cronSchedule": "Every 5 minutes",
     "note": "Settlement runs automatically. Sports events settle ~12h after game ends."
@@ -892,14 +896,14 @@
       },
       {
         "name": "strongWallet",
-        "wins": 1620,
-        "losses": 1191,
+        "wins": 1621,
+        "losses": 1192,
         "winRate": 58,
-        "weight": 1.23,
-        "lastUpdated": "2026-10-10T19:59:24.883Z",
-        "previousWeight": 1.29,
-        "optimizedAt": "2026-10-10T20:06:07.821Z",
-        "total": 2811
+        "weight": 1.29,
+        "lastUpdated": "2026-10-10T20:24:17.445Z",
+        "previousWeight": 1.3699999999999999,
+        "optimizedAt": "2026-10-10T20:26:21.842Z",
+        "total": 2813
       },
       {
         "name": "whaleSize50k",
@@ -917,32 +921,32 @@
         "wins": 1132,
         "losses": 894,
         "winRate": 56,
-        "weight": 1.26,
+        "weight": 1.2,
         "lastUpdated": "2026-10-10T20:09:33.246Z",
-        "previousWeight": 1.34,
-        "optimizedAt": "2026-10-10T20:11:27.694Z",
+        "previousWeight": 1.26,
+        "optimizedAt": "2026-10-10T20:16:36.579Z",
         "total": 2026
       },
       {
         "name": "whaleSize15k",
-        "wins": 1134,
+        "wins": 1135,
         "losses": 908,
         "winRate": 56,
         "weight": 1.2,
-        "lastUpdated": "2026-10-10T19:59:06.535Z",
+        "lastUpdated": "2026-10-10T20:14:29.718Z",
         "previousWeight": 1.26,
-        "optimizedAt": "2026-10-10T20:06:07.821Z",
-        "total": 2042
+        "optimizedAt": "2026-10-10T20:26:21.842Z",
+        "total": 2043
       },
       {
         "name": "whaleSize25k",
         "wins": 607,
         "losses": 504,
         "winRate": 55,
-        "weight": 1.25,
+        "weight": 1.19,
         "lastUpdated": "2026-10-10T20:09:33.246Z",
-        "previousWeight": 1.3250000000000002,
-        "optimizedAt": "2026-10-10T20:11:27.694Z",
+        "previousWeight": 1.25,
+        "optimizedAt": "2026-10-10T20:16:36.579Z",
         "total": 1111
       }
     ],
@@ -960,57 +964,57 @@
       },
       {
         "name": "sportsMarket",
-        "wins": 1412,
-        "losses": 1223,
+        "wins": 1413,
+        "losses": 1224,
         "winRate": 54,
         "weight": 1.18,
-        "lastUpdated": "2026-10-10T20:04:00.613Z",
+        "lastUpdated": "2026-10-10T20:14:29.718Z",
         "previousWeight": 1.23,
-        "optimizedAt": "2026-10-10T20:11:27.694Z",
-        "total": 2635
+        "optimizedAt": "2026-10-10T20:26:21.842Z",
+        "total": 2637
       },
       {
         "name": "concentrated",
         "wins": 1623,
-        "losses": 1405,
+        "losses": 1406,
         "winRate": 54,
         "weight": 1.18,
-        "lastUpdated": "2026-10-10T20:04:00.613Z",
+        "lastUpdated": "2026-10-10T20:14:17.465Z",
         "previousWeight": 1.23,
-        "optimizedAt": "2026-10-10T20:11:27.694Z",
-        "total": 3028
+        "optimizedAt": "2026-10-10T20:26:21.842Z",
+        "total": 3029
       },
       {
         "name": "whaleSize25k",
         "wins": 607,
         "losses": 504,
         "winRate": 55,
-        "weight": 1.25,
+        "weight": 1.19,
         "lastUpdated": "2026-10-10T20:09:33.246Z",
-        "previousWeight": 1.3250000000000002,
-        "optimizedAt": "2026-10-10T20:11:27.694Z",
+        "previousWeight": 1.25,
+        "optimizedAt": "2026-10-10T20:16:36.579Z",
         "total": 1111
       },
       {
         "name": "whaleSize15k",
-        "wins": 1134,
+        "wins": 1135,
         "losses": 908,
         "winRate": 56,
         "weight": 1.2,
-        "lastUpdated": "2026-10-10T19:59:06.535Z",
+        "lastUpdated": "2026-10-10T20:14:29.718Z",
         "previousWeight": 1.26,
-        "optimizedAt": "2026-10-10T20:06:07.821Z",
-        "total": 2042
+        "optimizedAt": "2026-10-10T20:26:21.842Z",
+        "total": 2043
       },
       {
         "name": "lastMinute6h",
         "wins": 1132,
         "losses": 894,
         "winRate": 56,
-        "weight": 1.26,
+        "weight": 1.2,
         "lastUpdated": "2026-10-10T20:09:33.246Z",
-        "previousWeight": 1.34,
-        "optimizedAt": "2026-10-10T20:11:27.694Z",
+        "previousWeight": 1.26,
+        "optimizedAt": "2026-10-10T20:16:36.579Z",
         "total": 2026
       },
       {
@@ -1026,14 +1030,14 @@
       },
       {
         "name": "strongWallet",
-        "wins": 1620,
-        "losses": 1191,
+        "wins": 1621,
+        "losses": 1192,
         "winRate": 58,
-        "weight": 1.23,
-        "lastUpdated": "2026-10-10T19:59:24.883Z",
-        "previousWeight": 1.29,
-        "optimizedAt": "2026-10-10T20:06:07.821Z",
-        "total": 2811
+        "weight": 1.29,
+        "lastUpdated": "2026-10-10T20:24:17.445Z",
+        "previousWeight": 1.3699999999999999,
+        "optimizedAt": "2026-10-10T20:26:21.842Z",
+        "total": 2813
       },
       {
         "name": "freshWallet",
@@ -1091,13 +1095,13 @@
         {
           "name": "sportsMarket",
           "winRate": 54,
-          "record": "1412W-1223L",
+          "record": "1413W-1224L",
           "isDiscovered": false
         },
         {
           "name": "concentrated",
           "winRate": 54,
-          "record": "1623W-1405L",
+          "record": "1623W-1406L",
           "isDiscovered": false
         }
       ],
@@ -1201,29 +1205,6 @@
     "totalFactors": 13
   },
   "tradeLog": [
-    {
-      "type": "SKIP",
-      "market": "Spread: FC Bayern München (-2.5)",
-      "reason": "Entry price too high for other (52% > 40%)",
-      "walletTier": "ELITE",
-      "marketCategory": "other",
-      "timestamp": "2026-10-10T14:11:14.501Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "Spread: Brentford FC (-1.5)",
-      "reason": "AI confidence too low: 28% (min 35%, time:28%)",
-      "aiConfidence": 28,
-      "aiComponents": [
-        {
-          "source": "time",
-          "confidence": 28,
-          "weight": 0.5
-        }
-      ],
-      "marketCategory": "other",
-      "timestamp": "2026-10-10T15:11:13.646Z"
-    },
     {
       "type": "SKIP",
       "market": "Spread: FC Bayern München (-2.5)",
@@ -1506,6 +1487,29 @@
       "reason": "Market already closed/resolved on Gamma",
       "marketCategory": "sports_binary",
       "timestamp": "2026-10-10T20:11:16.150Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "UCLA vs. Oregon",
+      "reason": "AI confidence too low: 26% (min 35%, time:26%)",
+      "aiConfidence": 26,
+      "aiComponents": [
+        {
+          "source": "time",
+          "confidence": 26,
+          "weight": 0.5
+        }
+      ],
+      "marketCategory": "sports_binary",
+      "timestamp": "2026-10-10T20:16:24.031Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Texas vs. Oklahoma",
+      "reason": "Entry price too high for sports_binary (78% > 40%)",
+      "walletTier": "ELITE",
+      "marketCategory": "sports_binary",
+      "timestamp": "2026-10-10T20:20:35.164Z"
     }
   ],
   "tradeHistory": [
@@ -2798,9 +2802,9 @@
     "success": true,
     "overview": {
       "totalFactorsTracked": 13,
-      "totalSignalsProcessed": 16546,
+      "totalSignalsProcessed": 16552,
       "overallWinRate": 55,
-      "pendingSignals": 390
+      "pendingSignals": 391
     },
     "walletEdge": {
       "totalTracked": 500,
@@ -2925,10 +2929,10 @@
         "wins": 1132,
         "losses": 894,
         "winRate": 56,
-        "weight": 1.26,
+        "weight": 1.2,
         "lastUpdated": "2026-10-10T20:09:33.246Z",
-        "previousWeight": 1.34,
-        "optimizedAt": "2026-10-10T20:11:27.694Z"
+        "previousWeight": 1.26,
+        "optimizedAt": "2026-10-10T20:16:36.579Z"
       },
       "lastMinute2h": {
         "wins": 547,
@@ -2943,28 +2947,28 @@
         "wins": 607,
         "losses": 504,
         "winRate": 55,
-        "weight": 1.25,
+        "weight": 1.19,
         "lastUpdated": "2026-10-10T20:09:33.246Z",
-        "previousWeight": 1.3250000000000002,
-        "optimizedAt": "2026-10-10T20:11:27.694Z"
+        "previousWeight": 1.25,
+        "optimizedAt": "2026-10-10T20:16:36.579Z"
       },
       "concentrated": {
         "wins": 1623,
-        "losses": 1405,
+        "losses": 1406,
         "winRate": 54,
         "weight": 1.18,
-        "lastUpdated": "2026-10-10T20:04:00.613Z",
+        "lastUpdated": "2026-10-10T20:14:17.465Z",
         "previousWeight": 1.23,
-        "optimizedAt": "2026-10-10T20:11:27.694Z"
+        "optimizedAt": "2026-10-10T20:26:21.842Z"
       },
       "whaleSize15k": {
-        "wins": 1134,
+        "wins": 1135,
         "losses": 908,
         "winRate": 56,
         "weight": 1.2,
-        "lastUpdated": "2026-10-10T19:59:06.535Z",
+        "lastUpdated": "2026-10-10T20:14:29.718Z",
         "previousWeight": 1.26,
-        "optimizedAt": "2026-10-10T20:06:07.821Z"
+        "optimizedAt": "2026-10-10T20:26:21.842Z"
       },
       "freshWallet": {
         "wins": 138,
@@ -2976,13 +2980,13 @@
         "optimizedAt": "2026-10-10T17:46:21.725Z"
       },
       "strongWallet": {
-        "wins": 1620,
-        "losses": 1191,
+        "wins": 1621,
+        "losses": 1192,
         "winRate": 58,
-        "weight": 1.23,
-        "lastUpdated": "2026-10-10T19:59:24.883Z",
-        "previousWeight": 1.29,
-        "optimizedAt": "2026-10-10T20:06:07.821Z"
+        "weight": 1.29,
+        "lastUpdated": "2026-10-10T20:24:17.445Z",
+        "previousWeight": 1.3699999999999999,
+        "optimizedAt": "2026-10-10T20:26:21.842Z"
       },
       "eliteWallet": {
         "wins": 616,
@@ -2994,13 +2998,13 @@
         "optimizedAt": "2026-10-10T20:06:07.821Z"
       },
       "sportsMarket": {
-        "wins": 1412,
-        "losses": 1223,
+        "wins": 1413,
+        "losses": 1224,
         "winRate": 54,
         "weight": 1.18,
-        "lastUpdated": "2026-10-10T20:04:00.613Z",
+        "lastUpdated": "2026-10-10T20:14:29.718Z",
         "previousWeight": 1.23,
-        "optimizedAt": "2026-10-10T20:11:27.694Z"
+        "optimizedAt": "2026-10-10T20:26:21.842Z"
       },
       "cryptoMarket": {
         "wins": 34,
@@ -3074,11 +3078,11 @@
   "learningInsights": {
     "success": true,
     "systemPerformance": {
-      "totalSignalsProcessed": 16546,
-      "wins": 9159,
-      "losses": 7387,
+      "totalSignalsProcessed": 16552,
+      "wins": 9162,
+      "losses": 7390,
       "winRate": 55,
-      "pendingSignals": 390
+      "pendingSignals": 391
     },
     "insights": {
       "bestFactors": [
@@ -3154,9 +3158,9 @@
       {
         "factor": "strongWallet",
         "winRate": 58,
-        "wins": 1620,
-        "losses": 1191,
-        "weight": 1.23,
+        "wins": 1621,
+        "losses": 1192,
+        "weight": 1.29,
         "performance": "AVERAGE"
       },
       {
@@ -3172,13 +3176,13 @@
         "winRate": 56,
         "wins": 1132,
         "losses": 894,
-        "weight": 1.26,
+        "weight": 1.2,
         "performance": "AVERAGE"
       },
       {
         "factor": "whaleSize15k",
         "winRate": 56,
-        "wins": 1134,
+        "wins": 1135,
         "losses": 908,
         "weight": 1.2,
         "performance": "AVERAGE"
@@ -3188,22 +3192,22 @@
         "winRate": 55,
         "wins": 607,
         "losses": 504,
-        "weight": 1.25,
+        "weight": 1.19,
         "performance": "AVERAGE"
       },
       {
         "factor": "concentrated",
         "winRate": 54,
         "wins": 1623,
-        "losses": 1405,
+        "losses": 1406,
         "weight": 1.18,
         "performance": "AVERAGE"
       },
       {
         "factor": "sportsMarket",
         "winRate": 54,
-        "wins": 1412,
-        "losses": 1223,
+        "wins": 1413,
+        "losses": 1224,
         "weight": 1.18,
         "performance": "AVERAGE"
       },
@@ -3259,12 +3263,12 @@
         "key": "all",
         "label": "Follow all signals",
         "side": "follow",
-        "settled": 9573,
-        "wins": 5296,
-        "losses": 4277,
-        "staked": 957300,
-        "pnl": 2431.34,
-        "roi": 0.3,
+        "settled": 9576,
+        "wins": 5297,
+        "losses": 4279,
+        "staked": 957600,
+        "pnl": 2293.64,
+        "roi": 0.2,
         "winRate": 55,
         "readyForAuto": true
       },
@@ -3285,11 +3289,11 @@
         "key": "high_score",
         "label": "High score (≥100)",
         "side": "follow",
-        "settled": 2423,
-        "wins": 1313,
+        "settled": 2424,
+        "wins": 1314,
         "losses": 1110,
-        "staked": 242300,
-        "pnl": -6284.02,
+        "staked": 242400,
+        "pnl": -6260.56,
         "roi": -2.6,
         "winRate": 54,
         "readyForAuto": false
@@ -3298,11 +3302,11 @@
         "key": "fade_favorites",
         "label": "Fade favorites (≥60¢)",
         "side": "fade",
-        "settled": 3319,
+        "settled": 3320,
         "wins": 974,
-        "losses": 2345,
-        "staked": 331900,
-        "pnl": -11562.64,
+        "losses": 2346,
+        "staked": 332000,
+        "pnl": -11662.64,
         "roi": -3.5,
         "winRate": 29,
         "readyForAuto": false
@@ -6840,12 +6844,12 @@
   "speed": {
     "success": true,
     "overall": {
-      "n": 216,
-      "avg_lag_sec": 297,
-      "lag_cost_c": 0.41,
-      "drift_5m_c": 0.59,
-      "drift_15m_c": 0.07,
-      "drift_60m_c": -0.09
+      "n": 219,
+      "avg_lag_sec": 296,
+      "lag_cost_c": 0.39,
+      "drift_5m_c": 0.63,
+      "drift_15m_c": 0.27,
+      "drift_60m_c": 0.65
     },
     "byLag": [
       {
@@ -6856,21 +6860,21 @@
       },
       {
         "lag": "2-5m",
-        "n": 94,
-        "lag_cost_c": -0.14,
-        "drift_15m_c": 0.9
+        "n": 96,
+        "lag_cost_c": -0.15,
+        "drift_15m_c": 1.3
       },
       {
         "lag": "5-15m",
-        "n": 113,
-        "lag_cost_c": 0.92,
-        "drift_15m_c": -0.3
+        "n": 114,
+        "lag_cost_c": 0.9,
+        "drift_15m_c": -0.25
       }
     ],
     "settled": {
-      "n": 104,
-      "roi_at_whale": 12.4,
-      "roi_at_detect": 11.8
+      "n": 108,
+      "roi_at_whale": 11.3,
+      "roi_at_detect": 10.7
     },
     "read": "lag_cost_c = cents the price moved against us before we saw it; drift = movement after. roi_at_whale vs roi_at_detect = the value of being as fast as the whale."
   },
@@ -6915,7 +6919,7 @@
       }
     ],
     "hunt": {
-      "at": "2026-10-10T20:09:54.513Z",
+      "at": "2026-10-10T20:24:50.999Z",
       "directiveId": "ord_mv2spnnh",
       "sports": [
         "cfb"
@@ -6923,8 +6927,8 @@
       "minEdge": 3,
       "perSport": {
         "cfb": {
-          "markets": 27,
-          "oddsGames": 41,
+          "markets": 25,
+          "oddsGames": 39,
           "dkGames": 0,
           "matched": 16,
           "dkMatched": 0,
@@ -6949,12 +6953,12 @@
         }
       },
       "oddsApi": {
-        "at": "2026-10-10T19:55:13.053Z",
+        "at": "2026-10-10T20:24:52.586Z",
         "ok": true,
         "status": 200,
-        "key": "odds_lines:basketball_nba:h2h,spreads",
-        "remaining": "490",
-        "used": "10"
+        "key": "odds_lines:americanfootball_ncaaf:h2h,spreads",
+        "remaining": "488",
+        "used": "12"
       },
       "priced": 16,
       "board": [
@@ -7163,6 +7167,108 @@
           "qualifies": false
         },
         {
+          "id": "cfb-usc-pennst-2026-10-10:0",
+          "sport": "cfb",
+          "marketSlug": "cfb-usc-pennst-2026-10-10",
+          "game": "USC vs. Penn State",
+          "team": "USC",
+          "teamFull": "USC Trojans",
+          "outcomeIndex": 0,
+          "startTime": "2026-10-10T23:30:00.000Z",
+          "vegasProb": 50.8,
+          "refSource": "books",
+          "books": 9,
+          "dkOdds": -115,
+          "dk": null,
+          "buyPrice": 50,
+          "midPrice": 49.5,
+          "spread": 0.01,
+          "edge": 0.8,
+          "volume": 49990,
+          "whale": null,
+          "verdict": "TRIM",
+          "reason": "Split 2-2 (margin -0.08)",
+          "margin": -0.08,
+          "votes": [
+            {
+              "agent": "GREED",
+              "vote": "ABSTAIN",
+              "conviction": 0,
+              "line": "No band history. Nothing to count yet."
+            },
+            {
+              "agent": "FOMO",
+              "vote": "NO",
+              "conviction": 0.4,
+              "line": "No whale money on this one. Boring."
+            },
+            {
+              "agent": "PANIC",
+              "vote": "YES",
+              "conviction": 0.2,
+              "line": "Nothing on fire. Fine. FINE."
+            },
+            {
+              "agent": "DOUBT",
+              "vote": "NO",
+              "conviction": 0.5,
+              "line": "no verified wallet, band n=0. Could be luck."
+            },
+            {
+              "agent": "QUANT",
+              "vote": "ABSTAIN",
+              "conviction": 0,
+              "line": "No independent price. Abstain."
+            },
+            {
+              "agent": "RISK",
+              "vote": "YES",
+              "conviction": 0.56,
+              "line": "Book at 4%. Room for it."
+            }
+          ],
+          "tiebreak": null,
+          "council": {
+            "v": [
+              [
+                "GREED",
+                "ABSTAIN",
+                0
+              ],
+              [
+                "FOMO",
+                "NO",
+                0.4
+              ],
+              [
+                "PANIC",
+                "YES",
+                0.2
+              ],
+              [
+                "DOUBT",
+                "NO",
+                0.5
+              ],
+              [
+                "QUANT",
+                "ABSTAIN",
+                0
+              ],
+              [
+                "RISK",
+                "YES",
+                0.56
+              ]
+            ],
+            "m": -0.08,
+            "verdict": "TRIM",
+            "tb": null,
+            "mode": "crew"
+          },
+          "qualifies": false
+        },
+        {
           "id": "cfb-ga-ala-2026-10-10:0",
           "sport": "cfb",
           "marketSlug": "cfb-ga-ala-2026-10-10",
@@ -7180,7 +7286,7 @@
           "midPrice": 45.5,
           "spread": 0.01,
           "edge": 0.8,
-          "volume": 97711,
+          "volume": 97911,
           "whale": null,
           "verdict": "TRIM",
           "reason": "Split 2-2 (margin -0.08)",
@@ -7469,108 +7575,6 @@
           "qualifies": false
         },
         {
-          "id": "cfb-usc-pennst-2026-10-10:0",
-          "sport": "cfb",
-          "marketSlug": "cfb-usc-pennst-2026-10-10",
-          "game": "USC vs. Penn State",
-          "team": "USC",
-          "teamFull": "USC Trojans",
-          "outcomeIndex": 0,
-          "startTime": "2026-10-10T23:30:00.000Z",
-          "vegasProb": 50.5,
-          "refSource": "books",
-          "books": 8,
-          "dkOdds": -115,
-          "dk": null,
-          "buyPrice": 50,
-          "midPrice": 49.5,
-          "spread": 0.01,
-          "edge": 0.5,
-          "volume": 49980,
-          "whale": null,
-          "verdict": "TRIM",
-          "reason": "Split 2-2 (margin -0.08)",
-          "margin": -0.08,
-          "votes": [
-            {
-              "agent": "GREED",
-              "vote": "ABSTAIN",
-              "conviction": 0,
-              "line": "No band history. Nothing to count yet."
-            },
-            {
-              "agent": "FOMO",
-              "vote": "NO",
-              "conviction": 0.4,
-              "line": "No whale money on this one. Boring."
-            },
-            {
-              "agent": "PANIC",
-              "vote": "YES",
-              "conviction": 0.2,
-              "line": "Nothing on fire. Fine. FINE."
-            },
-            {
-              "agent": "DOUBT",
-              "vote": "NO",
-              "conviction": 0.5,
-              "line": "no verified wallet, band n=0. Could be luck."
-            },
-            {
-              "agent": "QUANT",
-              "vote": "ABSTAIN",
-              "conviction": 0,
-              "line": "No independent price. Abstain."
-            },
-            {
-              "agent": "RISK",
-              "vote": "YES",
-              "conviction": 0.56,
-              "line": "Book at 4%. Room for it."
-            }
-          ],
-          "tiebreak": null,
-          "council": {
-            "v": [
-              [
-                "GREED",
-                "ABSTAIN",
-                0
-              ],
-              [
-                "FOMO",
-                "NO",
-                0.4
-              ],
-              [
-                "PANIC",
-                "YES",
-                0.2
-              ],
-              [
-                "DOUBT",
-                "NO",
-                0.5
-              ],
-              [
-                "QUANT",
-                "ABSTAIN",
-                0
-              ],
-              [
-                "RISK",
-                "YES",
-                0.56
-              ]
-            ],
-            "m": -0.08,
-            "verdict": "TRIM",
-            "tb": null,
-            "mode": "crew"
-          },
-          "qualifies": false
-        },
-        {
           "id": "cfb-nevada-utep-2026-10-10:1",
           "sport": "cfb",
           "marketSlug": "cfb-nevada-utep-2026-10-10",
@@ -7673,24 +7677,24 @@
           "qualifies": false
         },
         {
-          "id": "cfb-coast-marsh-2026-10-10:0",
+          "id": "cfb-syra-vir-2026-10-10:0",
           "sport": "cfb",
-          "marketSlug": "cfb-coast-marsh-2026-10-10",
-          "game": "Coastal Carolina vs. Marshall",
-          "team": "Coastal Carolina",
-          "teamFull": "Coastal Carolina Chanticleers",
+          "marketSlug": "cfb-syra-vir-2026-10-10",
+          "game": "Syracuse vs. Virginia",
+          "team": "Syracuse",
+          "teamFull": "Syracuse Orange",
           "outcomeIndex": 0,
-          "startTime": "2026-10-10T23:00:00.000Z",
-          "vegasProb": 37.2,
+          "startTime": "2026-10-10T23:30:00.000Z",
+          "vegasProb": 19,
           "refSource": "books",
           "books": 9,
-          "dkOdds": 154,
+          "dkOdds": 390,
           "dk": null,
-          "buyPrice": 37,
-          "midPrice": 36.5,
+          "buyPrice": 19,
+          "midPrice": 18.5,
           "spread": 0.01,
-          "edge": 0.2,
-          "volume": 122,
+          "edge": 0,
+          "volume": 37602,
           "whale": null,
           "verdict": "TRIM",
           "reason": "Split 2-2 (margin -0.08)",
@@ -7776,16 +7780,485 @@
         }
       ],
       "dkBoard": [],
-      "alsoRan": [
+      "polyGames": [
         {
-          "game": "Syracuse vs. Virginia",
-          "team": "Syracuse",
-          "vegasProb": 19,
-          "buyPrice": 19,
-          "edge": 0,
+          "slug": "cfb-jmad-gas-2026-10-10",
+          "game": "James Madison vs. Georgia Southern",
+          "outcomes": [
+            "James Madison",
+            "Georgia Southern"
+          ],
           "startTime": "2026-10-10T23:30:00.000Z",
-          "dkOdds": 390
+          "mid": [
+            72.5,
+            27.5
+          ],
+          "spread": 0.01,
+          "books": [
+            72.7,
+            27.3
+          ],
+          "sport": "cfb"
         },
+        {
+          "slug": "cfb-uab-mphs-2026-10-10",
+          "game": "UAB vs. Memphis",
+          "outcomes": [
+            "UAB",
+            "Memphis"
+          ],
+          "startTime": "2026-10-10T23:00:00.000Z",
+          "mid": [
+            15.5,
+            84.5
+          ],
+          "spread": 0.01,
+          "books": [
+            16.7,
+            83.3
+          ],
+          "sport": "cfb"
+        },
+        {
+          "slug": "cfb-jackst-grmbst-2026-10-10",
+          "game": "Jackson State vs. Grambling State",
+          "outcomes": [
+            "Jackson State",
+            "Grambling State"
+          ],
+          "startTime": "2026-10-10T21:00:00.000Z",
+          "mid": [
+            75.5,
+            24.5
+          ],
+          "spread": 0.01,
+          "books": [
+            null,
+            null
+          ],
+          "sport": "cfb"
+        },
+        {
+          "slug": "cfb-mont-narz-2026-10-10",
+          "game": "Montana vs. Northern Arizona",
+          "outcomes": [
+            "Montana",
+            "Northern Arizona"
+          ],
+          "startTime": "2026-10-10T21:00:00.000Z",
+          "mid": [
+            71.5,
+            28.5
+          ],
+          "spread": 0.01,
+          "books": [
+            null,
+            null
+          ],
+          "sport": "cfb"
+        },
+        {
+          "slug": "cfb-ndak-niowa-2026-10-10",
+          "game": "North Dakota vs. Northern Iowa",
+          "outcomes": [
+            "North Dakota",
+            "Northern Iowa"
+          ],
+          "startTime": "2026-10-10T21:00:00.000Z",
+          "mid": [
+            81.5,
+            18.5
+          ],
+          "spread": 0.01,
+          "books": [
+            null,
+            null
+          ],
+          "sport": "cfb"
+        },
+        {
+          "slug": "cfb-calpol-idhst-2026-10-10",
+          "game": "Cal Poly vs. Idaho State",
+          "outcomes": [
+            "Cal Poly",
+            "Idaho State"
+          ],
+          "startTime": "2026-10-10T22:00:00.000Z",
+          "mid": [
+            17.5,
+            82.5
+          ],
+          "spread": 0.01,
+          "books": [
+            null,
+            null
+          ],
+          "sport": "cfb"
+        },
+        {
+          "slug": "cfb-sdst-oregst-2026-10-10",
+          "game": "San Diego State vs. Oregon State",
+          "outcomes": [
+            "San Diego State",
+            "Oregon State"
+          ],
+          "startTime": "2026-10-10T22:00:00.000Z",
+          "mid": [
+            14.5,
+            85.5
+          ],
+          "spread": 0.01,
+          "books": [
+            14.7,
+            85.3
+          ],
+          "sport": "cfb"
+        },
+        {
+          "slug": "cfb-uwg-ekent-2026-10-10",
+          "game": "West Georgia vs. Eastern Kentucky",
+          "outcomes": [
+            "West Georgia",
+            "Eastern Kentucky"
+          ],
+          "startTime": "2026-10-10T22:00:00.000Z",
+          "mid": [
+            32.5,
+            67.5
+          ],
+          "spread": 0.01,
+          "books": [
+            null,
+            null
+          ],
+          "sport": "cfb"
+        },
+        {
+          "slug": "cfb-tarl-ausp-2026-10-10",
+          "game": "Tarleton State vs. Austin Peay",
+          "outcomes": [
+            "Tarleton State",
+            "Austin Peay"
+          ],
+          "startTime": "2026-10-10T23:00:00.000Z",
+          "mid": [
+            44,
+            56
+          ],
+          "spread": 0.02,
+          "books": [
+            null,
+            null
+          ],
+          "sport": "cfb"
+        },
+        {
+          "slug": "cfb-ndkst-unlv-2026-10-10",
+          "game": "North Dakota State vs. UNLV",
+          "outcomes": [
+            "North Dakota State",
+            "UNLV"
+          ],
+          "startTime": "2026-10-10T23:00:00.000Z",
+          "mid": [
+            54.5,
+            45.5
+          ],
+          "spread": 0.01,
+          "books": [
+            54.3,
+            45.7
+          ],
+          "sport": "cfb"
+        },
+        {
+          "slug": "cfb-ncol-ewash-2026-10-10",
+          "game": "Northern Colorado vs. Eastern Washington",
+          "outcomes": [
+            "Northern Colorado",
+            "Eastern Washington"
+          ],
+          "startTime": "2026-10-10T23:00:00.000Z",
+          "mid": [
+            30.5,
+            69.5
+          ],
+          "spread": 0.01,
+          "books": [
+            null,
+            null
+          ],
+          "sport": "cfb"
+        },
+        {
+          "slug": "cfb-nevada-utep-2026-10-10",
+          "game": "Nevada vs. UTEP",
+          "outcomes": [
+            "Nevada",
+            "UTEP"
+          ],
+          "startTime": "2026-10-10T23:00:00.000Z",
+          "mid": [
+            76.5,
+            23.5
+          ],
+          "spread": 0.01,
+          "books": [
+            75.7,
+            24.3
+          ],
+          "sport": "cfb"
+        },
+        {
+          "slug": "cfb-lsu-uk-2026-10-10",
+          "game": "LSU vs. Kentucky",
+          "outcomes": [
+            "LSU",
+            "Kentucky"
+          ],
+          "startTime": "2026-10-10T23:00:00.000Z",
+          "mid": [
+            75.5,
+            24.5
+          ],
+          "spread": 0.01,
+          "books": [
+            74.5,
+            25.5
+          ],
+          "sport": "cfb"
+        },
+        {
+          "slug": "cfb-coast-marsh-2026-10-10",
+          "game": "Coastal Carolina vs. Marshall",
+          "outcomes": [
+            "Coastal Carolina",
+            "Marshall"
+          ],
+          "startTime": "2026-10-10T23:00:00.000Z",
+          "mid": [
+            36.5,
+            63.5
+          ],
+          "spread": 0.01,
+          "books": [
+            36.6,
+            63.4
+          ],
+          "sport": "cfb"
+        },
+        {
+          "slug": "cfb-usc-pennst-2026-10-10",
+          "game": "USC vs. Penn State",
+          "outcomes": [
+            "USC",
+            "Penn State"
+          ],
+          "startTime": "2026-10-10T23:30:00.000Z",
+          "mid": [
+            49.5,
+            50.5
+          ],
+          "spread": 0.01,
+          "books": [
+            50.8,
+            49.2
+          ],
+          "sport": "cfb"
+        },
+        {
+          "slug": "cfb-airf-nill-2026-10-10",
+          "game": "Air Force vs. Northern Illinois",
+          "outcomes": [
+            "Air Force",
+            "Northern Illinois"
+          ],
+          "startTime": "2026-10-10T23:30:00.000Z",
+          "mid": [
+            71.5,
+            28.5
+          ],
+          "spread": 0.01,
+          "books": [
+            71.8,
+            28.2
+          ],
+          "sport": "cfb"
+        },
+        {
+          "slug": "cfb-syra-vir-2026-10-10",
+          "game": "Syracuse vs. Virginia",
+          "outcomes": [
+            "Syracuse",
+            "Virginia"
+          ],
+          "startTime": "2026-10-10T23:30:00.000Z",
+          "mid": [
+            18.5,
+            81.5
+          ],
+          "spread": 0.01,
+          "books": [
+            19,
+            81
+          ],
+          "sport": "cfb"
+        },
+        {
+          "slug": "cfb-loulaf-loutch-2026-10-10",
+          "game": "Louisiana vs. Louisiana Tech",
+          "outcomes": [
+            "Louisiana",
+            "Louisiana Tech"
+          ],
+          "startTime": "2026-10-10T23:30:00.000Z",
+          "mid": [
+            42.5,
+            57.5
+          ],
+          "spread": 0.01,
+          "books": [
+            42,
+            58
+          ],
+          "sport": "cfb"
+        },
+        {
+          "slug": "cfb-ga-ala-2026-10-10",
+          "game": "Georgia vs. Alabama",
+          "outcomes": [
+            "Georgia",
+            "Alabama"
+          ],
+          "startTime": "2026-10-10T23:30:00.000Z",
+          "mid": [
+            45.5,
+            54.5
+          ],
+          "spread": 0.01,
+          "books": [
+            46.8,
+            53.2
+          ],
+          "sport": "cfb"
+        },
+        {
+          "slug": "cfb-cark-abchr-2026-10-10",
+          "game": "Central Arkansas vs. Abilene Christian",
+          "outcomes": [
+            "Central Arkansas",
+            "Abilene Christian"
+          ],
+          "startTime": "2026-10-11T00:00:00.000Z",
+          "mid": [
+            25,
+            75
+          ],
+          "spread": 0.02,
+          "books": [
+            null,
+            null
+          ],
+          "sport": "cfb"
+        },
+        {
+          "slug": "cfb-minnst-pur-2026-10-10",
+          "game": "Minnesota vs. Purdue",
+          "outcomes": [
+            "Minnesota",
+            "Purdue"
+          ],
+          "startTime": "2026-10-11T00:00:00.000Z",
+          "mid": [
+            56.5,
+            43.5
+          ],
+          "spread": 0.01,
+          "books": [
+            56.2,
+            43.8
+          ],
+          "sport": "cfb"
+        },
+        {
+          "slug": "cfb-selou-utrgv-2026-10-10",
+          "game": "Southeastern Louisiana vs. UT Rio Grande Valley",
+          "outcomes": [
+            "Southeastern Louisiana",
+            "UT Rio Grande Valley"
+          ],
+          "startTime": "2026-10-11T00:00:00.000Z",
+          "mid": [
+            54.5,
+            45.5
+          ],
+          "spread": 0.01,
+          "books": [
+            null,
+            null
+          ],
+          "sport": "cfb"
+        },
+        {
+          "slug": "cfb-kan-utah-2026-10-10",
+          "game": "Kansas vs. Utah",
+          "outcomes": [
+            "Kansas",
+            "Utah"
+          ],
+          "startTime": "2026-10-11T00:00:00.000Z",
+          "mid": [
+            14.5,
+            85.5
+          ],
+          "spread": 0.01,
+          "books": [
+            15.9,
+            84.1
+          ],
+          "sport": "cfb"
+        },
+        {
+          "slug": "cfb-hawaii-arzst-2026-10-10",
+          "game": "Hawai'i vs. Arizona State",
+          "outcomes": [
+            "Hawai'i",
+            "Arizona State"
+          ],
+          "startTime": "2026-10-11T02:30:00.000Z",
+          "mid": [
+            7.5,
+            92.5
+          ],
+          "spread": 0.01,
+          "books": [
+            9.4,
+            90.6
+          ],
+          "sport": "cfb"
+        },
+        {
+          "slug": "cfb-boise-frest-2026-10-10",
+          "game": "Boise State vs. Fresno State",
+          "outcomes": [
+            "Boise State",
+            "Fresno State"
+          ],
+          "startTime": "2026-10-11T02:30:00.000Z",
+          "mid": [
+            73.5,
+            26.5
+          ],
+          "spread": 0.01,
+          "books": [
+            73.3,
+            26.7
+          ],
+          "sport": "cfb"
+        }
+      ],
+      "dkFairMaxSpread": 0.04,
+      "alsoRan": [
         {
           "game": "Louisiana vs. Louisiana Tech",
           "team": "Louisiana Tech",
@@ -7850,6 +8323,24 @@
           "dkOdds": 250
         },
         {
+          "game": "Coastal Carolina vs. Marshall",
+          "team": "Coastal Carolina",
+          "vegasProb": 36.6,
+          "buyPrice": 37,
+          "edge": -0.4,
+          "startTime": "2026-10-10T23:00:00.000Z",
+          "dkOdds": 154
+        },
+        {
+          "game": "Coastal Carolina vs. Marshall",
+          "team": "Marshall",
+          "vegasProb": 63.4,
+          "buyPrice": 64,
+          "edge": -0.6,
+          "startTime": "2026-10-10T23:00:00.000Z",
+          "dkOdds": -185
+        },
+        {
           "game": "James Madison vs. Georgia Southern",
           "team": "Georgia Southern",
           "vegasProb": 27.3,
@@ -7875,15 +8366,6 @@
           "edge": -0.7,
           "startTime": "2026-10-10T23:00:00.000Z",
           "dkOdds": -130
-        },
-        {
-          "game": "Boise State vs. Fresno State",
-          "team": "Boise State",
-          "vegasProb": 73.3,
-          "buyPrice": 74,
-          "edge": -0.7,
-          "startTime": "2026-10-11T02:30:00.000Z",
-          "dkOdds": -310
         }
       ],
       "counts": {
@@ -7916,12 +8398,12 @@
       "ncaab"
     ],
     "oddsApi": {
-      "at": "2026-10-10T19:55:13.053Z",
+      "at": "2026-10-10T20:24:52.586Z",
       "ok": true,
       "status": 200,
-      "key": "odds_lines:basketball_nba:h2h,spreads",
-      "remaining": "490",
-      "used": "10"
+      "key": "odds_lines:americanfootball_ncaaf:h2h,spreads",
+      "remaining": "488",
+      "used": "12"
     }
   }
 }
