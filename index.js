@@ -3699,11 +3699,11 @@ async function buildOddsComparison(env, sport) {
 
   const games = (oddsData || []).map(game => {
     const preferredBooks = ['fanduel', 'draftkings', 'betmgm'];
-    let h2hOdds = null, spreadOdds = null;
+    let h2hOdds = null, spreadOdds = null, h2hUpdatedAt = null;
     for (const bookKey of preferredBooks) {
       const book = game.bookmakers?.find(b => b.key === bookKey);
       if (book) {
-        if (!h2hOdds) { const m = book.markets?.find(m => m.key === 'h2h'); if (m) h2hOdds = m.outcomes; }
+        if (!h2hOdds) { const m = book.markets?.find(m => m.key === 'h2h'); if (m) { h2hOdds = m.outcomes; h2hUpdatedAt = m.last_update || book.last_update || null; } }
         if (!spreadOdds) { const m = book.markets?.find(m => m.key === 'spreads'); if (m) spreadOdds = m.outcomes; }
       }
       if (h2hOdds && spreadOdds) break;
@@ -3772,7 +3772,8 @@ async function buildOddsComparison(env, sport) {
           home: { line: spreadOdds.find(o => o.name === game.home_team)?.point, odds: spreadOdds.find(o => o.name === game.home_team)?.price },
           away: { line: spreadOdds.find(o => o.name === game.away_team)?.point, odds: spreadOdds.find(o => o.name === game.away_team)?.price }
         } : null,
-        devigged: true
+        devigged: true,
+        h2hUpdatedAt
       },
       polymarket: polyData ? {
         moneyline: { home: polyData.moneyline.home || null, away: polyData.moneyline.away || null },
@@ -3841,6 +3842,13 @@ function shapeEdgeDetection(sport, cmp) {
 var EDGE_ALERT_MIN = 4;   // net devigged points to log as an opportunity
 var EDGE_ALERT_MAX = 15;  // above this the "edge" is almost always a market-matching or stale-book error, not free money
 var EDGE_BOOK_MAX_DAYS_OUT = 10; // don't book games further out — far-future Polymarket books are thin and unreliable
+// PREGAME ONLY. Oct 2026 audit: 95 of 99 settled opportunities were booked
+// AFTER kickoff — a live in-game Polymarket price vs a pregame Vegas line.
+// The "edge" was just the score (the team was losing), and bigger gaps lost
+// more (6-9pt band -27.7% ROI). Compare only before the game starts, against
+// a recently updated book.
+var EDGE_PREGAME_MIN_MINUTES = 10;  // must be at least this long before kickoff
+var EDGE_MAX_BOOK_AGE_MIN = 45;     // ignore Vegas lines older than this
 // Team sports with the standard "<sport>-<away>-<home>-<date>" Polymarket slug
 // and a real Odds API league key. (Tennis/MMA use non-team slugs; excluded.)
 var EDGE_SCAN_SPORTS = ["mlb", "nba", "wnba", "nfl", "nhl", "ncaab", "ncaaf", "cfb"];
@@ -3890,6 +3898,9 @@ async function scanEdges(env) {
           // drift for weeks, and giant "edges" there are data errors.
           const startMs = g.commenceTime ? new Date(g.commenceTime).getTime() : 0;
           if (startMs && startMs - Date.now() > EDGE_BOOK_MAX_DAYS_OUT * 24 * 3600 * 1000) continue;
+          if (!startMs || startMs - Date.now() < EDGE_PREGAME_MIN_MINUTES * 60 * 1000) continue;  // pregame only
+          const bookTs = g.vegas && g.vegas.h2hUpdatedAt ? new Date(g.vegas.h2hUpdatedAt).getTime() : null;
+          if (bookTs && Date.now() - bookTs > EDGE_MAX_BOOK_AGE_MIN * 60 * 1000) continue;     // stale line
           // HONEST BOOKING: pm.price is the last-trade print from the trades
           // feed, which lags the live book by several points — the Sep 17-21
           // promotion audit watched print-based "10-15pt edges" fail a live
@@ -3914,6 +3925,9 @@ async function scanEdges(env) {
             vegasProb: vegProb, polyPrice: livePrice, edgeNet: liveEdge,
             printPrice: pm.price,     // kept for print-vs-live gap visibility
             honestFill: true,
+            pregame: true,              // booked before kickoff (see EDGE_PREGAME_MIN_MINUTES)
+            minutesToStart: Math.round((startMs - Date.now()) / 60000),
+            bookUpdatedAt: (g.vegas && g.vegas.h2hUpdatedAt) || null,
             polySlug: pm.slug,
             detectedAt: new Date().toISOString(),
             outcome: null, settledAt: null, pnl: null
@@ -3930,9 +3944,13 @@ async function scanEdges(env) {
   let newCount = 0;
   for (const o of found) {
     if (byId[o.id]) {
-      byId[o.id].polyPrice = o.polyPrice;
-      byId[o.id].vegasProb = o.vegasProb;
-      byId[o.id].edgeNet = o.edgeNet;
+      // Entry fields stay FROZEN at first detection: settlement pays out at
+      // polyPrice, so overwriting it with later prices booked results at a
+      // price that was never the entry. Track the latest view separately.
+      byId[o.id].lastPolyPrice = o.polyPrice;
+      byId[o.id].lastVegasProb = o.vegasProb;
+      byId[o.id].lastEdgeNet = o.edgeNet;
+      byId[o.id].lastSeenAt = o.detectedAt;
     } else {
       byId[o.id] = o;
       newCount++;
@@ -3989,8 +4007,11 @@ async function settleEdgeOpportunities(env) {
       // Two eras, two books: honest-fill rows (booked at live Gamma prices,
       // Sep 21+) accumulate into _v2; older print-priced rows keep settling
       // into the legacy bucket, whose ROI is known to be print-inflated.
-      for (const bucketKey of ["edge_lane_stats", "edge_lane_stats_v2"]) {
-        const rows = newlySettled.filter(o => bucketKey === "edge_lane_stats_v2" ? o.honestFill : !o.honestFill);
+      // _v3 = pregame-only honest rows (Oct 2026 fix); _v2 keeps the
+      // honest-fill rows booked before that, which were mostly in-game.
+      const bucketOf = (o) => !o.honestFill ? "edge_lane_stats" : o.pregame ? "edge_lane_stats_v3" : "edge_lane_stats_v2";
+      for (const bucketKey of ["edge_lane_stats", "edge_lane_stats_v2", "edge_lane_stats_v3"]) {
+        const rows = newlySettled.filter(o => bucketOf(o) === bucketKey);
         if (rows.length === 0) continue;
         const stats = await env.SIGNALS_CACHE.get(bucketKey, { type: "json" }) ||
           { overall: { wins: 0, losses: 0, staked: 0, pnl: 0 }, byBand: {}, createdAt: new Date().toISOString() };
@@ -4534,17 +4555,33 @@ export default {
           // last-trade prints that lagged the live book, inflating ROI (the
           // Sep 17-21 promotion audit proved those edges rarely existed at
           // live prices).
+          // _v3 (pregame-only, live fills) is the only lane that can earn
+          // readyForAuto. _v2 is shown demoted: ~96% of its rows were booked
+          // after kickoff against a pregame line.
+          const laneV3 = await env.SIGNALS_CACHE.get("edge_lane_stats_v3", { type: "json" });
+          if (laneV3 && laneV3.overall && (laneV3.overall.wins + laneV3.overall.losses) > 0) {
+            const { wins, losses, staked, pnl } = laneV3.overall;
+            const settledCount = wins + losses;
+            const roi = staked > 0 ? Math.round((pnl / staked) * 1000) / 10 : null;
+            strategies.push({
+              key: "vegas_edge", label: "Vegas edge (pregame, live fills)", side: "follow",
+              settled: settledCount, wins, losses, staked, pnl: Math.round(pnl * 100) / 100, roi,
+              winRate: settledCount ? Math.round((wins / settledCount) * 100) : null,
+              byBand: laneV3.byBand || null,
+              readyForAuto: settledCount >= PROVEN_MIN && (roi || 0) > 0
+            });
+          }
           const laneV2 = await env.SIGNALS_CACHE.get("edge_lane_stats_v2", { type: "json" });
           if (laneV2 && laneV2.overall && (laneV2.overall.wins + laneV2.overall.losses) > 0) {
             const { wins, losses, staked, pnl } = laneV2.overall;
             const settledCount = wins + losses;
             const roi = staked > 0 ? Math.round((pnl / staked) * 1000) / 10 : null;
             strategies.push({
-              key: "vegas_edge", label: "Vegas edge (live fills)", side: "follow",
+              key: "vegas_edge_ingame", label: "Vegas edge (in-game contaminated — superseded)", side: "follow",
               settled: settledCount, wins, losses, staked, pnl: Math.round(pnl * 100) / 100, roi,
               winRate: settledCount ? Math.round((wins / settledCount) * 100) : null,
               byBand: laneV2.byBand || null,
-              readyForAuto: settledCount >= PROVEN_MIN && (roi || 0) > 0
+              readyForAuto: false
             });
           }
           const laneStats = await env.SIGNALS_CACHE.get("edge_lane_stats", { type: "json" });
