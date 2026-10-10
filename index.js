@@ -7412,6 +7412,10 @@ function formatDirectionForDisplay(direction, marketTitle, marketSlug) {
       
       // Calculate confidence (Phase 3)
       const confidence = await calculateConfidence(env, factors, involvedWallets, score);
+      // Canonical learning-factor names (lastMinute6h, eliteWallet, ...). The
+      // auto-trader's AI-learning gate keys factor_stats on these; scoreBreakdown
+      // is a display-label object and cannot be used for that lookup.
+      signal.factors = factors;
       signal.confidence = confidence.confidence;
       signal.confidenceRated = confidence.rated === true;
       signal.confidenceLevel = confidence.level;
