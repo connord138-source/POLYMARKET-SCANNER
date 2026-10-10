@@ -1,27 +1,27 @@
 {
-  "fetchedAt": "2026-10-10T19:38:51Z",
+  "fetchedAt": "2026-10-10T19:58:12Z",
   "health": {
     "status": "ok",
-    "timestamp": "2026-10-10T19:38:52.166Z",
+    "timestamp": "2026-10-10T19:58:15.189Z",
     "version": "21.1.0 - Modularize: extract src/odds.js + src/gamma.js from index.js",
     "cache": {
-      "signalCount": 14108,
-      "oldestSignal": "2026-10-03T19:35:52.000Z",
-      "newestSignal": "2026-10-10T19:33:48.000Z"
+      "signalCount": 14115,
+      "oldestSignal": "2026-10-03T19:55:56.000Z",
+      "newestSignal": "2026-10-10T19:53:40.000Z"
     }
   },
   "cronStatus": {
     "success": true,
     "lastRun": {
-      "startedAt": "2026-10-10T19:30:59.771Z",
+      "startedAt": "2026-10-10T19:50:50.516Z",
       "scan": {
-        "signals": 664,
+        "signals": 683,
         "success": true
       },
       "settlement": {
-        "processed": 0,
-        "wins": 0,
-        "losses": 0,
+        "processed": 6,
+        "wins": 4,
+        "losses": 2,
         "errors": 0
       },
       "investigations": {
@@ -44,21 +44,102 @@
         "confirmed": 0,
         "total": 0
       },
-      "optimization": null,
+      "optimization": {
+        "optimized": true,
+        "totalFactors": 13,
+        "totalOptimized": 6,
+        "optimizations": [
+          {
+            "factor": "lastMinute6h",
+            "winRate": 56,
+            "samples": 2024,
+            "oldWeight": 1.34,
+            "newWeight": 1.26,
+            "change": -0.08
+          },
+          {
+            "factor": "whaleSize25k",
+            "winRate": 55,
+            "samples": 1109,
+            "oldWeight": 1.3250000000000002,
+            "newWeight": 1.25,
+            "change": -0.08
+          },
+          {
+            "factor": "concentrated",
+            "winRate": 54,
+            "samples": 3025,
+            "oldWeight": 1.31,
+            "newWeight": 1.23,
+            "change": -0.08
+          },
+          {
+            "factor": "whaleSize15k",
+            "winRate": 56,
+            "samples": 2041,
+            "oldWeight": 1.34,
+            "newWeight": 1.26,
+            "change": -0.08
+          },
+          {
+            "factor": "strongWallet",
+            "winRate": 58,
+            "samples": 2810,
+            "oldWeight": 1.3699999999999999,
+            "newWeight": 1.29,
+            "change": -0.08
+          },
+          {
+            "factor": "sportsMarket",
+            "winRate": 54,
+            "samples": 2629,
+            "oldWeight": 1.31,
+            "newWeight": 1.23,
+            "change": -0.08
+          }
+        ]
+      },
       "error": null,
       "edgeScan": {
-        "skipped": "throttled",
-        "nextInMin": 5
+        "at": 1791662114588,
+        "scanned": 5,
+        "sports": [
+          "cfb",
+          "mlb",
+          "nhl",
+          "nfl",
+          "nba"
+        ],
+        "found": 0,
+        "newCount": 0
       },
       "crewHunt": {
-        "skipped": "no orders"
+        "priced": 18,
+        "debated": 8,
+        "queued": 0,
+        "dkPlusEv": 0,
+        "counts": {
+          "APPROVE": 0,
+          "TRIM": 8,
+          "VETO": 0
+        },
+        "perSport": {
+          "cfb": {
+            "markets": 31,
+            "oddsGames": 41,
+            "dkGames": 0,
+            "matched": 18,
+            "dkMatched": 0,
+            "unmatched": 9
+          }
+        }
       },
       "edgeSettle": {
         "checked": 0,
         "settled": 0
       },
       "invSettle": {
-        "checked": 0,
+        "checked": 1,
         "scored": 0
       },
       "signalBackfill": {
@@ -73,18 +154,18 @@
         "phase": "B"
       },
       "autotrader": {
-        "evaluated": 664,
+        "evaluated": 683,
         "tradesOpened": 0,
         "tradesPaperTraded": 0,
         "tradesQueued": 0,
-        "skipped": 664,
+        "skipped": 683,
         "skipReasons": {
           "Entry price too high for other (51% > 40%)": 2,
           "Entry price too high for other (52% > 40%)": 3,
           "Entry price too high for sports_binary (74% > 40%)": 3,
           "Entry price too high for sports_binary (71% > 40%)": 2,
           "Entry price too high for sports_binary (76% > 40%)": 3,
-          "No winning wallet on signal": 451,
+          "No winning wallet on signal": 467,
           "Entry price too high for sports_binary (63% > 40%)": 2,
           "Entry price too high for sports_binary (68% > 40%)": 2,
           "Entry price too high for sports_binary (73% > 40%)": 3,
@@ -97,13 +178,14 @@
           "Entry price too high for sports_binary (54% > 40%)": 2,
           "Entry price too high for sports_binary (64% > 40%)": 1,
           "Duplicate market (already traded)": 2,
-          "Market already closed/resolved on Gamma": 3,
+          "Market already closed/resolved on Gamma": 4,
           "Entry price too high for sports_binary (61% > 40%)": 6,
-          "No proven edge for entry band 21-40 (-6pt)": 73,
+          "No proven edge for entry band 21-40 (-6pt)": 74,
           "Entry price too high for other (49% > 40%)": 5,
-          "Entry price too high for other (50% > 40%)": 4,
+          "Entry price too high for other (50% > 40%)": 6,
           "Entry price too high for sports_binary (58% > 40%)": 2,
-          "AI confidence too low: 26% (min 35%, time:26%)": 2,
+          "AI confidence too low: 26% (min 35%, time:26%)": 1,
+          "Entry price too high for sports_binary (45% > 40%)": 2,
           "Entry price too high for sports_binary (67% > 40%)": 2,
           "Entry price too high for sports_binary (69% > 40%)": 3,
           "Entry price too high for sports_binary (48% > 40%)": 2,
@@ -111,7 +193,6 @@
           "Entry price too high for sports_binary (60% > 40%)": 1,
           "Event too far out (21d > 7d horizon)": 4,
           "Entry price too high for sports_binary (70% > 40%)": 1,
-          "Entry price too high for sports_binary (45% > 40%)": 1,
           "Entry price too high for other (80% > 40%)": 1,
           "Event too far out (82d > 7d horizon)": 3,
           "Entry price too high for other (46% > 40%)": 1,
@@ -139,7 +220,6 @@
           "Event too far out (37d > 7d horizon)": 1,
           "Event too far out (22d > 7d horizon)": 8,
           "Event too far out (814d > 7d horizon)": 1,
-          "Event too far out (84d > 7d horizon)": 1,
           "Event too far out (448d > 7d horizon)": 1,
           "Event too far out (23d > 7d horizon)": 1,
           "Event too far out (36d > 7d horizon)": 1
@@ -180,15 +260,15 @@
         "totalPnL": -38.72999999999998
       },
       "speed": {
-        "watching": 32,
-        "priced": 8,
-        "dropped": 2
+        "watching": 27,
+        "priced": 7,
+        "dropped": 4
       },
       "forge": {
         "skipped": "ran recently",
         "lastRun": "2026-10-10T05:40:39.562Z"
       },
-      "completedAt": "2026-10-10T19:36:10.380Z"
+      "completedAt": "2026-10-10T19:56:47.923Z"
     },
     "cronSchedule": "Every 5 minutes",
     "note": "Settlement runs automatically. Sports events settle ~12h after game ends."
@@ -799,13 +879,13 @@
       {
         "name": "eliteWallet",
         "wins": 615,
-        "losses": 419,
+        "losses": 420,
         "winRate": 59,
         "weight": 1.24,
-        "lastUpdated": "2026-10-10T19:24:08.869Z",
+        "lastUpdated": "2026-10-10T19:44:39.688Z",
         "previousWeight": 1.3,
-        "optimizedAt": "2026-10-10T19:31:13.321Z",
-        "total": 1034
+        "optimizedAt": "2026-10-10T19:50:58.795Z",
+        "total": 1035
       },
       {
         "name": "freshWallet",
@@ -820,14 +900,14 @@
       },
       {
         "name": "strongWallet",
-        "wins": 1616,
-        "losses": 1190,
+        "wins": 1619,
+        "losses": 1191,
         "winRate": 58,
-        "weight": 1.23,
-        "lastUpdated": "2026-10-10T19:15:33.147Z",
-        "previousWeight": 1.29,
-        "optimizedAt": "2026-10-10T19:21:23.699Z",
-        "total": 2806
+        "weight": 1.29,
+        "lastUpdated": "2026-10-10T19:54:46.264Z",
+        "previousWeight": 1.3699999999999999,
+        "optimizedAt": "2026-10-10T19:56:47.114Z",
+        "total": 2810
       },
       {
         "name": "whaleSize50k",
@@ -842,36 +922,36 @@
       },
       {
         "name": "lastMinute6h",
-        "wins": 1130,
+        "wins": 1131,
         "losses": 893,
         "winRate": 56,
-        "weight": 1.2,
-        "lastUpdated": "2026-10-10T19:15:33.147Z",
-        "previousWeight": 1.26,
-        "optimizedAt": "2026-10-10T19:21:23.699Z",
-        "total": 2023
-      },
-      {
-        "name": "whaleSize25k",
-        "wins": 605,
-        "losses": 503,
-        "winRate": 55,
-        "weight": 1.19,
-        "lastUpdated": "2026-10-10T19:09:20.858Z",
-        "previousWeight": 1.25,
-        "optimizedAt": "2026-10-10T19:16:28.633Z",
-        "total": 1108
+        "weight": 1.26,
+        "lastUpdated": "2026-10-10T19:54:46.264Z",
+        "previousWeight": 1.34,
+        "optimizedAt": "2026-10-10T19:56:47.114Z",
+        "total": 2024
       },
       {
         "name": "whaleSize15k",
-        "wins": 1130,
-        "losses": 907,
+        "wins": 1133,
+        "losses": 908,
+        "winRate": 56,
+        "weight": 1.26,
+        "lastUpdated": "2026-10-10T19:54:11.909Z",
+        "previousWeight": 1.34,
+        "optimizedAt": "2026-10-10T19:56:47.114Z",
+        "total": 2041
+      },
+      {
+        "name": "whaleSize25k",
+        "wins": 606,
+        "losses": 503,
         "winRate": 55,
-        "weight": 1.19,
-        "lastUpdated": "2026-10-10T18:44:39.238Z",
-        "previousWeight": 1.25,
-        "optimizedAt": "2026-10-10T18:56:56.089Z",
-        "total": 2037
+        "weight": 1.25,
+        "lastUpdated": "2026-10-10T19:54:19.367Z",
+        "previousWeight": 1.3250000000000002,
+        "optimizedAt": "2026-10-10T19:56:47.114Z",
+        "total": 1109
       }
     ],
     "bottomFactors": [
@@ -888,58 +968,58 @@
       },
       {
         "name": "sportsMarket",
-        "wins": 1403,
-        "losses": 1218,
+        "wins": 1409,
+        "losses": 1220,
         "winRate": 54,
         "weight": 1.23,
-        "lastUpdated": "2026-10-10T19:29:07.556Z",
+        "lastUpdated": "2026-10-10T19:54:46.264Z",
         "previousWeight": 1.31,
-        "optimizedAt": "2026-10-10T19:31:13.321Z",
-        "total": 2621
+        "optimizedAt": "2026-10-10T19:56:47.114Z",
+        "total": 2629
       },
       {
         "name": "concentrated",
-        "wins": 1618,
+        "wins": 1621,
         "losses": 1404,
         "winRate": 54,
         "weight": 1.23,
-        "lastUpdated": "2026-10-10T19:29:07.556Z",
+        "lastUpdated": "2026-10-10T19:54:19.367Z",
         "previousWeight": 1.31,
-        "optimizedAt": "2026-10-10T19:31:13.321Z",
-        "total": 3022
-      },
-      {
-        "name": "whaleSize15k",
-        "wins": 1130,
-        "losses": 907,
-        "winRate": 55,
-        "weight": 1.19,
-        "lastUpdated": "2026-10-10T18:44:39.238Z",
-        "previousWeight": 1.25,
-        "optimizedAt": "2026-10-10T18:56:56.089Z",
-        "total": 2037
+        "optimizedAt": "2026-10-10T19:56:47.114Z",
+        "total": 3025
       },
       {
         "name": "whaleSize25k",
-        "wins": 605,
+        "wins": 606,
         "losses": 503,
         "winRate": 55,
-        "weight": 1.19,
-        "lastUpdated": "2026-10-10T19:09:20.858Z",
-        "previousWeight": 1.25,
-        "optimizedAt": "2026-10-10T19:16:28.633Z",
-        "total": 1108
+        "weight": 1.25,
+        "lastUpdated": "2026-10-10T19:54:19.367Z",
+        "previousWeight": 1.3250000000000002,
+        "optimizedAt": "2026-10-10T19:56:47.114Z",
+        "total": 1109
+      },
+      {
+        "name": "whaleSize15k",
+        "wins": 1133,
+        "losses": 908,
+        "winRate": 56,
+        "weight": 1.26,
+        "lastUpdated": "2026-10-10T19:54:11.909Z",
+        "previousWeight": 1.34,
+        "optimizedAt": "2026-10-10T19:56:47.114Z",
+        "total": 2041
       },
       {
         "name": "lastMinute6h",
-        "wins": 1130,
+        "wins": 1131,
         "losses": 893,
         "winRate": 56,
-        "weight": 1.2,
-        "lastUpdated": "2026-10-10T19:15:33.147Z",
-        "previousWeight": 1.26,
-        "optimizedAt": "2026-10-10T19:21:23.699Z",
-        "total": 2023
+        "weight": 1.26,
+        "lastUpdated": "2026-10-10T19:54:46.264Z",
+        "previousWeight": 1.34,
+        "optimizedAt": "2026-10-10T19:56:47.114Z",
+        "total": 2024
       },
       {
         "name": "whaleSize50k",
@@ -954,14 +1034,14 @@
       },
       {
         "name": "strongWallet",
-        "wins": 1616,
-        "losses": 1190,
+        "wins": 1619,
+        "losses": 1191,
         "winRate": 58,
-        "weight": 1.23,
-        "lastUpdated": "2026-10-10T19:15:33.147Z",
-        "previousWeight": 1.29,
-        "optimizedAt": "2026-10-10T19:21:23.699Z",
-        "total": 2806
+        "weight": 1.29,
+        "lastUpdated": "2026-10-10T19:54:46.264Z",
+        "previousWeight": 1.3699999999999999,
+        "optimizedAt": "2026-10-10T19:56:47.114Z",
+        "total": 2810
       },
       {
         "name": "freshWallet",
@@ -977,13 +1057,13 @@
       {
         "name": "eliteWallet",
         "wins": 615,
-        "losses": 419,
+        "losses": 420,
         "winRate": 59,
         "weight": 1.24,
-        "lastUpdated": "2026-10-10T19:24:08.869Z",
+        "lastUpdated": "2026-10-10T19:44:39.688Z",
         "previousWeight": 1.3,
-        "optimizedAt": "2026-10-10T19:31:13.321Z",
-        "total": 1034
+        "optimizedAt": "2026-10-10T19:50:58.795Z",
+        "total": 1035
       }
     ],
     "recommendation": {
@@ -1019,13 +1099,13 @@
         {
           "name": "sportsMarket",
           "winRate": 54,
-          "record": "1403W-1218L",
+          "record": "1409W-1220L",
           "isDiscovered": false
         },
         {
           "name": "concentrated",
           "winRate": 54,
-          "record": "1618W-1404L",
+          "record": "1621W-1404L",
           "isDiscovered": false
         }
       ],
@@ -1129,29 +1209,6 @@
     "totalFactors": 13
   },
   "tradeLog": [
-    {
-      "type": "SKIP",
-      "market": "Spread: FC Bayern München (-2.5)",
-      "reason": "Entry price too high for other (52% > 40%)",
-      "walletTier": "ELITE",
-      "marketCategory": "other",
-      "timestamp": "2026-10-10T13:11:03.360Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "Will the U.S. invade Iran before 2027?",
-      "reason": "Event too far out (83d > 7d horizon)",
-      "marketCategory": "politics",
-      "timestamp": "2026-10-10T13:36:08.528Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "Spread: FC Bayern München (-2.5)",
-      "reason": "Entry price too high for other (51% > 40%)",
-      "walletTier": "ELITE",
-      "marketCategory": "other",
-      "timestamp": "2026-10-10T14:06:14.552Z"
-    },
     {
       "type": "SKIP",
       "market": "Spread: Brentford FC (-1.5)",
@@ -1442,6 +1499,29 @@
       "reason": "Market already closed/resolved on Gamma",
       "marketCategory": "sports_binary",
       "timestamp": "2026-10-10T19:11:12.341Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Spread: FC Bayern München (-2.5)",
+      "reason": "Entry price too high for other (51% > 40%)",
+      "walletTier": "ELITE",
+      "marketCategory": "other",
+      "timestamp": "2026-10-10T19:40:52.340Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Spread: FC Bayern München (-2.5)",
+      "reason": "Entry price too high for other (52% > 40%)",
+      "walletTier": "ELITE",
+      "marketCategory": "other",
+      "timestamp": "2026-10-10T19:46:38.273Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Arizona vs. West Virginia",
+      "reason": "Market already closed/resolved on Gamma",
+      "marketCategory": "sports_binary",
+      "timestamp": "2026-10-10T19:50:49.183Z"
     }
   ],
   "tradeHistory": [
@@ -2734,9 +2814,9 @@
     "success": true,
     "overview": {
       "totalFactorsTracked": 13,
-      "totalSignalsProcessed": 16507,
+      "totalSignalsProcessed": 16529,
       "overallWinRate": 55,
-      "pendingSignals": 398
+      "pendingSignals": 397
     },
     "walletEdge": {
       "totalTracked": 500,
@@ -2858,13 +2938,13 @@
         "optimizedAt": "2026-10-10T19:01:24.425Z"
       },
       "lastMinute6h": {
-        "wins": 1130,
+        "wins": 1131,
         "losses": 893,
         "winRate": 56,
-        "weight": 1.2,
-        "lastUpdated": "2026-10-10T19:15:33.147Z",
-        "previousWeight": 1.26,
-        "optimizedAt": "2026-10-10T19:21:23.699Z"
+        "weight": 1.26,
+        "lastUpdated": "2026-10-10T19:54:46.264Z",
+        "previousWeight": 1.34,
+        "optimizedAt": "2026-10-10T19:56:47.114Z"
       },
       "lastMinute2h": {
         "wins": 547,
@@ -2876,31 +2956,31 @@
         "optimizedAt": "2026-10-10T08:25:46.772Z"
       },
       "whaleSize25k": {
-        "wins": 605,
+        "wins": 606,
         "losses": 503,
         "winRate": 55,
-        "weight": 1.19,
-        "lastUpdated": "2026-10-10T19:09:20.858Z",
-        "previousWeight": 1.25,
-        "optimizedAt": "2026-10-10T19:16:28.633Z"
+        "weight": 1.25,
+        "lastUpdated": "2026-10-10T19:54:19.367Z",
+        "previousWeight": 1.3250000000000002,
+        "optimizedAt": "2026-10-10T19:56:47.114Z"
       },
       "concentrated": {
-        "wins": 1618,
+        "wins": 1621,
         "losses": 1404,
         "winRate": 54,
         "weight": 1.23,
-        "lastUpdated": "2026-10-10T19:29:07.556Z",
+        "lastUpdated": "2026-10-10T19:54:19.367Z",
         "previousWeight": 1.31,
-        "optimizedAt": "2026-10-10T19:31:13.321Z"
+        "optimizedAt": "2026-10-10T19:56:47.114Z"
       },
       "whaleSize15k": {
-        "wins": 1130,
-        "losses": 907,
-        "winRate": 55,
-        "weight": 1.19,
-        "lastUpdated": "2026-10-10T18:44:39.238Z",
-        "previousWeight": 1.25,
-        "optimizedAt": "2026-10-10T18:56:56.089Z"
+        "wins": 1133,
+        "losses": 908,
+        "winRate": 56,
+        "weight": 1.26,
+        "lastUpdated": "2026-10-10T19:54:11.909Z",
+        "previousWeight": 1.34,
+        "optimizedAt": "2026-10-10T19:56:47.114Z"
       },
       "freshWallet": {
         "wins": 138,
@@ -2912,31 +2992,31 @@
         "optimizedAt": "2026-10-10T17:46:21.725Z"
       },
       "strongWallet": {
-        "wins": 1616,
-        "losses": 1190,
+        "wins": 1619,
+        "losses": 1191,
         "winRate": 58,
-        "weight": 1.23,
-        "lastUpdated": "2026-10-10T19:15:33.147Z",
-        "previousWeight": 1.29,
-        "optimizedAt": "2026-10-10T19:21:23.699Z"
+        "weight": 1.29,
+        "lastUpdated": "2026-10-10T19:54:46.264Z",
+        "previousWeight": 1.3699999999999999,
+        "optimizedAt": "2026-10-10T19:56:47.114Z"
       },
       "eliteWallet": {
         "wins": 615,
-        "losses": 419,
+        "losses": 420,
         "winRate": 59,
         "weight": 1.24,
-        "lastUpdated": "2026-10-10T19:24:08.869Z",
+        "lastUpdated": "2026-10-10T19:44:39.688Z",
         "previousWeight": 1.3,
-        "optimizedAt": "2026-10-10T19:31:13.321Z"
+        "optimizedAt": "2026-10-10T19:50:58.795Z"
       },
       "sportsMarket": {
-        "wins": 1403,
-        "losses": 1218,
+        "wins": 1409,
+        "losses": 1220,
         "winRate": 54,
         "weight": 1.23,
-        "lastUpdated": "2026-10-10T19:29:07.556Z",
+        "lastUpdated": "2026-10-10T19:54:46.264Z",
         "previousWeight": 1.31,
-        "optimizedAt": "2026-10-10T19:31:13.321Z"
+        "optimizedAt": "2026-10-10T19:56:47.114Z"
       },
       "cryptoMarket": {
         "wins": 34,
@@ -3010,11 +3090,11 @@
   "learningInsights": {
     "success": true,
     "systemPerformance": {
-      "totalSignalsProcessed": 16507,
-      "wins": 9131,
-      "losses": 7376,
+      "totalSignalsProcessed": 16529,
+      "wins": 9148,
+      "losses": 7381,
       "winRate": 55,
-      "pendingSignals": 398
+      "pendingSignals": 397
     },
     "insights": {
       "bestFactors": [
@@ -3075,7 +3155,7 @@
         "factor": "eliteWallet",
         "winRate": 59,
         "wins": 615,
-        "losses": 419,
+        "losses": 420,
         "weight": 1.24,
         "performance": "AVERAGE"
       },
@@ -3090,9 +3170,9 @@
       {
         "factor": "strongWallet",
         "winRate": 58,
-        "wins": 1616,
-        "losses": 1190,
-        "weight": 1.23,
+        "wins": 1619,
+        "losses": 1191,
+        "weight": 1.29,
         "performance": "AVERAGE"
       },
       {
@@ -3106,31 +3186,31 @@
       {
         "factor": "lastMinute6h",
         "winRate": 56,
-        "wins": 1130,
+        "wins": 1131,
         "losses": 893,
-        "weight": 1.2,
+        "weight": 1.26,
+        "performance": "AVERAGE"
+      },
+      {
+        "factor": "whaleSize15k",
+        "winRate": 56,
+        "wins": 1133,
+        "losses": 908,
+        "weight": 1.26,
         "performance": "AVERAGE"
       },
       {
         "factor": "whaleSize25k",
         "winRate": 55,
-        "wins": 605,
+        "wins": 606,
         "losses": 503,
-        "weight": 1.19,
-        "performance": "AVERAGE"
-      },
-      {
-        "factor": "whaleSize15k",
-        "winRate": 55,
-        "wins": 1130,
-        "losses": 907,
-        "weight": 1.19,
+        "weight": 1.25,
         "performance": "AVERAGE"
       },
       {
         "factor": "concentrated",
         "winRate": 54,
-        "wins": 1618,
+        "wins": 1621,
         "losses": 1404,
         "weight": 1.23,
         "performance": "AVERAGE"
@@ -3138,8 +3218,8 @@
       {
         "factor": "sportsMarket",
         "winRate": 54,
-        "wins": 1403,
-        "losses": 1218,
+        "wins": 1409,
+        "losses": 1220,
         "weight": 1.23,
         "performance": "AVERAGE"
       },
@@ -3195,12 +3275,12 @@
         "key": "all",
         "label": "Follow all signals",
         "side": "follow",
-        "settled": 9557,
-        "wins": 5286,
-        "losses": 4271,
-        "staked": 955700,
-        "pnl": 2360.73,
-        "roi": 0.2,
+        "settled": 9566,
+        "wins": 5292,
+        "losses": 4274,
+        "staked": 956600,
+        "pnl": 2465.71,
+        "roi": 0.3,
         "winRate": 55,
         "readyForAuto": true
       },
@@ -3221,12 +3301,12 @@
         "key": "high_score",
         "label": "High score (≥100)",
         "side": "follow",
-        "settled": 2418,
-        "wins": 1309,
+        "settled": 2420,
+        "wins": 1311,
         "losses": 1109,
-        "staked": 241800,
-        "pnl": -6444.09,
-        "roi": -2.7,
+        "staked": 242000,
+        "pnl": -6276.08,
+        "roi": -2.6,
         "winRate": 54,
         "readyForAuto": false
       },
@@ -3234,12 +3314,12 @@
         "key": "fade_favorites",
         "label": "Fade favorites (≥60¢)",
         "side": "fade",
-        "settled": 3311,
-        "wins": 971,
-        "losses": 2340,
-        "staked": 331100,
-        "pnl": -11809.23,
-        "roi": -3.6,
+        "settled": 3316,
+        "wins": 973,
+        "losses": 2343,
+        "staked": 331600,
+        "pnl": -11512.64,
+        "roi": -3.5,
         "winRate": 29,
         "readyForAuto": false
       },
@@ -3298,14 +3378,14 @@
     "settledCount": 199,
     "winRate": 48,
     "lastScan": {
-      "at": 1791660288365,
+      "at": 1791662114588,
       "scanned": 5,
       "sports": [
         "cfb",
+        "mlb",
         "nhl",
-        "nba",
         "nfl",
-        "mlb"
+        "nba"
       ],
       "found": 0,
       "newCount": 0
@@ -6776,12 +6856,12 @@
   "speed": {
     "success": true,
     "overall": {
-      "n": 205,
+      "n": 211,
       "avg_lag_sec": 298,
-      "lag_cost_c": 0.5,
-      "drift_5m_c": 0.5,
-      "drift_15m_c": -0.21,
-      "drift_60m_c": 0.84
+      "lag_cost_c": 0.44,
+      "drift_5m_c": 0.58,
+      "drift_15m_c": 0.02,
+      "drift_60m_c": -0.05
     },
     "byLag": [
       {
@@ -6792,21 +6872,21 @@
       },
       {
         "lag": "2-5m",
-        "n": 88,
-        "lag_cost_c": -0.07,
-        "drift_15m_c": 0.02
+        "n": 91,
+        "lag_cost_c": -0.12,
+        "drift_15m_c": 0.35
       },
       {
         "lag": "5-15m",
-        "n": 108,
-        "lag_cost_c": 1.03,
-        "drift_15m_c": -0.09
+        "n": 111,
+        "lag_cost_c": 0.96,
+        "drift_15m_c": 0.07
       }
     ],
     "settled": {
-      "n": 88,
-      "roi_at_whale": 14.2,
-      "roi_at_detect": 13.6
+      "n": 97,
+      "roi_at_whale": 14,
+      "roi_at_detect": 13.5
     },
     "read": "lag_cost_c = cents the price moved against us before we saw it; drift = movement after. roi_at_whale vs roi_at_detect = the value of being as fast as the whale."
   },
@@ -6851,7 +6931,7 @@
       }
     ],
     "hunt": {
-      "at": "2026-10-10T19:39:35.003Z",
+      "at": "2026-10-10T19:55:14.888Z",
       "directiveId": "ord_mv2spnnh",
       "sports": [
         "cfb"
@@ -6859,18 +6939,955 @@
       "minEdge": 3,
       "perSport": {
         "cfb": {
-          "markets": 32,
-          "oddsGames": 0,
-          "matched": 0,
-          "unmatched": 31
+          "markets": 31,
+          "oddsGames": 41,
+          "dkGames": 0,
+          "matched": 18,
+          "dkMatched": 0,
+          "unmatched": 9
         }
       },
-      "priced": 0,
-      "board": [],
-      "alsoRan": [],
+      "oddsApi": {
+        "at": "2026-10-10T19:55:13.053Z",
+        "ok": true,
+        "status": 200,
+        "key": "odds_lines:basketball_nba:h2h,spreads",
+        "remaining": "490",
+        "used": "10"
+      },
+      "priced": 18,
+      "board": [
+        {
+          "id": "cfb-tenn-ark-2026-10-10:1",
+          "sport": "cfb",
+          "marketSlug": "cfb-tenn-ark-2026-10-10",
+          "game": "Tennessee vs. Arkansas",
+          "team": "Arkansas",
+          "teamFull": "Arkansas Razorbacks",
+          "outcomeIndex": 1,
+          "startTime": "2026-10-10T20:15:00.000Z",
+          "vegasProb": 18.4,
+          "refSource": "books",
+          "books": 9,
+          "dkOdds": 425,
+          "dk": null,
+          "buyPrice": 17,
+          "midPrice": 16.5,
+          "spread": 0.01,
+          "edge": 1.4,
+          "volume": 7589,
+          "whale": null,
+          "verdict": "TRIM",
+          "reason": "Split 2-2 (margin -0.08)",
+          "margin": -0.08,
+          "votes": [
+            {
+              "agent": "GREED",
+              "vote": "ABSTAIN",
+              "conviction": 0,
+              "line": "No band history. Nothing to count yet."
+            },
+            {
+              "agent": "FOMO",
+              "vote": "NO",
+              "conviction": 0.4,
+              "line": "No whale money on this one. Boring."
+            },
+            {
+              "agent": "PANIC",
+              "vote": "YES",
+              "conviction": 0.2,
+              "line": "Nothing on fire. Fine. FINE."
+            },
+            {
+              "agent": "DOUBT",
+              "vote": "NO",
+              "conviction": 0.5,
+              "line": "no verified wallet, band n=0. Could be luck."
+            },
+            {
+              "agent": "QUANT",
+              "vote": "ABSTAIN",
+              "conviction": 0,
+              "line": "No independent price. Abstain."
+            },
+            {
+              "agent": "RISK",
+              "vote": "YES",
+              "conviction": 0.56,
+              "line": "Book at 4%. Room for it."
+            }
+          ],
+          "tiebreak": null,
+          "council": {
+            "v": [
+              [
+                "GREED",
+                "ABSTAIN",
+                0
+              ],
+              [
+                "FOMO",
+                "NO",
+                0.4
+              ],
+              [
+                "PANIC",
+                "YES",
+                0.2
+              ],
+              [
+                "DOUBT",
+                "NO",
+                0.5
+              ],
+              [
+                "QUANT",
+                "ABSTAIN",
+                0
+              ],
+              [
+                "RISK",
+                "YES",
+                0.56
+              ]
+            ],
+            "m": -0.08,
+            "verdict": "TRIM",
+            "tb": null,
+            "mode": "crew"
+          },
+          "qualifies": false
+        },
+        {
+          "id": "cfb-hawaii-arzst-2026-10-10:0",
+          "sport": "cfb",
+          "marketSlug": "cfb-hawaii-arzst-2026-10-10",
+          "game": "Hawai'i vs. Arizona State",
+          "team": "Hawai'i",
+          "teamFull": "Hawaii Rainbow Warriors",
+          "outcomeIndex": 0,
+          "startTime": "2026-10-11T02:30:00.000Z",
+          "vegasProb": 9.4,
+          "refSource": "books",
+          "books": 9,
+          "dkOdds": 1000,
+          "dk": null,
+          "buyPrice": 8,
+          "midPrice": 7.5,
+          "spread": 0.01,
+          "edge": 1.4,
+          "volume": 5253,
+          "whale": null,
+          "verdict": "TRIM",
+          "reason": "Split 2-2 (margin -0.08)",
+          "margin": -0.08,
+          "votes": [
+            {
+              "agent": "GREED",
+              "vote": "ABSTAIN",
+              "conviction": 0,
+              "line": "No band history. Nothing to count yet."
+            },
+            {
+              "agent": "FOMO",
+              "vote": "NO",
+              "conviction": 0.4,
+              "line": "No whale money on this one. Boring."
+            },
+            {
+              "agent": "PANIC",
+              "vote": "YES",
+              "conviction": 0.2,
+              "line": "Nothing on fire. Fine. FINE."
+            },
+            {
+              "agent": "DOUBT",
+              "vote": "NO",
+              "conviction": 0.5,
+              "line": "no verified wallet, band n=0. Could be luck."
+            },
+            {
+              "agent": "QUANT",
+              "vote": "ABSTAIN",
+              "conviction": 0,
+              "line": "No independent price. Abstain."
+            },
+            {
+              "agent": "RISK",
+              "vote": "YES",
+              "conviction": 0.56,
+              "line": "Book at 4%. Room for it."
+            }
+          ],
+          "tiebreak": null,
+          "council": {
+            "v": [
+              [
+                "GREED",
+                "ABSTAIN",
+                0
+              ],
+              [
+                "FOMO",
+                "NO",
+                0.4
+              ],
+              [
+                "PANIC",
+                "YES",
+                0.2
+              ],
+              [
+                "DOUBT",
+                "NO",
+                0.5
+              ],
+              [
+                "QUANT",
+                "ABSTAIN",
+                0
+              ],
+              [
+                "RISK",
+                "YES",
+                0.56
+              ]
+            ],
+            "m": -0.08,
+            "verdict": "TRIM",
+            "tb": null,
+            "mode": "crew"
+          },
+          "qualifies": false
+        },
+        {
+          "id": "cfb-kan-utah-2026-10-10:0",
+          "sport": "cfb",
+          "marketSlug": "cfb-kan-utah-2026-10-10",
+          "game": "Kansas vs. Utah",
+          "team": "Kansas",
+          "teamFull": "Kansas Jayhawks",
+          "outcomeIndex": 0,
+          "startTime": "2026-10-11T00:00:00.000Z",
+          "vegasProb": 15.9,
+          "refSource": "books",
+          "books": 8,
+          "dkOdds": 500,
+          "dk": null,
+          "buyPrice": 15,
+          "midPrice": 14.5,
+          "spread": 0.01,
+          "edge": 0.9,
+          "volume": 468,
+          "whale": null,
+          "verdict": "TRIM",
+          "reason": "Split 2-2 (margin -0.08)",
+          "margin": -0.08,
+          "votes": [
+            {
+              "agent": "GREED",
+              "vote": "ABSTAIN",
+              "conviction": 0,
+              "line": "No band history. Nothing to count yet."
+            },
+            {
+              "agent": "FOMO",
+              "vote": "NO",
+              "conviction": 0.4,
+              "line": "No whale money on this one. Boring."
+            },
+            {
+              "agent": "PANIC",
+              "vote": "YES",
+              "conviction": 0.2,
+              "line": "Nothing on fire. Fine. FINE."
+            },
+            {
+              "agent": "DOUBT",
+              "vote": "NO",
+              "conviction": 0.5,
+              "line": "no verified wallet, band n=0. Could be luck."
+            },
+            {
+              "agent": "QUANT",
+              "vote": "ABSTAIN",
+              "conviction": 0,
+              "line": "No independent price. Abstain."
+            },
+            {
+              "agent": "RISK",
+              "vote": "YES",
+              "conviction": 0.56,
+              "line": "Book at 4%. Room for it."
+            }
+          ],
+          "tiebreak": null,
+          "council": {
+            "v": [
+              [
+                "GREED",
+                "ABSTAIN",
+                0
+              ],
+              [
+                "FOMO",
+                "NO",
+                0.4
+              ],
+              [
+                "PANIC",
+                "YES",
+                0.2
+              ],
+              [
+                "DOUBT",
+                "NO",
+                0.5
+              ],
+              [
+                "QUANT",
+                "ABSTAIN",
+                0
+              ],
+              [
+                "RISK",
+                "YES",
+                0.56
+              ]
+            ],
+            "m": -0.08,
+            "verdict": "TRIM",
+            "tb": null,
+            "mode": "crew"
+          },
+          "qualifies": false
+        },
+        {
+          "id": "cfb-ga-ala-2026-10-10:0",
+          "sport": "cfb",
+          "marketSlug": "cfb-ga-ala-2026-10-10",
+          "game": "Georgia vs. Alabama",
+          "team": "Georgia",
+          "teamFull": "Georgia Bulldogs",
+          "outcomeIndex": 0,
+          "startTime": "2026-10-10T23:30:00.000Z",
+          "vegasProb": 46.8,
+          "refSource": "books",
+          "books": 9,
+          "dkOdds": 105,
+          "dk": null,
+          "buyPrice": 46,
+          "midPrice": 45.5,
+          "spread": 0.01,
+          "edge": 0.8,
+          "volume": 97682,
+          "whale": null,
+          "verdict": "TRIM",
+          "reason": "Split 2-2 (margin -0.08)",
+          "margin": -0.08,
+          "votes": [
+            {
+              "agent": "GREED",
+              "vote": "ABSTAIN",
+              "conviction": 0,
+              "line": "No band history. Nothing to count yet."
+            },
+            {
+              "agent": "FOMO",
+              "vote": "NO",
+              "conviction": 0.4,
+              "line": "No whale money on this one. Boring."
+            },
+            {
+              "agent": "PANIC",
+              "vote": "YES",
+              "conviction": 0.2,
+              "line": "Nothing on fire. Fine. FINE."
+            },
+            {
+              "agent": "DOUBT",
+              "vote": "NO",
+              "conviction": 0.5,
+              "line": "no verified wallet, band n=0. Could be luck."
+            },
+            {
+              "agent": "QUANT",
+              "vote": "ABSTAIN",
+              "conviction": 0,
+              "line": "No independent price. Abstain."
+            },
+            {
+              "agent": "RISK",
+              "vote": "YES",
+              "conviction": 0.56,
+              "line": "Book at 4%. Room for it."
+            }
+          ],
+          "tiebreak": null,
+          "council": {
+            "v": [
+              [
+                "GREED",
+                "ABSTAIN",
+                0
+              ],
+              [
+                "FOMO",
+                "NO",
+                0.4
+              ],
+              [
+                "PANIC",
+                "YES",
+                0.2
+              ],
+              [
+                "DOUBT",
+                "NO",
+                0.5
+              ],
+              [
+                "QUANT",
+                "ABSTAIN",
+                0
+              ],
+              [
+                "RISK",
+                "YES",
+                0.56
+              ]
+            ],
+            "m": -0.08,
+            "verdict": "TRIM",
+            "tb": null,
+            "mode": "crew"
+          },
+          "qualifies": false
+        },
+        {
+          "id": "cfb-uab-mphs-2026-10-10:0",
+          "sport": "cfb",
+          "marketSlug": "cfb-uab-mphs-2026-10-10",
+          "game": "UAB vs. Memphis",
+          "team": "UAB",
+          "teamFull": "UAB Blazers",
+          "outcomeIndex": 0,
+          "startTime": "2026-10-10T23:00:00.000Z",
+          "vegasProb": 16.7,
+          "refSource": "books",
+          "books": 9,
+          "dkOdds": 470,
+          "dk": null,
+          "buyPrice": 16,
+          "midPrice": 15.5,
+          "spread": 0.01,
+          "edge": 0.7,
+          "volume": 128,
+          "whale": null,
+          "verdict": "TRIM",
+          "reason": "Split 2-2 (margin -0.08)",
+          "margin": -0.08,
+          "votes": [
+            {
+              "agent": "GREED",
+              "vote": "ABSTAIN",
+              "conviction": 0,
+              "line": "No band history. Nothing to count yet."
+            },
+            {
+              "agent": "FOMO",
+              "vote": "NO",
+              "conviction": 0.4,
+              "line": "No whale money on this one. Boring."
+            },
+            {
+              "agent": "PANIC",
+              "vote": "YES",
+              "conviction": 0.2,
+              "line": "Nothing on fire. Fine. FINE."
+            },
+            {
+              "agent": "DOUBT",
+              "vote": "NO",
+              "conviction": 0.5,
+              "line": "no verified wallet, band n=0. Could be luck."
+            },
+            {
+              "agent": "QUANT",
+              "vote": "ABSTAIN",
+              "conviction": 0,
+              "line": "No independent price. Abstain."
+            },
+            {
+              "agent": "RISK",
+              "vote": "YES",
+              "conviction": 0.56,
+              "line": "Book at 4%. Room for it."
+            }
+          ],
+          "tiebreak": null,
+          "council": {
+            "v": [
+              [
+                "GREED",
+                "ABSTAIN",
+                0
+              ],
+              [
+                "FOMO",
+                "NO",
+                0.4
+              ],
+              [
+                "PANIC",
+                "YES",
+                0.2
+              ],
+              [
+                "DOUBT",
+                "NO",
+                0.5
+              ],
+              [
+                "QUANT",
+                "ABSTAIN",
+                0
+              ],
+              [
+                "RISK",
+                "YES",
+                0.56
+              ]
+            ],
+            "m": -0.08,
+            "verdict": "TRIM",
+            "tb": null,
+            "mode": "crew"
+          },
+          "qualifies": false
+        },
+        {
+          "id": "cfb-lsu-uk-2026-10-10:1",
+          "sport": "cfb",
+          "marketSlug": "cfb-lsu-uk-2026-10-10",
+          "game": "LSU vs. Kentucky",
+          "team": "Kentucky",
+          "teamFull": "Kentucky Wildcats",
+          "outcomeIndex": 1,
+          "startTime": "2026-10-10T23:00:00.000Z",
+          "vegasProb": 25.5,
+          "refSource": "books",
+          "books": 9,
+          "dkOdds": 275,
+          "dk": null,
+          "buyPrice": 25,
+          "midPrice": 24.5,
+          "spread": 0.01,
+          "edge": 0.5,
+          "volume": 2546,
+          "whale": null,
+          "verdict": "TRIM",
+          "reason": "Split 2-2 (margin -0.08)",
+          "margin": -0.08,
+          "votes": [
+            {
+              "agent": "GREED",
+              "vote": "ABSTAIN",
+              "conviction": 0,
+              "line": "No band history. Nothing to count yet."
+            },
+            {
+              "agent": "FOMO",
+              "vote": "NO",
+              "conviction": 0.4,
+              "line": "No whale money on this one. Boring."
+            },
+            {
+              "agent": "PANIC",
+              "vote": "YES",
+              "conviction": 0.2,
+              "line": "Nothing on fire. Fine. FINE."
+            },
+            {
+              "agent": "DOUBT",
+              "vote": "NO",
+              "conviction": 0.5,
+              "line": "no verified wallet, band n=0. Could be luck."
+            },
+            {
+              "agent": "QUANT",
+              "vote": "ABSTAIN",
+              "conviction": 0,
+              "line": "No independent price. Abstain."
+            },
+            {
+              "agent": "RISK",
+              "vote": "YES",
+              "conviction": 0.56,
+              "line": "Book at 4%. Room for it."
+            }
+          ],
+          "tiebreak": null,
+          "council": {
+            "v": [
+              [
+                "GREED",
+                "ABSTAIN",
+                0
+              ],
+              [
+                "FOMO",
+                "NO",
+                0.4
+              ],
+              [
+                "PANIC",
+                "YES",
+                0.2
+              ],
+              [
+                "DOUBT",
+                "NO",
+                0.5
+              ],
+              [
+                "QUANT",
+                "ABSTAIN",
+                0
+              ],
+              [
+                "RISK",
+                "YES",
+                0.56
+              ]
+            ],
+            "m": -0.08,
+            "verdict": "TRIM",
+            "tb": null,
+            "mode": "crew"
+          },
+          "qualifies": false
+        },
+        {
+          "id": "cfb-usc-pennst-2026-10-10:0",
+          "sport": "cfb",
+          "marketSlug": "cfb-usc-pennst-2026-10-10",
+          "game": "USC vs. Penn State",
+          "team": "USC",
+          "teamFull": "USC Trojans",
+          "outcomeIndex": 0,
+          "startTime": "2026-10-10T23:30:00.000Z",
+          "vegasProb": 50.5,
+          "refSource": "books",
+          "books": 8,
+          "dkOdds": -115,
+          "dk": null,
+          "buyPrice": 50,
+          "midPrice": 49.5,
+          "spread": 0.01,
+          "edge": 0.5,
+          "volume": 47448,
+          "whale": null,
+          "verdict": "TRIM",
+          "reason": "Split 2-2 (margin -0.08)",
+          "margin": -0.08,
+          "votes": [
+            {
+              "agent": "GREED",
+              "vote": "ABSTAIN",
+              "conviction": 0,
+              "line": "No band history. Nothing to count yet."
+            },
+            {
+              "agent": "FOMO",
+              "vote": "NO",
+              "conviction": 0.4,
+              "line": "No whale money on this one. Boring."
+            },
+            {
+              "agent": "PANIC",
+              "vote": "YES",
+              "conviction": 0.2,
+              "line": "Nothing on fire. Fine. FINE."
+            },
+            {
+              "agent": "DOUBT",
+              "vote": "NO",
+              "conviction": 0.5,
+              "line": "no verified wallet, band n=0. Could be luck."
+            },
+            {
+              "agent": "QUANT",
+              "vote": "ABSTAIN",
+              "conviction": 0,
+              "line": "No independent price. Abstain."
+            },
+            {
+              "agent": "RISK",
+              "vote": "YES",
+              "conviction": 0.56,
+              "line": "Book at 4%. Room for it."
+            }
+          ],
+          "tiebreak": null,
+          "council": {
+            "v": [
+              [
+                "GREED",
+                "ABSTAIN",
+                0
+              ],
+              [
+                "FOMO",
+                "NO",
+                0.4
+              ],
+              [
+                "PANIC",
+                "YES",
+                0.2
+              ],
+              [
+                "DOUBT",
+                "NO",
+                0.5
+              ],
+              [
+                "QUANT",
+                "ABSTAIN",
+                0
+              ],
+              [
+                "RISK",
+                "YES",
+                0.56
+              ]
+            ],
+            "m": -0.08,
+            "verdict": "TRIM",
+            "tb": null,
+            "mode": "crew"
+          },
+          "qualifies": false
+        },
+        {
+          "id": "cfb-jmad-gas-2026-10-10:1",
+          "sport": "cfb",
+          "marketSlug": "cfb-jmad-gas-2026-10-10",
+          "game": "James Madison vs. Georgia Southern",
+          "team": "Georgia Southern",
+          "teamFull": "Georgia Southern Eagles",
+          "outcomeIndex": 1,
+          "startTime": "2026-10-10T23:30:00.000Z",
+          "vegasProb": 27.3,
+          "refSource": "books",
+          "books": 9,
+          "dkOdds": 250,
+          "dk": null,
+          "buyPrice": 27,
+          "midPrice": 26.5,
+          "spread": 0.01,
+          "edge": 0.3,
+          "volume": 159,
+          "whale": null,
+          "verdict": "TRIM",
+          "reason": "Split 2-2 (margin -0.08)",
+          "margin": -0.08,
+          "votes": [
+            {
+              "agent": "GREED",
+              "vote": "ABSTAIN",
+              "conviction": 0,
+              "line": "No band history. Nothing to count yet."
+            },
+            {
+              "agent": "FOMO",
+              "vote": "NO",
+              "conviction": 0.4,
+              "line": "No whale money on this one. Boring."
+            },
+            {
+              "agent": "PANIC",
+              "vote": "YES",
+              "conviction": 0.2,
+              "line": "Nothing on fire. Fine. FINE."
+            },
+            {
+              "agent": "DOUBT",
+              "vote": "NO",
+              "conviction": 0.5,
+              "line": "no verified wallet, band n=0. Could be luck."
+            },
+            {
+              "agent": "QUANT",
+              "vote": "ABSTAIN",
+              "conviction": 0,
+              "line": "No independent price. Abstain."
+            },
+            {
+              "agent": "RISK",
+              "vote": "YES",
+              "conviction": 0.56,
+              "line": "Book at 4%. Room for it."
+            }
+          ],
+          "tiebreak": null,
+          "council": {
+            "v": [
+              [
+                "GREED",
+                "ABSTAIN",
+                0
+              ],
+              [
+                "FOMO",
+                "NO",
+                0.4
+              ],
+              [
+                "PANIC",
+                "YES",
+                0.2
+              ],
+              [
+                "DOUBT",
+                "NO",
+                0.5
+              ],
+              [
+                "QUANT",
+                "ABSTAIN",
+                0
+              ],
+              [
+                "RISK",
+                "YES",
+                0.56
+              ]
+            ],
+            "m": -0.08,
+            "verdict": "TRIM",
+            "tb": null,
+            "mode": "crew"
+          },
+          "qualifies": false
+        }
+      ],
+      "dkBoard": [],
+      "alsoRan": [
+        {
+          "game": "Nevada vs. UTEP",
+          "team": "UTEP",
+          "vegasProb": 24.3,
+          "buyPrice": 24,
+          "edge": 0.3,
+          "startTime": "2026-10-10T23:00:00.000Z",
+          "dkOdds": 295
+        },
+        {
+          "game": "Coastal Carolina vs. Marshall",
+          "team": "Coastal Carolina",
+          "vegasProb": 37.2,
+          "buyPrice": 37,
+          "edge": 0.2,
+          "startTime": "2026-10-10T23:00:00.000Z",
+          "dkOdds": 154
+        },
+        {
+          "game": "Syracuse vs. Virginia",
+          "team": "Syracuse",
+          "vegasProb": 19,
+          "buyPrice": 19,
+          "edge": 0,
+          "startTime": "2026-10-10T23:30:00.000Z",
+          "dkOdds": 390
+        },
+        {
+          "game": "Louisiana vs. Louisiana Tech",
+          "team": "Louisiana Tech",
+          "vegasProb": 58,
+          "buyPrice": 58,
+          "edge": 0,
+          "startTime": "2026-10-10T23:30:00.000Z",
+          "dkOdds": -155
+        },
+        {
+          "game": "Air Force vs. Northern Illinois",
+          "team": "Air Force",
+          "vegasProb": 71.8,
+          "buyPrice": 72,
+          "edge": -0.2,
+          "startTime": "2026-10-10T23:30:00.000Z",
+          "dkOdds": -298
+        },
+        {
+          "game": "Minnesota vs. Purdue",
+          "team": "Purdue",
+          "vegasProb": 43.8,
+          "buyPrice": 44,
+          "edge": -0.2,
+          "startTime": "2026-10-11T00:00:00.000Z",
+          "dkOdds": 120
+        },
+        {
+          "game": "San Diego State vs. Oregon State",
+          "team": "San Diego State",
+          "vegasProb": 14.7,
+          "buyPrice": 15,
+          "edge": -0.3,
+          "startTime": "2026-10-10T22:00:00.000Z",
+          "dkOdds": 525
+        },
+        {
+          "game": "North Dakota State vs. UNLV",
+          "team": "UNLV",
+          "vegasProb": 45.7,
+          "buyPrice": 46,
+          "edge": -0.3,
+          "startTime": "2026-10-10T23:00:00.000Z",
+          "dkOdds": 110
+        },
+        {
+          "game": "Boise State vs. Fresno State",
+          "team": "Fresno State",
+          "vegasProb": 26.7,
+          "buyPrice": 27,
+          "edge": -0.3,
+          "startTime": "2026-10-11T02:30:00.000Z",
+          "dkOdds": 250
+        },
+        {
+          "game": "San Diego State vs. Oregon State",
+          "team": "Oregon State",
+          "vegasProb": 85.3,
+          "buyPrice": 86,
+          "edge": -0.7,
+          "startTime": "2026-10-10T22:00:00.000Z",
+          "dkOdds": -750
+        },
+        {
+          "game": "North Dakota State vs. UNLV",
+          "team": "North Dakota State",
+          "vegasProb": 54.3,
+          "buyPrice": 55,
+          "edge": -0.7,
+          "startTime": "2026-10-10T23:00:00.000Z",
+          "dkOdds": -130
+        },
+        {
+          "game": "Boise State vs. Fresno State",
+          "team": "Boise State",
+          "vegasProb": 73.3,
+          "buyPrice": 74,
+          "edge": -0.7,
+          "startTime": "2026-10-11T02:30:00.000Z",
+          "dkOdds": -310
+        }
+      ],
       "counts": {
         "APPROVE": 0,
-        "TRIM": 0,
+        "TRIM": 8,
         "VETO": 0
       },
       "queued": []
@@ -6896,6 +7913,14 @@
       "mlb",
       "nhl",
       "ncaab"
-    ]
+    ],
+    "oddsApi": {
+      "at": "2026-10-10T19:55:13.053Z",
+      "ok": true,
+      "status": 200,
+      "key": "odds_lines:basketball_nba:h2h,spreads",
+      "remaining": "490",
+      "used": "10"
+    }
   }
 }
