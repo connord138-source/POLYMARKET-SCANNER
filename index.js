@@ -19,6 +19,7 @@ import {
   computeFavoritesExperiment
 } from "./src/autotrader.js";
 import { runForge, maybeRunForge, getForgeReport } from "./src/forge.js";
+import { logSignalWallets, backfillWalletLedger, topWallets } from "./src/wallet-ledger.js";
 import {
   getCouncilStats, getCouncilFeed, leaderboard as councilLeaderboard
 } from "./src/council.js";
@@ -521,6 +522,9 @@ async function storeSignalForLearning(env, signal, factors, wallets) {
     }
     
     await d1InsertSignal(env, signal, detectMarketType(signal.marketTitle));  // guarded
+    // Point-in-time wallet ledger: which wallets were in this signal, scored
+    // against their record as of now (src/wallet-ledger.js). Guarded.
+    await logSignalWallets(env, { ...signal, factors, wallets });
 
     console.log(`Stored signal for learning: ${signal.id}`);
   } catch (e) {
@@ -4691,6 +4695,8 @@ export default {
           updatedAt: stats.updatedAt || null,
           recent: feed,
         });
+      }
+
       // Strategy Forge: latest walk-forward report / force a run.
       if (path === "/forge/report" && request.method === "GET") {
         return atJson(await getForgeReport(env));
@@ -4699,6 +4705,14 @@ export default {
         let overrides = {};
         try { overrides = await request.json(); } catch (e) {}
         return atJson(await runForge(env, overrides || {}));
+      }
+
+      // Point-in-time wallet ledger: wallets ranked by skill (win rate minus
+      // average entry price) over their settled signals.
+      if (path === "/wallets/ledger" && request.method === "GET") {
+        const limit = Math.min(parseInt(url.searchParams.get("limit") || "25"), 100);
+        const minN = Math.max(parseInt(url.searchParams.get("minN") || "10"), 1);
+        return atJson({ success: true, minN, wallets: await topWallets(env, limit, minN) });
       }
 
       // Get open positions
@@ -6744,6 +6758,8 @@ export default {
       // (e.g. signals_log rows written before the DB binding existed).
       try {
         cronStatus.signalBackfill = await d1BackfillSignalOutcomes(env, 25);
+        try { cronStatus.walletLedger = await backfillWalletLedger(env, 150); }
+        catch (e) { cronStatus.walletLedger = { error: e.message }; }
       } catch (e) {
         cronStatus.signalBackfill = { error: e.message };
       }
