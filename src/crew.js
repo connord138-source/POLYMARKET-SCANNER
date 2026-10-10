@@ -216,22 +216,33 @@ function etYmd(ms) {
   } catch (e) { return new Date(ms).toISOString().slice(0, 10).replace(/-/g, ''); }
 }
 
+// ESPN's edge rejects header-less requests (a Worker sends no User-Agent),
+// so present as a browser and record what each call returned.
+const ESPN_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36',
+  Accept: 'application/json, text/plain, */*',
+  Referer: 'https://www.espn.com/',
+};
 async function fetchDkLines(sport, nowMs) {
   const path = ESPN_PATH[sport];
-  if (!path) return [];
+  const diag = [];
+  if (!path) return { games: [], diag };
   const dates = [...new Set([etYmd(nowMs), etYmd(nowMs + 24 * 3600e3)])];
   const groups = ESPN_GROUPS[sport] || [null];
   const byId = new Map();
   for (const d of dates) {
     for (const g of groups) {
       try {
-        const res = await fetch(`https://site.api.espn.com/apis/site/v2/sports/${path}/scoreboard?dates=${d}&limit=400${g ? `&groups=${g}` : ''}`);
-        if (!res.ok) continue;
-        for (const game of parseEspnGames(await res.json())) byId.set(game.id, game);
-      } catch (e) {}
+        const res = await fetch(`https://site.api.espn.com/apis/site/v2/sports/${path}/scoreboard?dates=${d}&limit=400${g ? `&groups=${g}` : ''}`, { headers: ESPN_HEADERS });
+        if (!res.ok) { diag.push(`${d}/${g || '-'}: HTTP ${res.status}`); continue; }
+        const json = await res.json();
+        const parsed = parseEspnGames(json);
+        diag.push(`${d}/${g || '-'}: ${(json.events || []).length} events, ${parsed.length} pregame w/ DK`);
+        for (const game of parsed) byId.set(game.id, game);
+      } catch (e) { diag.push(`${d}/${g || '-'}: ${e.message}`); }
     }
   }
-  return [...byId.values()];
+  return { games: [...byId.values()], diag };
 }
 
 // ---------- pricing ----------
@@ -339,6 +350,7 @@ export function dkMoneyline(dk) {
 export function buildCandidates(sport, markets, oddsGames, nowMs = Date.now(), dkGames = []) {
   const out = [];
   let matched = 0, unmatched = 0, skipped = 0, dkMatched = 0;
+  const unmatchedGames = [];
   for (const m of markets || []) {
     const startMs = Date.parse(String(m.gameStartTime || m.endDate || '').replace(' ', 'T').replace(/\+00$/, 'Z'));
     if (!startMs || startMs - nowMs < PREGAME_MIN_MS || startMs - nowMs > HORIZON_MS || m.closed) { skipped++; continue; }
@@ -348,7 +360,7 @@ export function buildCandidates(sport, markets, oddsGames, nowMs = Date.now(), d
     const cons = ob ? consensusMoneyline(ob.g) : null;
     const db = matchGame(outcomes, startMs, dkGames, g => g.away.name, g => g.home.name, g => g.startMs);
     const dkMl = db ? dkMoneyline(db.g.dk) : null;
-    if (!cons && !dkMl) { unmatched++; continue; }
+    if (!cons && !dkMl) { unmatched++; if (unmatchedGames.length < 12) unmatchedGames.push(m.question || outcomes.join(' vs. ')); continue; }
     matched++;
     if (dkMl) dkMatched++;
     for (let i = 0; i < 2; i++) {
@@ -398,7 +410,7 @@ export function buildCandidates(sport, markets, oddsGames, nowMs = Date.now(), d
       });
     }
   }
-  return { candidates: out, matched, unmatched, skipped, dkMatched };
+  return { candidates: out, matched, unmatched, skipped, dkMatched, unmatchedGames };
 }
 
 async function fetchSportMoneylines(sport, nowMs) {
@@ -502,19 +514,26 @@ export async function runCrewHunt(env, deps, nowMs = Date.now()) {
     getBotPerformance(env).catch(() => ({})), getCouncilStats(env),
   ]);
 
+  // Odds API is a paid/limited feed; when it's nearly spent, price off
+  // DraftKings (ESPN, free) alone rather than burn the last credits.
+  const oddsStatus = await kvJson(env, 'odds_api_status');
+  const creditsLeft = oddsStatus && oddsStatus.remaining != null ? parseInt(oddsStatus.remaining, 10) : null;
+  const useOddsApi = !(creditsLeft !== null && !isNaN(creditsLeft) && creditsLeft < 150);
+
   const perSport = {};
   let candidates = [];
   for (const sport of directive.sports.filter(s => SPORT_TAG[s])) {
     try {
-      const [markets, odds, dkGames] = await Promise.all([
+      const [markets, odds, dk] = await Promise.all([
         fetchSportMoneylines(sport, nowMs),
-        Promise.resolve(getGameOdds(env, SPORT_KEY_MAP[sport], 'h2h,spreads')).catch(() => null),
+        useOddsApi ? Promise.resolve(getGameOdds(env, SPORT_KEY_MAP[sport], 'h2h,spreads')).catch(() => null) : null,
         fetchDkLines(sport, nowMs),
       ]);
-      const built = buildCandidates(sport, markets, odds || [], nowMs, dkGames);
+      const built = buildCandidates(sport, markets, odds || [], nowMs, dk.games);
       perSport[sport] = {
-        markets: markets.length, oddsGames: (odds || []).length, dkGames: dkGames.length,
+        markets: markets.length, oddsGames: (odds || []).length, dkGames: dk.games.length,
         matched: built.matched, dkMatched: built.dkMatched, unmatched: built.unmatched,
+        unmatchedGames: built.unmatchedGames, dkFeed: dk.diag,
       };
       candidates.push(...built.candidates);
     } catch (e) {
