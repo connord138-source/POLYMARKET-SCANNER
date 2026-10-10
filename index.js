@@ -19,6 +19,9 @@ import {
   computeFavoritesExperiment
 } from "./src/autotrader.js";
 import {
+  getCouncilStats, getCouncilFeed, leaderboard as councilLeaderboard
+} from "./src/council.js";
+import {
   getFactorStats as atGetFactorStats, getAIRecommendation,
   getFactorCombos, getDiscoveredPatterns
 } from "./src/at-learning.js";
@@ -4673,6 +4676,21 @@ export default {
         return atJson(result);
       }
       
+      // Council: "Who called it?" leaderboard, chair verdict ledger, recent sessions.
+      if (path === "/autotrader/council" && request.method === "GET") {
+        const limit = Math.min(parseInt(url.searchParams.get("limit") || "20"), 60);
+        const [stats, feed, cfg] = await Promise.all([getCouncilStats(env), getCouncilFeed(env, limit), getAutotraderConfig(env)]);
+        return atJson({
+          success: true,
+          mode: cfg.councilMode || "shadow",
+          enabled: cfg.councilEnabled !== false,
+          leaderboard: councilLeaderboard(stats),
+          chair: stats.chair || {},
+          updatedAt: stats.updatedAt || null,
+          recent: feed,
+        });
+      }
+
       // Get open positions
       if (path === "/autotrader/positions") {
         const positions = await getOpenPositions(env);
