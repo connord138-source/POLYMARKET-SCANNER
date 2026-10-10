@@ -20,6 +20,7 @@ import {
   compactSession, recordCouncilOutcome, applyOutcomeToStats,
 } from './council.js';
 import { bucketSignal, matchesFilter } from './forge.js';
+import { CREW_KEYS, appendCrewChat, fetchMoneylineQuote } from './crew.js';
 
 const GAMMA_API = 'https://gamma-api.polymarket.com';
 const CLOB_API = 'https://clob.polymarket.com';
@@ -559,6 +560,14 @@ const DEFAULT_CONFIG = {
   // settling opportunities regardless, so the lane still builds its record.
   vegasEdgeRequireProven: true,
   vegasEdgeProvenMinSettled: 30,
+  // CREW HUNT (Agent Crew orders, src/crew.js): picks the operator's ordered
+  // hunt queued after a council debate. Paper only, own lane
+  // (strategySource 'crew_hunt'), hold to resolution, re-checked at the live
+  // ask. Never counted in graduation / go-live / favorites.
+  crewHuntEntries: true,
+  crewBetSize: 5,          // APPROVE size; a split (TRIM) vote bets half
+  crewMaxPerDay: 6,
+  crewMinEdge: 3,          // pts of devigged-consensus edge at the ask
   // Forge lane: paper-trade signals matching strategies the Strategy Forge
   // PROMOTED (walk-forward + slippage + significance). Auto-demotes a rule
   // whose own live paper ledger goes negative.
@@ -2591,6 +2600,13 @@ export async function processSignals(env, signals) {
     console.error('Vegas edge entry error:', e.message);
   }
 
+  // CREW LANE: picks from the operator-ordered hunt (Agent Crew chat).
+  try {
+    await enterCrewPicks(env, config, dailyStats, stillOpen, results);
+  } catch (e) {
+    console.error('Crew pick entry error:', e.message);
+  }
+
   // FORGE LANE: third entry source — strategies the forge promoted.
   try {
     await enterForgeStrategies(env, config, dailyStats, stillOpen, results, signals);
@@ -2872,6 +2888,94 @@ async function enterVegasEdgeOpportunities(env, config, dailyStats, stillOpen, r
         JSON.stringify(Array.from(enteredSet).slice(-500)), { expirationTtl: 30 * 24 * 3600 });
     } catch (e) {}
   }
+}
+
+// Crew lane: open the picks the directed hunt queued (src/crew.js).
+async function enterCrewPicks(env, config, dailyStats, stillOpen, results) {
+  if (config.crewHuntEntries === false) return;
+  let queue = [];
+  try { queue = await env.SIGNALS_CACHE.get(CREW_KEYS.PICKS, { type: 'json' }) || []; } catch (e) { return; }
+  if (!queue.length) return;
+  const stat = { entered: 0, skips: {} };
+  results.crew = stat;
+  const skip = (why) => { stat.skips[why] = (stat.skips[why] || 0) + 1; };
+  if (!config.paperTradeMode) { skip('paper only'); return; }
+  if (config.dailyLossLimit && (dailyStats.realizedPnL || 0) <= -Math.abs(config.dailyLossLimit)) { skip('daily loss limit'); return; }
+
+  let enteredIds = [];
+  try { enteredIds = await env.SIGNALS_CACHE.get(CREW_KEYS.ENTERED, { type: 'json' }) || []; } catch (e) {}
+  const entered = new Set(enteredIds);
+  const remaining = [];
+  const now = Date.now();
+  const maxPerDay = config.crewMaxPerDay ?? 6;
+
+  for (const pick of queue) {
+    if (entered.has(pick.id)) continue;
+    const start = Date.parse(pick.startTime);
+    if (!start || start - now < 5 * 60 * 1000) { skip('game started'); continue; }   // dropped from the queue
+    if ((dailyStats.crewOpened || 0) >= maxPerDay) { skip('crew daily cap'); remaining.push(pick); continue; }
+    if (stillOpen.some(p => p.marketSlug === pick.marketSlug)) { skip('already holding market'); entered.add(pick.id); continue; }
+    const base = config.crewBetSize ?? 5;
+    const size = Math.round((pick.verdict === 'TRIM' ? base * 0.5 : base) * 100) / 100;
+    if (config.maxDailyTrades > 0 && dailyStats.tradesOpened >= config.maxDailyTrades) { skip('daily trade cap'); remaining.push(pick); continue; }
+    if (config.maxDailySpend > 0 && dailyStats.totalSpent + size > config.maxDailySpend) { skip('daily spend cap'); remaining.push(pick); continue; }
+    if (config.maxOpenPositions > 0 && stillOpen.length >= config.maxOpenPositions) { skip('max open positions'); remaining.push(pick); continue; }
+
+    // Honest fill: the edge must survive the live ask, not the hunt's snapshot.
+    const q = await fetchMoneylineQuote(pick.marketSlug, pick.outcomeIndex);
+    if (!q || q.closed || typeof q.buy !== 'number') { skip(!q ? 'quote miss' : q.closed ? 'market closed' : 'no price'); remaining.push(pick); continue; }
+    if (q.outcome && String(q.outcome).toLowerCase() !== String(pick.team).toLowerCase()) { skip('outcome mismatch'); entered.add(pick.id); continue; }
+    const liveEdge = Math.round((pick.vegasProb - q.buy) * 10) / 10;
+    if (q.buy <= 3 || q.buy >= 97 || liveEdge < (pick.minEdge ?? config.crewMinEdge ?? 3)) { skip('edge gone at live price'); remaining.push(pick); continue; }
+
+    const position = {
+      id: `at_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      marketSlug: pick.marketSlug,
+      marketTitle: `${pick.game} — ${pick.team}`,
+      marketType: 'sports',
+      signalSubType: 'moneyline',
+      direction: pick.team,
+      directionRaw: pick.team,
+      whaleAction: 'BUY',
+      entryPrice: q.buy,
+      size,
+      walletTier: 'CREW',
+      strategySource: 'crew_hunt',
+      crewPickId: pick.id,
+      vegasProbAtEntry: pick.vegasProb,
+      edgeAtEntry: liveEdge,
+      council: pick.council || null,
+      openedAt: new Date().toISOString(),
+      paperTrade: true,
+      marketCategory: 'sports_binary',
+      holdToResolution: true,
+      shares: size / (q.buy / 100),
+    };
+    stillOpen.push(position);
+    entered.add(pick.id);
+    stat.entered++;
+    dailyStats.tradesOpened++;
+    dailyStats.totalSpent += size;
+    dailyStats.crewOpened = (dailyStats.crewOpened || 0) + 1;
+    results.tradesPaperTraded = (results.tradesPaperTraded || 0) + 1;
+
+    const verdictWord = pick.verdict === 'TRIM' ? 'split vote, half size' : 'council approved';
+    await logDecision(env, {
+      type: 'PAPER_TRADE',
+      market: position.marketTitle,
+      size,
+      entryPrice: q.buy,
+      walletTier: 'CREW',
+      reason: `Crew pick: ${pick.team} ${q.buy}¢ vs books ${pick.vegasProb}% (+${liveEdge}), ${verdictWord} — hold to resolution`,
+      marketCategory: 'sports_binary',
+    });
+    await appendCrewChat(env, 'crew', `Placed: ${pick.team} moneyline @ ${q.buy}¢, $${size} paper (books ${pick.vegasProb}%, +${liveEdge} pts, ${verdictWord}).`);
+  }
+
+  try {
+    await env.SIGNALS_CACHE.put(CREW_KEYS.PICKS, JSON.stringify(remaining));
+    await env.SIGNALS_CACHE.put(CREW_KEYS.ENTERED, JSON.stringify(Array.from(entered).slice(-500)), { expirationTtl: 30 * 24 * 3600 });
+  } catch (e) {}
 }
 
 // ============================================================
