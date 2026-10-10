@@ -497,6 +497,33 @@ export function crewLedger(history, openPositions) {
   };
 }
 
+// Pure: every pregame Polymarket moneyline in the window with its live
+// prices (and the books consensus where matched). The Agent Crew page pairs
+// these with DraftKings lines fetched in the operator's browser: ESPN only
+// serves betting odds to US visitors, and the Worker's cron runs elsewhere.
+export function polyGameRows(markets, candidates, nowMs = Date.now()) {
+  const byId = new Map((candidates || []).map(c => [c.id, c]));
+  const rows = [];
+  for (const m of markets || []) {
+    const startMs = Date.parse(String(m.gameStartTime || m.endDate || '').replace(' ', 'T').replace(/\+00$/, 'Z'));
+    if (!startMs || startMs - nowMs < PREGAME_MIN_MS || startMs - nowMs > HORIZON_MS || m.closed) continue;
+    const outcomes = parseArr(m.outcomes) || [];
+    if (outcomes.length !== 2) continue;
+    const q0 = quoteOutcome(m, 0), q1 = quoteOutcome(m, 1);
+    const c0 = byId.get(`${m.slug}:0`), c1 = byId.get(`${m.slug}:1`);
+    rows.push({
+      slug: m.slug,
+      game: m.question || outcomes.join(' vs. '),
+      outcomes: outcomes.map(String),
+      startTime: new Date(startMs).toISOString(),
+      mid: [q0.mid, q1.mid],
+      spread: q0.spread,
+      books: [c0 && c0.refSource === 'books' ? c0.vegasProb : null, c1 && c1.refSource === 'books' ? c1.vegasProb : null],
+    });
+  }
+  return rows;
+}
+
 // ---------- the hunt (cron) ----------
 
 export async function runCrewHunt(env, deps, nowMs = Date.now()) {
@@ -522,6 +549,7 @@ export async function runCrewHunt(env, deps, nowMs = Date.now()) {
 
   const perSport = {};
   let candidates = [];
+  const polyGames = [];
   for (const sport of directive.sports.filter(s => SPORT_TAG[s])) {
     try {
       const [markets, odds, dk] = await Promise.all([
@@ -536,6 +564,7 @@ export async function runCrewHunt(env, deps, nowMs = Date.now()) {
         unmatchedGames: built.unmatchedGames, dkFeed: dk.diag,
       };
       candidates.push(...built.candidates);
+      polyGames.push(...polyGameRows(markets, built.candidates, nowMs).map(r => ({ ...r, sport })));
     } catch (e) {
       perSport[sport] = { error: e.message };
     }
@@ -622,6 +651,8 @@ export async function runCrewHunt(env, deps, nowMs = Date.now()) {
     priced,
     board: debated,
     dkBoard,
+    polyGames,
+    dkFairMaxSpread: DK_FAIR_MAX_SPREAD,
     alsoRan: tradeable.filter(c => !top.includes(c)).slice(0, 12)
       .map(c => ({ game: c.game, team: c.team, vegasProb: c.vegasProb, buyPrice: c.buyPrice, edge: c.edge, startTime: c.startTime, dkOdds: c.dkOdds })),
     counts,
