@@ -148,10 +148,20 @@ async function cachedOddsFetch(env, cacheKey, url, ttlSeconds) {
     } catch (e) { /* fall through to live fetch */ }
   }
   var response = await fetch(url);
+  // Record feed health so a dead key / spent quota is visible (crew chat,
+  // snapshot) instead of silently returning no games.
+  var status = {
+    at: new Date().toISOString(), ok: response.ok, status: response.status, key: cacheKey,
+    remaining: response.headers && response.headers.get ? response.headers.get("x-requests-remaining") : null,
+    used: response.headers && response.headers.get ? response.headers.get("x-requests-used") : null,
+  };
   if (!response.ok) {
     console.error("Odds API error " + response.status + " for " + cacheKey);
+    try { status.error = (await response.text()).slice(0, 200); } catch (e) { /* ignore */ }
+    if (env.SIGNALS_CACHE) { try { await env.SIGNALS_CACHE.put("odds_api_status", JSON.stringify(status)); } catch (e) { /* best-effort */ } }
     return null;
   }
+  if (env.SIGNALS_CACHE) { try { await env.SIGNALS_CACHE.put("odds_api_status", JSON.stringify(status)); } catch (e) { /* best-effort */ } }
   var data = await response.json();
   if (env.SIGNALS_CACHE && data) {
     try { await env.SIGNALS_CACHE.put(cacheKey, JSON.stringify(data), { expirationTtl: ttlSeconds }); } catch (e) { /* best-effort */ }
