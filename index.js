@@ -3884,10 +3884,26 @@ async function scanEdges(env) {
     return { skipped: "throttled", nextInMin: Math.ceil((14 * 60 * 1000 - (Date.now() - last.at)) / 60000) };
   }
 
+  // CREDIT GUARD: a full scan costs ~10 Odds API credits (5 sports x 2
+  // markets). On a small key that empties it in hours, so scale back as the
+  // remaining balance drops (the crew prices DraftKings via ESPN for free).
+  const oddsStatus = await env.SIGNALS_CACHE.get("odds_api_status", { type: "json" });
+  const remaining = oddsStatus && oddsStatus.remaining != null ? parseInt(oddsStatus.remaining, 10) : null;
+  let maxSports = 5;
+  if (remaining !== null && !isNaN(remaining)) {
+    if (remaining < 150) return { skipped: `odds credits low (${remaining} left)` };
+    if (remaining < 2000) {
+      if (last && last.at && (Date.now() - last.at) < 60 * 60 * 1000) {
+        return { skipped: "throttled (credit saver)", remaining, nextInMin: Math.ceil((60 * 60 * 1000 - (Date.now() - last.at)) / 60000) };
+      }
+      maxSports = 2;
+    }
+  }
+
   const sports = await detectActiveSports(env);
   const found = [];
   let scanned = 0;
-  for (const sport of sports.slice(0, 5)) {   // cap per scan for credit safety
+  for (const sport of sports.slice(0, maxSports)) {   // cap per scan for credit safety
     const cmp = await buildOddsComparison(env, sport);
     if (cmp.error) continue;
     scanned++;
