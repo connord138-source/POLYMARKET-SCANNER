@@ -72,7 +72,7 @@ function fomo(ctx) {
   if (f.has('sharpVsPublic')) { pts += 1; why.push('sharp vs public'); }
   const largest = signal.largestBet || 0;
   if (pts >= 2) return vote('FOMO', 'YES', pts / 6, `${why.join(', ')}. Everyone's in, GET IN.`);
-  if (pts === 0 && largest < 5000) return vote('FOMO', 'NO', 0.4, `One $${Math.round(largest / 1000)}k ticket and no crowd. Boring.`);
+  if (pts === 0 && largest < 5000) return vote('FOMO', 'NO', 0.4, largest > 0 ? `One $${Math.round(largest / 1000)}k ticket and no crowd. Boring.` : 'No whale money on this one. Boring.');
   return vote('FOMO', 'ABSTAIN', 0.1, why.length ? `Some heat: ${why.join(', ')}.` : 'Lukewarm flow.');
 }
 

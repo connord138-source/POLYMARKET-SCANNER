@@ -44,6 +44,12 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   `edge_profile_v2`) reads cold, so a recovering band can requalify.
 - `src/at-learning.js` — confidence scoring (`calculateConfidence`),
   factor stats, combos, pattern discovery.
+- `src/crew.js` — Agent Crew orders (chat box on the Agent Crew page):
+  `POST /agents/crew/orders` sets a focus ("Focus CFB today"); while active,
+  the cron hunts that sport's pregame moneylines (Gamma by sport tag) vs the
+  books' devigged consensus, the persona council debates the biggest gaps,
+  and non-vetoed picks are paper-entered by `enterCrewPicks` (own lane,
+  `strategySource: 'crew_hunt'`, filled at the ask). `GET /agents/crew`.
 - `src/odds.js` — The Odds API client (KV-cached; `ODDS_API_KEY` secret).
 - `src/gamma.js` — Gamma API settlement (`findGammaMarket` handles
   closed markets + multi-market moneyline preference).

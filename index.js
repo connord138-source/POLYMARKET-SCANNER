@@ -22,6 +22,7 @@ import { runForge, maybeRunForge, getForgeReport } from "./src/forge.js";
 import { logSignalWallets, backfillWalletLedger, topWallets } from "./src/wallet-ledger.js";
 import { trackSpeed, updateSpeed, speedReport } from "./src/speed.js";
 import { buildAgentHub } from "./src/agent-hub.js";
+import { handleCrewOrder, runCrewHunt, getCrewState } from "./src/crew.js";
 import {
   getCouncilStats, getCouncilFeed, leaderboard as councilLeaderboard
 } from "./src/council.js";
@@ -3623,6 +3624,7 @@ function atJson(data, status) {
 function requiresAdmin(path, url, method) {
   if (path.startsWith("/autotrader") && method === "POST") return true;
   if (path.startsWith("/forge") && method === "POST") return true;      // /forge/run spends D1 reads
+  if (path.startsWith("/agents/crew") && method === "POST") return true; // crew orders steer paper bets
   if (path.startsWith("/admin")) return true;                       // /admin/ping, /admin/reprocess-wallets, ...
   if (path.startsWith("/debug")) return true;                       // internal diagnostics
   if (path.startsWith("/learning/debug")) return true;              // internal diagnostics
@@ -4761,6 +4763,20 @@ export default {
         return atJson(await buildAgentHub(env, {
           getBotPerformance, getOpenPositions, getTradeLog, getTradeHistory, getDailyStats, getAutotraderConfig,
         }));
+      }
+
+      // Agent Crew orders: the chat box on the Agent Crew page.
+      if (path === "/agents/crew" && request.method === "GET") {
+        return atJson(await getCrewState(env, { getTradeHistory, getOpenPositions }));
+      }
+      if (path === "/agents/crew/orders" && request.method === "POST") {
+        const body = await request.json().catch(() => ({}));
+        const text = String(body.text || "").trim();
+        if (!text) return atJson({ success: false, error: "Empty order" }, 400);
+        if (text.length > 500) return atJson({ success: false, error: "Order too long (500 chars max)" }, 400);
+        const config = await getAutotraderConfig(env);
+        const r = await handleCrewOrder(env, text, config);
+        return atJson({ ...(await getCrewState(env, { getTradeHistory, getOpenPositions })), reply: r.reply, parsed: r.parsed });
       }
 
       // Speed telemetry: what the cron lag costs vs post-detection drift.
@@ -6797,6 +6813,18 @@ export default {
       } catch (e) {
         console.error("Edge scan error:", e.message);
         cronStatus.edgeScan = { error: e.message };
+      }
+      // CREW HUNT: when the operator has given the Agent Crew an order, price
+      // that sport's whole pregame slate vs the books, debate the biggest gaps,
+      // and queue picks for the auto-trader below (self-throttled ~15 min).
+      try {
+        cronStatus.crewHunt = await runCrewHunt(env, {
+          getAutotraderConfig, getGameOdds, getDailyStats, getOpenPositions, getBotPerformance,
+          signals: (result.signals || []).map(adaptSignalForAutotrader),
+        });
+      } catch (e) {
+        console.error("Crew hunt error:", e.message);
+        cronStatus.crewHunt = { error: e.message };
       }
       // Settle finished edge opportunities into the vegas_edge track record.
       try {
