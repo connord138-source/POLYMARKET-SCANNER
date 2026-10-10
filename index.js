@@ -18,6 +18,7 @@ import {
   computeExplorationGraduation, computeGoLiveMilestone, voidPhantomComplementExits, dedupeSettledHistory,
   computeFavoritesExperiment
 } from "./src/autotrader.js";
+import { runForge, maybeRunForge, getForgeReport } from "./src/forge.js";
 import {
   getCouncilStats, getCouncilFeed, leaderboard as councilLeaderboard
 } from "./src/council.js";
@@ -3606,6 +3607,7 @@ function atJson(data, status) {
 
 function requiresAdmin(path, url, method) {
   if (path.startsWith("/autotrader") && method === "POST") return true;
+  if (path.startsWith("/forge") && method === "POST") return true;      // /forge/run spends D1 reads
   if (path.startsWith("/admin")) return true;                       // /admin/ping, /admin/reprocess-wallets, ...
   if (path.startsWith("/debug")) return true;                       // internal diagnostics
   if (path.startsWith("/learning/debug")) return true;              // internal diagnostics
@@ -4689,6 +4691,14 @@ export default {
           updatedAt: stats.updatedAt || null,
           recent: feed,
         });
+      // Strategy Forge: latest walk-forward report / force a run.
+      if (path === "/forge/report" && request.method === "GET") {
+        return atJson(await getForgeReport(env));
+      }
+      if (path === "/forge/run" && request.method === "POST") {
+        let overrides = {};
+        try { overrides = await request.json(); } catch (e) {}
+        return atJson(await runForge(env, overrides || {}));
       }
 
       // Get open positions
@@ -6773,6 +6783,14 @@ export default {
         cronStatus.optimization = optimizeResults;
       }
       
+      // Strategy Forge: walk-forward backtest of filter combos over D1
+      // settled signals. Self-throttled to once per 24h.
+      try {
+        cronStatus.forge = await maybeRunForge(env);
+      } catch (e) {
+        cronStatus.forge = { error: e.message };
+      }
+
       cronStatus.completedAt = new Date().toISOString();
       
     } catch (error) {
