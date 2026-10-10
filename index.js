@@ -20,6 +20,7 @@ import {
 } from "./src/autotrader.js";
 import { runForge, maybeRunForge, getForgeReport } from "./src/forge.js";
 import { logSignalWallets, backfillWalletLedger, topWallets } from "./src/wallet-ledger.js";
+import { trackSpeed, updateSpeed, speedReport } from "./src/speed.js";
 import {
   getCouncilStats, getCouncilFeed, leaderboard as councilLeaderboard
 } from "./src/council.js";
@@ -525,6 +526,8 @@ async function storeSignalForLearning(env, signal, factors, wallets) {
     // Point-in-time wallet ledger: which wallets were in this signal, scored
     // against their record as of now (src/wallet-ledger.js). Guarded.
     await logSignalWallets(env, { ...signal, factors, wallets });
+    // Speed telemetry: lag + our side's live price at detection (src/speed.js).
+    await trackSpeed(env, signal, gammaSidePriceCents);
 
     console.log(`Stored signal for learning: ${signal.id}`);
   } catch (e) {
@@ -1611,6 +1614,13 @@ function investigationKeyFor(marketSlug, directionRaw) {
 // live outcome prices at investigation time. This is the honest baseline for
 // Brier - NOT the whale's impact-inflated entry fill (avgEntryPrice), which is
 // kept only for the ROI ledger.
+// Our side's live Gamma price in cents (null when unmatched). Used by speed telemetry.
+async function gammaSidePriceCents(marketSlug, directionRaw) {
+  var found = await findGammaMarket(marketSlug, directionRaw);
+  var b = gammaBaselineForDirection(found, directionRaw);
+  return (b.marketProb == null) ? null : Math.round(b.marketProb * 1000) / 10;
+}
+
 function gammaBaselineForDirection(found, directionRaw) {
   if (!found || !found.market) return { marketProb: null, winIndex: -1 };
   var names = parseGammaArray(found.market.outcomes);
@@ -4707,6 +4717,11 @@ export default {
         return atJson(await runForge(env, overrides || {}));
       }
 
+      // Speed telemetry: what the cron lag costs vs post-detection drift.
+      if (path === "/speed/report" && request.method === "GET") {
+        return atJson(await speedReport(env));
+      }
+
       // Point-in-time wallet ledger: wallets ranked by skill (win rate minus
       // average entry price) over their settled signals.
       if (path === "/wallets/ledger" && request.method === "GET") {
@@ -6789,6 +6804,8 @@ export default {
       const lineResults = await updateLineMovements(env);
       console.log(`Line movements: ${lineResults.updated} updated, ${lineResults.confirmed} confirmed`);
       cronStatus.lines = lineResults;
+      try { cronStatus.speed = await updateSpeed(env, gammaSidePriceCents, 40); }
+      catch (e) { cronStatus.speed = { error: e.message }; }
       
       // PHASE 3: Optimize factor weights periodically (every ~hour based on 5min cron)
       // Only run if we've processed some signals
