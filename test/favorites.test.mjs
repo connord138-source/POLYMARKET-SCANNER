@@ -4,7 +4,8 @@ import { processSignals, computeFavoritesExperiment } from "../src/autotrader.js
 
 let pass = 0, fail = 0;
 const check = (n, c, x) => { if (c) pass++; else { fail++; console.error("FAIL:", n, x ?? ""); } };
-const SLUG = "nfl-kc-lv-2026-10-06";
+// Slug date must stay in the future or Gate 3 ("event day passed") rejects it.
+const SLUG = `nfl-kc-lv-${new Date(Date.now() + 86400000).toISOString().slice(0, 10)}`;
 
 function makeEnv({ positions = [], daily = null, cfg = {} } = {}) {
   const today = new Date().toISOString().split("T")[0];

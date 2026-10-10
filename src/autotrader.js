@@ -2096,7 +2096,13 @@ export async function processSignals(env, signals) {
     if (config.useLearningData !== false) {
       try {
         // 1. Get AI confidence score from the learning system
-        const signalFactors = signal.scoreBreakdown?.map(f => f.factor || f.name) || [];
+        // signal.factors holds canonical factor names (set in the scan). The old
+        // `scoreBreakdown?.map(...)` threw on every signal — scoreBreakdown is a
+        // label->points OBJECT — so this whole block silently no-op'd and
+        // aiConfidence was null on every trade.
+        const signalFactors = Array.isArray(signal.factors) ? signal.factors
+          : Array.isArray(signal.scoreBreakdown) ? signal.scoreBreakdown.map(f => f.factor || f.name).filter(Boolean)
+          : [];
         const learningConfidence = await calculateConfidence(env, signalFactors, signal);
 
         if (learningConfidence && learningConfidence.confidence > 0) {
