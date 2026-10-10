@@ -47,6 +47,11 @@ const DIMENSIONS = {
   type: "COALESCE(market_type, 'other')",
   horizon: "CASE WHEN event_date IS NULL THEN 'unknown' WHEN julianday(event_date) - julianday(detected_at) <= 0.25 THEN '<6h' WHEN julianday(event_date) - julianday(detected_at) <= 2 THEN '6h-2d' ELSE '2d+' END",
   score: "CASE WHEN score >= 100 THEN '100+' WHEN score >= 60 THEN '60-99' ELSE '<60' END",
+  // Point-in-time skill of the signal's best wallet (src/wallet-ledger.js):
+  // win rate minus avg entry price over bets settled BEFORE this signal.
+  walletEdge: "CASE WHEN wallets_logged IS NOT 1 OR wallet_scored_at IS NULL THEN 'nodata' " +
+    "WHEN wallet_best_n < 10 THEN 'thin' WHEN wallet_best_excess >= 10 THEN 'sharp10+' " +
+    "WHEN wallet_best_excess >= 3 THEN 'edge3-10' WHEN wallet_best_excess <= -5 THEN 'square' ELSE 'flat' END",
 };
 
 // Pairs of dimensions (single dims are covered by grouping on one).
@@ -55,6 +60,7 @@ const COMBOS = [
   ['side', 'size'], ['side', 'wallets'], ['side', 'horizon'], ['side', 'score'],
   ['side', 'type'], ['size', 'wallets'], ['horizon', 'score'],
   ['side', 'size', 'wallets'],
+  ['walletEdge'], ['walletEdge', 'side'], ['walletEdge', 'size'], ['walletEdge', 'horizon'],
 ];
 
 export function buildForgeSql(dims, cfg, nowIso) {
