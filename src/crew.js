@@ -661,7 +661,15 @@ export async function runCrewHunt(env, deps, nowMs = Date.now()) {
   await env.SIGNALS_CACHE.put(CREW_KEYS.HUNT, JSON.stringify(hunt));
 
   // Report to the chat on the first sweep of an order, or when picks change.
-  if (!last || last.directiveId !== directive.id || fresh.length > 0) {
+  // Report on the first sweep of an order, when picks change, when pricing
+  // recovers from nothing, and at least hourly so the chat never goes stale.
+  const lastReport = last && (last.reportedAt || last.at);
+  const report = !last || last.directiveId !== directive.id || fresh.length > 0 ||
+    ((last.priced || 0) === 0 && priced > 0) || !lastReport || nowMs - Date.parse(lastReport) >= 60 * 60 * 1000;
+  if (report) hunt.reportedAt = hunt.at;
+  else hunt.reportedAt = lastReport;
+  await env.SIGNALS_CACHE.put(CREW_KEYS.HUNT, JSON.stringify(hunt));
+  if (report) {
     const label = directive.sports.map(s => SPORT_LABEL[s]).join(' + ');
     const am = (n) => (n > 0 ? `+${n}` : `${n}`);
     const feed = oddsApi && oddsApi.ok === false
