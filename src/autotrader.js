@@ -553,6 +553,11 @@ const DEFAULT_CONFIG = {
   // directly (paper), full size, filled at the live Gamma price, held to
   // resolution — the model the lane proved.
   vegasEdgeEntries: true,
+  // Only paper-enter Vegas edges once the pregame lane ledger
+  // (edge_lane_stats_v3) has proven itself. The scanner keeps booking and
+  // settling opportunities regardless, so the lane still builds its record.
+  vegasEdgeRequireProven: true,
+  vegasEdgeProvenMinSettled: 30,
   vegasEdgeMinEdge: 10,
   // v21.3.0 EXPLORATION FLOOR. Even with the 14d rolling edge window
   // (edge_profile_v2), a strict edgeNet>0 gate can deadlock: when every band
@@ -2602,6 +2607,17 @@ export async function processSignals(env, signals) {
 async function enterVegasEdgeOpportunities(env, config, dailyStats, stillOpen, results) {
   if (config.vegasEdgeEntries === false) return;
   if (!config.paperTradeMode) return;
+  if (config.vegasEdgeRequireProven !== false) {
+    let lane = null;
+    try { lane = await env.SIGNALS_CACHE.get('edge_lane_stats_v3', { type: 'json' }); } catch (e) {}
+    const o = lane && lane.overall;
+    const n = o ? (o.wins || 0) + (o.losses || 0) : 0;
+    const minN = config.vegasEdgeProvenMinSettled ?? 30;
+    if (!o || n < minN || !(o.pnl > 0)) {
+      results.vegasEdge = { entered: 0, skips: { [`lane unproven (n=${n}/${minN}, pnl=${o ? o.pnl : 0})`]: 1 } };
+      return;
+    }
+  }
   if (config.dailyLossLimit) {
     const lossLimit = -Math.abs(config.dailyLossLimit);
     if ((dailyStats.realizedPnL || 0) <= lossLimit) return;
