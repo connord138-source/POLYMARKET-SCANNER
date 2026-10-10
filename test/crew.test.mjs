@@ -2,7 +2,7 @@
 // queue, and open picks through the real processSignals.
 // Run with: node test/crew.test.mjs
 import {
-  parseDirective, consensusMoneyline, quoteOutcome, buildCandidates,
+  parseDirective, consensusMoneyline, quoteOutcome, buildCandidates, parseEspnGames, dkMoneyline,
   handleCrewOrder, runCrewHunt, getCrewState, crewLedger, CREW_KEYS,
 } from "../src/crew.js";
 import { processSignals } from "../src/autotrader.js";
@@ -45,6 +45,8 @@ const J = (env, k) => JSON.parse(env.store[k] || "null");
   const q = parseDirective("NFL and college football tomorrow, min edge 4, up to 3 bets");
   check("parse: two sports + knobs", q.sports.includes("nfl") && q.sports.includes("cfb") && q.minEdge === 4 && q.maxBets === 3, JSON.stringify(q));
   check("parse: politics unhuntable", parseDirective("focus on politics").kind === "unhuntable");
+  const o = parseDirective("you can file up to 12 bets a day. Focus only on CFB and no other areas until I tell you");
+  check("parse: operator's 2nd order = 12 bets, open-ended", o.kind === "focus" && o.maxBets === 12 && o.days === 30 && o.sports.join() === "cfb", JSON.stringify(o));
   check("parse: gibberish unknown", parseDirective("hello there").kind === "unknown");
 }
 
@@ -107,12 +109,50 @@ for (const [label, book] of [["UMass", "Massachusetts Minutemen"], ["Hawai'i", "
   check(`names: ${label} matches ${book}`, b.matched === 1, JSON.stringify(b.unmatched));
 }
 
+// ---------- DraftKings via ESPN ----------
+const espnLink = (path) => ({ href: `https://www.espn.com/x?wpsrc=413&preurl=${encodeURIComponent(`https://sportsbook.draftkings.com/event/1?outcomes=${path}`)}` });
+const espnEvent = (id, away, home, ml, sp, tot, startMs = START, state = "pre") => ({
+  id, date: iso(startMs), name: `${away} at ${home}`,
+  competitions: [{
+    date: iso(startMs), status: { type: { state } },
+    competitors: [{ homeAway: "home", team: { displayName: home, location: home.split(" ")[0] } }, { homeAway: "away", team: { displayName: away, location: away.split(" ")[0] } }],
+    odds: [{
+      provider: { name: "DraftKings" }, overUnder: tot,
+      moneyline: { home: { close: { odds: ml[1], link: espnLink("hml") } }, away: { close: { odds: ml[0], link: espnLink("aml") } } },
+      pointSpread: { home: { close: { line: sp[1], odds: "-110", link: espnLink("hsp") } }, away: { close: { line: sp[0], odds: "-110", link: espnLink("asp") } } },
+      total: { over: { close: { line: `o${tot}`, odds: "-110", link: espnLink("o") } }, under: { close: { line: `u${tot}`, odds: "-110", link: espnLink("u") } } },
+    }],
+  }],
+});
+const ESPN = { events: [
+  espnEvent("1", "James Madison Dukes", "Georgia Southern Eagles", ["-150", "+130"], ["-3.5", "+3.5"], 51.5),
+  espnEvent("2", "Miami (OH) RedHawks", "Ohio Bobcats", ["+120", "-140"], ["+2.5", "-2.5"], 44.5),
+  espnEvent("3", "Done U", "Over St", ["-110", "-110"], ["-1", "+1"], 40, NOW - 3600e3, "post"),
+] };
+{
+  const g = parseEspnGames(ESPN);
+  check("espn: pregame DK games only", g.length === 2 && g[0].home.name === "Georgia Southern Eagles", JSON.stringify(g.map(x => x.id)));
+  check("espn: DK odds + direct DK link", g[0].dk.ml.away.odds === -150 && g[0].dk.ml.away.link === "https://sportsbook.draftkings.com/event/1?outcomes=aml");
+  check("espn: spread + total", g[0].dk.spread.away.line === -3.5 && g[0].dk.total.line === 51.5 && g[0].dk.total.over.odds === -110);
+  const ml = dkMoneyline(g[0].dk);
+  check("dk: implied has vig, fair is no-vig", ml.away.implied === 60 && ml.away.fair < 60 && Math.abs(ml.away.fair + ml.home.fair - 100) < 0.2, JSON.stringify(ml));
+
+  // No Odds API (feed down): DK is the reference; JMU 62c mid on Polymarket vs DK -150 (60% implied) = value
+  const b = buildCandidates("cfb", MARKETS, [], NOW, g);
+  const jmu = b.candidates.find(c => c.team === "James Madison");
+  check("dk-only: game priced off DraftKings", b.matched === 2 && b.dkMatched === 2 && jmu.refSource === "dk" && jmu.vegasProb === jmu.dk.fair, JSON.stringify({ m: b.matched, ref: jmu && jmu.refSource }));
+  check("dk-only: DK value = Polymarket fair vs DK implied", jmu.dk.ev === Math.round((62 / 60 - 1) * 1000) / 10 && jmu.dk.link.endsWith("aml"), JSON.stringify(jmu.dk));
+  const gaso = b.candidates.find(c => c.team === "Georgia Southern");
+  check("dk-only: other side negative", gaso.dk.ev < 0 && gaso.dk.spread.line === 3.5);
+}
+
 // ---------- order -> hunt -> queue -> entry ----------
 function installFetch(markets, quoteOverride = {}) {
   globalThis.fetch = async (url) => {
     const u = String(url);
     const json = (b) => ({ ok: true, status: 200, json: async () => b, text: async () => JSON.stringify(b) });
     if (u.includes("gamma-api.polymarket.com/markets?closed=false")) return json(u.includes("offset=0") ? markets : []);
+    if (u.includes("site.api.espn.com")) return json(globalThis.__espn || { events: [] });
     if (u.includes("gamma-api.polymarket.com/markets?slug=")) {
       const slug = decodeURIComponent(u.split("slug=")[1]);
       const m = markets.find(x => x.slug === slug);
@@ -197,6 +237,38 @@ const deps = (signals = []) => ({
   }, { paperTradeMode: false });
   const res = await processSignals(env, []);
   check("live mode: paper only", (J(env, "autotrader_positions") || []).length === 0 && res.crew && res.crew.skips["paper only"] === 1, JSON.stringify(res.crew));
+}
+
+// hunt with the Odds API down: DraftKings board + crew still prices the slate
+{
+  globalThis.__espn = ESPN;
+  installFetch(MARKETS);
+  const env = makeEnv({ odds_api_status: JSON.stringify({ ok: false, status: 401, error: "Usage quota has been reached" }) });
+  await handleCrewOrder(env, "you can file up to 12 bets a day. Focus only on CFB and no other areas until I tell you", J(env, "autotrader_config"), NOW);
+  const d = J(env, CREW_KEYS.DIRECTIVE);
+  check("order: 12 bets + open-ended stored", d.maxBets === 12 && Date.parse(d.expiresAt) - NOW > 20 * 86400e3, JSON.stringify(d));
+  check("order: reply says until stand down", /until you say stand down/.test(J(env, CREW_KEYS.CHAT).slice(-1)[0].text));
+  const h = await runCrewHunt({ ...env }, { ...deps(), getGameOdds: async () => null }, NOW);
+  const hunt = J(env, CREW_KEYS.HUNT);
+  check("dk hunt: priced off DraftKings", h.priced === 2 && hunt.dkBoard.length === 2, JSON.stringify(h));
+  check("dk hunt: board sorted by EV, links kept", hunt.dkBoard[0].ev >= hunt.dkBoard[1].ev && /draftkings\.com/.test(hunt.dkBoard[0].link), JSON.stringify(hunt.dkBoard.map(x => [x.team, x.ev])));
+  const msg = J(env, CREW_KEYS.CHAT).slice(-1)[0].text;
+  check("dk hunt: chat names DK value + dead feed", /DraftKings value: James Madison ML -150/.test(msg) && /HTTP 401/.test(msg), msg);
+  check("dk hunt: picks carry the order's cap", J(env, CREW_KEYS.PICKS).every(p => p.maxBets === 12));
+  globalThis.__espn = null;
+}
+
+// entry honors the order's cap (12), not the config default (6)
+{
+  installFetch(MARKETS);
+  const today = new Date().toISOString().split("T")[0];
+  const env = makeEnv({
+    [`autotrader_daily_stats_${today}`]: JSON.stringify({ date: today, tradesOpened: 6, totalSpent: 30, crewOpened: 6, realizedPnL: 0 }),
+    [CREW_KEYS.PICKS]: JSON.stringify([{ id: "cfb-jmad-gas-2026-10-10:0", marketSlug: "cfb-jmad-gas-2026-10-10", outcomeIndex: 0, team: "James Madison",
+      game: "James Madison vs. Georgia Southern", startTime: iso(START), vegasProb: 74, verdict: "APPROVE", minEdge: 3, maxBets: 12 }]),
+  });
+  const res = await processSignals(env, []);
+  check("cap: 7th crew bet allowed under a 12/day order", (J(env, "autotrader_positions") || []).length === 1, JSON.stringify(res.crew));
 }
 
 // ledger

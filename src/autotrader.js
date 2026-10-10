@@ -2913,7 +2913,7 @@ async function enterCrewPicks(env, config, dailyStats, stillOpen, results) {
     if (entered.has(pick.id)) continue;
     const start = Date.parse(pick.startTime);
     if (!start || start - now < 5 * 60 * 1000) { skip('game started'); continue; }   // dropped from the queue
-    if ((dailyStats.crewOpened || 0) >= maxPerDay) { skip('crew daily cap'); remaining.push(pick); continue; }
+    if ((dailyStats.crewOpened || 0) >= (pick.maxBets ?? maxPerDay)) { skip('crew daily cap'); remaining.push(pick); continue; }
     if (stillOpen.some(p => p.marketSlug === pick.marketSlug)) { skip('already holding market'); entered.add(pick.id); continue; }
     const base = config.crewBetSize ?? 5;
     const size = Math.round((pick.verdict === 'TRIM' ? base * 0.5 : base) * 100) / 100;

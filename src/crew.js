@@ -41,6 +41,10 @@ const HORIZON_MS = 30 * 3600 * 1000;        // today's slate (+ late west-coast 
 const DEBATE_TOP = 8;                       // biggest gaps that go before the council
 const MAX_QUEUED_PER_HUNT = 3;              // no burst-filling a whole slate at once
 const MAX_SPREAD = 0.05;                    // skip books wider than 5c (thin, fills lie)
+const MAX_BETS_CAP = 25;                    // hard ceiling on an order's bets/day
+const OPEN_ENDED_DAYS = 30;                 // "until I tell you" = until stand down (30d safety expiry)
+const DK_BOARD_SIZE = 15;
+const DK_FAIR_MAX_SPREAD = 0.04;            // Polymarket only counts as a fair price when its book is tight
 
 // Polymarket sport tag ids (Gamma /sports — tags minus the generic 1 and 100639).
 const SPORT_TAG = { cfb: 100351, nfl: 450, nba: 745, wnba: 100254, mlb: 100381, nhl: 899, ncaab: 100149 };
@@ -77,8 +81,9 @@ export function parseDirective(text) {
   const edgeM = t.match(/(\d+(?:\.\d+)?)\s*(?:pt|pts|point|points|%)\s*(?:edge|gap)?/i) || t.match(/\bedge\s*(?:of|>=?|at least)?\s*(\d+(?:\.\d+)?)/i);
   const betsM = t.match(/(?:up to|max(?:imum)?|at most|no more than)\s*(\d+)\s*(?:bets?|picks?|plays?)/i) || t.match(/\b(\d+)\s*(?:bets?|picks?|plays?)\b/i);
   const minEdge = edgeM ? Math.max(1, Math.min(15, parseFloat(edgeM[1]))) : null;
-  const maxBets = betsM ? Math.max(1, Math.min(10, parseInt(betsM[1], 10))) : null;
-  const days = /\b(week|weekend)\b/i.test(t) ? (/\bweekend\b/i.test(t) ? 3 : 7) : null;
+  const maxBets = betsM ? Math.max(1, Math.min(MAX_BETS_CAP, parseInt(betsM[1], 10))) : null;
+  const days = /\buntil (i|we) (tell|say)|until further notice|until told|indefinitely|from now on\b/i.test(t) ? OPEN_ENDED_DAYS
+    : /\b(week|weekend)\b/i.test(t) ? (/\bweekend\b/i.test(t) ? 3 : 7) : null;
   if (sports.length) return { kind: 'focus', sports, minEdge, maxBets, days };
   const other = t.match(UNHUNTABLE_WORDS);
   if (other) return { kind: 'unhuntable', sports: [], topic: other[1] };
@@ -117,6 +122,7 @@ export async function handleCrewOrder(env, text, config = {}, nowMs = Date.now()
     reply = 'Standing down. Queued picks cleared; open crew bets ride to settlement. Back to the normal lanes.';
   } else if (p.kind === 'focus') {
     const expiresMs = nowMs + (p.days ? p.days * 86400e3 : 18 * 3600e3);
+    const openEnded = p.days === OPEN_ENDED_DAYS;
     const minEdge = p.minEdge ?? config.crewMinEdge ?? 3;
     const maxBets = p.maxBets ?? config.crewMaxPerDay ?? 6;
     const directive = {
@@ -126,9 +132,9 @@ export async function handleCrewOrder(env, text, config = {}, nowMs = Date.now()
     await env.SIGNALS_CACHE.put(CREW_KEYS.DIRECTIVE, JSON.stringify(directive));
     await env.SIGNALS_CACHE.put(CREW_KEYS.PICKS, '[]');
     const size = config.crewBetSize ?? 5;
-    reply = `Copy. Hunting ${p.sports.map(s => SPORT_LABEL[s]).join(' + ')} moneylines until ${fmtEt(expiresMs)}. ` +
-      `Every pregame game gets priced against the sportsbooks; the council debates the biggest gaps; ` +
-      `picks with ${minEdge}+ pts of edge that aren't vetoed go in as paper bets ($${size}, half on a split vote, up to ${maxBets} a day). ` +
+    reply = `Copy. Hunting ${p.sports.map(s => SPORT_LABEL[s]).join(' + ')} only, ${openEnded ? 'until you say stand down' : `until ${fmtEt(expiresMs)}`}. ` +
+      `Every pregame game gets priced two ways: DraftKings' line vs the Polymarket price (the DraftKings value board, for your slips), ` +
+      `and Polymarket vs the books (paper bets: ${minEdge}+ pts of edge, not vetoed by the council, $${size} or half on a split vote, up to ${maxBets} a day). ` +
       `First sweep within 5 minutes.`;
   } else if (p.kind === 'unhuntable') {
     reply = `Logged, but I can't hunt ${p.topic} yet. The crew prices bets against sportsbook lines, which only exist here for ${HUNTABLE.map(s => SPORT_LABEL[s]).join(', ')}.`;
@@ -137,6 +143,95 @@ export async function handleCrewOrder(env, text, config = {}, nowMs = Date.now()
   }
   await appendCrewChat(env, 'crew', reply);
   return { reply, parsed: p };
+}
+
+// ---------- DraftKings lines (ESPN scoreboard, free) ----------
+
+const ESPN_PATH = {
+  cfb: 'football/college-football', nfl: 'football/nfl', nba: 'basketball/nba', wnba: 'basketball/wnba',
+  mlb: 'baseball/mlb', nhl: 'hockey/nhl', ncaab: 'basketball/mens-college-basketball',
+};
+const ESPN_GROUPS = { cfb: ['80', '81'], ncaab: ['50'] };   // FBS + FCS; all D-I hoops
+
+const amOdds = (v) => {
+  if (typeof v === 'number') return v;
+  const t = String(v || '').trim().toUpperCase();
+  if (t === 'EVEN' || t === 'EV') return 100;
+  const n = parseInt(t.replace('+', ''), 10);
+  return isNaN(n) || n === 0 ? null : n;
+};
+// ESPN wraps DraftKings bet links in a tracking redirect; keep the DK URL.
+const dkHref = (link) => {
+  const h = link && link.href;
+  if (!h) return null;
+  const m = h.match(/[?&]preurl=([^&]+)/);
+  try { return m ? decodeURIComponent(m[1]) : h; } catch (e) { return h; }
+};
+const lineNum = (v) => { const n = parseFloat(String(v || '').replace(/^[ou]/i, '')); return isNaN(n) ? null : n; };
+
+// Pure: ESPN scoreboard JSON -> pregame games with DraftKings lines.
+export function parseEspnGames(json) {
+  const out = [];
+  for (const e of (json && json.events) || []) {
+    const c = (e.competitions || [])[0];
+    if (!c || !c.status || !c.status.type || c.status.type.state !== 'pre') continue;
+    const o = (c.odds || []).find(x => /draftkings/i.test((x.provider && x.provider.name) || ''));
+    if (!o) continue;
+    const team = (ha) => {
+      const t = ((c.competitors || []).find(x => x.homeAway === ha) || {}).team || {};
+      return { name: t.displayName || t.location || '', loc: t.location || '', abbr: t.abbreviation || '' };
+    };
+    const ml = o.moneyline || {}, ps = o.pointSpread || {}, tot = o.total || {};
+    const cur = (x) => (x && (x.close || x.current || x.open)) || {};
+    out.push({
+      id: e.id,
+      startMs: Date.parse(c.date || e.date),
+      home: team('home'),
+      away: team('away'),
+      dk: {
+        ml: {
+          home: { odds: amOdds(cur(ml.home).odds), link: dkHref(cur(ml.home).link) },
+          away: { odds: amOdds(cur(ml.away).odds), link: dkHref(cur(ml.away).link) },
+        },
+        spread: {
+          home: { line: lineNum(cur(ps.home).line), odds: amOdds(cur(ps.home).odds), link: dkHref(cur(ps.home).link) },
+          away: { line: lineNum(cur(ps.away).line), odds: amOdds(cur(ps.away).odds), link: dkHref(cur(ps.away).link) },
+        },
+        total: {
+          line: lineNum(cur(tot.over).line) ?? (typeof o.overUnder === 'number' ? o.overUnder : null),
+          over: { odds: amOdds(cur(tot.over).odds), link: dkHref(cur(tot.over).link) },
+          under: { odds: amOdds(cur(tot.under).odds), link: dkHref(cur(tot.under).link) },
+        },
+      },
+    });
+  }
+  return out;
+}
+
+function etYmd(ms) {
+  try {
+    const p = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date(ms));
+    const g = (t) => (p.find(x => x.type === t) || {}).value;
+    return `${g('year')}${g('month')}${g('day')}`;
+  } catch (e) { return new Date(ms).toISOString().slice(0, 10).replace(/-/g, ''); }
+}
+
+async function fetchDkLines(sport, nowMs) {
+  const path = ESPN_PATH[sport];
+  if (!path) return [];
+  const dates = [...new Set([etYmd(nowMs), etYmd(nowMs + 24 * 3600e3)])];
+  const groups = ESPN_GROUPS[sport] || [null];
+  const byId = new Map();
+  for (const d of dates) {
+    for (const g of groups) {
+      try {
+        const res = await fetch(`https://site.api.espn.com/apis/site/v2/sports/${path}/scoreboard?dates=${d}&limit=400${g ? `&groups=${g}` : ''}`);
+        if (!res.ok) continue;
+        for (const game of parseEspnGames(await res.json())) byId.set(game.id, game);
+      } catch (e) {}
+    }
+  }
+  return [...byId.values()];
 }
 
 // ---------- pricing ----------
@@ -204,56 +299,106 @@ function nameScore(label, team) {
   return best;
 }
 
-// Pure: pair Polymarket moneyline markets with Odds API games and emit one
-// candidate per side. Unmatched markets are counted, not guessed.
-export function buildCandidates(sport, markets, oddsGames, nowMs = Date.now()) {
+// Find the game whose two teams match a market's two outcome labels and
+// whose start is within 3h. Returns { g, swapped } (swapped: outcome 0 is home).
+function matchGame(outcomes, startMs, games, awayOf, homeOf, msOf) {
+  let best = null;
+  for (const g of games || []) {
+    const gMs = msOf(g);
+    if (!gMs || Math.abs(gMs - startMs) > 3 * 3600e3) continue;
+    const s00 = nameScore(outcomes[0], awayOf(g)), s11 = nameScore(outcomes[1], homeOf(g));
+    const s01 = nameScore(outcomes[0], homeOf(g)), s10 = nameScore(outcomes[1], awayOf(g));
+    const straight = s00 && s11 ? s00 + s11 : 0;
+    const swapped = s01 && s10 ? s01 + s10 : 0;
+    const score = Math.max(straight, swapped);
+    if (score > 0 && (!best || score > best.score)) best = { g, score, swapped: swapped > straight };
+  }
+  return best;
+}
+
+// Pure: DraftKings two-way moneyline -> implied (with vig) and no-vig %.
+export function dkMoneyline(dk) {
+  const h = dk && dk.ml && dk.ml.home && dk.ml.home.odds, a = dk && dk.ml && dk.ml.away && dk.ml.away.odds;
+  if (typeof h !== 'number' || typeof a !== 'number') return null;
+  const ph = americanToProb(h), pa = americanToProb(a);
+  if (!(ph > 0 && pa > 0)) return null;
+  return {
+    home: { odds: h, implied: r1(ph * 100), fair: r1((ph / (ph + pa)) * 100) },
+    away: { odds: a, implied: r1(pa * 100), fair: r1((pa / (ph + pa)) * 100) },
+  };
+}
+
+// Pure: pair Polymarket moneyline markets with sportsbook prices and emit one
+// candidate per side. Two references: the Odds API consensus (all books) and
+// DraftKings (ESPN). The paper lane's reference is the consensus when the
+// Odds API answers, else DraftKings' no-vig line. Separately, every side with
+// a DraftKings price and a tight Polymarket book gets a DraftKings value:
+// how much more DraftKings pays than the fair price (Polymarket, blended
+// with the consensus when available) says it should. Unmatched markets are
+// counted, not guessed.
+export function buildCandidates(sport, markets, oddsGames, nowMs = Date.now(), dkGames = []) {
   const out = [];
-  let matched = 0, unmatched = 0, skipped = 0;
+  let matched = 0, unmatched = 0, skipped = 0, dkMatched = 0;
   for (const m of markets || []) {
     const startMs = Date.parse(String(m.gameStartTime || m.endDate || '').replace(' ', 'T').replace(/\+00$/, 'Z'));
     if (!startMs || startMs - nowMs < PREGAME_MIN_MS || startMs - nowMs > HORIZON_MS || m.closed) { skipped++; continue; }
     const outcomes = parseArr(m.outcomes) || [];
     if (outcomes.length !== 2) { skipped++; continue; }
-    let best = null;
-    for (const g of oddsGames || []) {
-      const gMs = Date.parse(g.commence_time);
-      if (!gMs || Math.abs(gMs - startMs) > 3 * 3600e3) continue;
-      const s00 = nameScore(outcomes[0], g.away_team), s11 = nameScore(outcomes[1], g.home_team);
-      const s01 = nameScore(outcomes[0], g.home_team), s10 = nameScore(outcomes[1], g.away_team);
-      const straight = s00 && s11 ? s00 + s11 : 0;
-      const swapped = s01 && s10 ? s01 + s10 : 0;
-      const score = Math.max(straight, swapped);
-      if (score > 0 && (!best || score > best.score)) best = { g, score, swapped: swapped > straight };
-    }
-    if (!best) { unmatched++; continue; }
-    const cons = consensusMoneyline(best.g);
-    if (!cons) { unmatched++; continue; }
+    const ob = matchGame(outcomes, startMs, oddsGames, g => g.away_team, g => g.home_team, g => Date.parse(g.commence_time));
+    const cons = ob ? consensusMoneyline(ob.g) : null;
+    const db = matchGame(outcomes, startMs, dkGames, g => g.away.name, g => g.home.name, g => g.startMs);
+    const dkMl = db ? dkMoneyline(db.g.dk) : null;
+    if (!cons && !dkMl) { unmatched++; continue; }
     matched++;
+    if (dkMl) dkMatched++;
     for (let i = 0; i < 2; i++) {
-      const side = (i === 0) !== best.swapped ? 'away' : 'home';
+      const cSide = ob ? ((i === 0) !== ob.swapped ? 'away' : 'home') : null;
+      const dSide = db ? ((i === 0) !== db.swapped ? 'away' : 'home') : null;
       const q = quoteOutcome(m, i);
-      const vegasProb = cons[side];
+      const booksProb = cons ? cons[cSide] : null;
+      const dkSide = dkMl ? dkMl[dSide] : null;
+      const vegasProb = booksProb ?? (dkSide ? dkSide.fair : null);
+      const tight = q.spread !== null && q.spread <= DK_FAIR_MAX_SPREAD && q.mid !== null && q.mid > 2 && q.mid < 98;
+      const fairForDk = tight ? r1(booksProb != null ? (q.mid + booksProb) / 2 : q.mid) : null;
+      let dk = null;
+      if (dkSide) {
+        const g = db.g.dk;
+        const opp = dSide === 'home' ? 'away' : 'home';
+        dk = {
+          odds: dkSide.odds,
+          implied: dkSide.implied,
+          fair: dkSide.fair,
+          link: g.ml[dSide].link,
+          ev: fairForDk !== null ? r1((fairForDk / dkSide.implied - 1) * 100) : null,
+          fairUsed: fairForDk,
+          spread: { line: g.spread[dSide].line, odds: g.spread[dSide].odds, link: g.spread[dSide].link },
+          total: { line: g.total.line, over: g.total.over.odds, under: g.total.under.odds, overLink: g.total.over.link, underLink: g.total.under.link },
+          opponent: db.g[opp].name,
+        };
+      }
       out.push({
         id: `${m.slug}:${i}`,
         sport,
         marketSlug: m.slug,
         game: m.question || `${outcomes[0]} vs. ${outcomes[1]}`,
         team: String(outcomes[i]),
-        teamFull: side === 'home' ? best.g.home_team : best.g.away_team,
+        teamFull: cSide ? (cSide === 'home' ? ob.g.home_team : ob.g.away_team) : (dSide ? db.g[dSide].name : String(outcomes[i])),
         outcomeIndex: i,
         startTime: new Date(startMs).toISOString(),
         vegasProb,
-        books: cons.books,
-        dkOdds: cons.dk ? cons.dk[side] : null,
+        refSource: booksProb != null ? 'books' : 'dk',
+        books: cons ? cons.books : 0,
+        dkOdds: dkSide ? dkSide.odds : (cons && cons.dk ? cons.dk[cSide] : null),
+        dk,
         buyPrice: q.buy,
         midPrice: q.mid,
         spread: q.spread,
-        edge: q.buy === null ? null : r1(vegasProb - q.buy),
+        edge: q.buy === null || vegasProb === null ? null : r1(vegasProb - q.buy),
         volume: Math.round(Number(m.volumeNum || m.volume || 0)),
       });
     }
   }
-  return { candidates: out, matched, unmatched, skipped };
+  return { candidates: out, matched, unmatched, skipped, dkMatched };
 }
 
 async function fetchSportMoneylines(sport, nowMs) {
@@ -361,16 +506,37 @@ export async function runCrewHunt(env, deps, nowMs = Date.now()) {
   let candidates = [];
   for (const sport of directive.sports.filter(s => SPORT_TAG[s])) {
     try {
-      const [markets, odds] = await Promise.all([
+      const [markets, odds, dkGames] = await Promise.all([
         fetchSportMoneylines(sport, nowMs),
-        getGameOdds(env, SPORT_KEY_MAP[sport], 'h2h,spreads'),
+        Promise.resolve(getGameOdds(env, SPORT_KEY_MAP[sport], 'h2h,spreads')).catch(() => null),
+        fetchDkLines(sport, nowMs),
       ]);
-      const built = buildCandidates(sport, markets, odds || [], nowMs);
-      perSport[sport] = { markets: markets.length, oddsGames: (odds || []).length, matched: built.matched, unmatched: built.unmatched };
+      const built = buildCandidates(sport, markets, odds || [], nowMs, dkGames);
+      perSport[sport] = {
+        markets: markets.length, oddsGames: (odds || []).length, dkGames: dkGames.length,
+        matched: built.matched, dkMatched: built.dkMatched, unmatched: built.unmatched,
+      };
       candidates.push(...built.candidates);
     } catch (e) {
       perSport[sport] = { error: e.message };
     }
+  }
+  const oddsApi = await kvJson(env, 'odds_api_status');
+
+  // DraftKings value board: best price DraftKings offers vs the fair price,
+  // one side per game.
+  const dkSeen = new Set();
+  const dkBoard = [];
+  for (const c of candidates.filter(c => c.dk && typeof c.dk.ev === 'number').sort((a, b) => b.dk.ev - a.dk.ev)) {
+    if (dkSeen.has(c.marketSlug)) continue;
+    dkSeen.add(c.marketSlug);
+    dkBoard.push({
+      id: c.id, game: c.game, team: c.team, opponent: c.dk.opponent, startTime: c.startTime,
+      odds: c.dk.odds, implied: c.dk.implied, fair: c.dk.fairUsed, dkNoVig: c.dk.fair, ev: c.dk.ev,
+      polyMid: c.midPrice, booksProb: c.refSource === 'books' ? c.vegasProb : null, link: c.dk.link,
+      spread: c.dk.spread, total: c.dk.total,
+    });
+    if (dkBoard.length >= DK_BOARD_SIZE) break;
   }
 
   // Rank tradeable sides by edge at the ask; one side per game.
@@ -420,7 +586,7 @@ export async function runCrewHunt(env, deps, nowMs = Date.now()) {
   const queue = [...prevQueue, ...fresh.map(d => ({
     id: d.id, marketSlug: d.marketSlug, outcomeIndex: d.outcomeIndex, team: d.team, game: d.game, sport: d.sport,
     startTime: d.startTime, vegasProb: d.vegasProb, buyPrice: d.buyPrice, edge: d.edge, verdict: d.verdict,
-    council: d.council, directiveId: directive.id, minEdge, queuedAt: new Date(nowMs).toISOString(),
+    council: d.council, directiveId: directive.id, minEdge, maxBets: directive.maxBets, queuedAt: new Date(nowMs).toISOString(),
   }))];
   await env.SIGNALS_CACHE.put(CREW_KEYS.PICKS, JSON.stringify(queue));
 
@@ -433,8 +599,10 @@ export async function runCrewHunt(env, deps, nowMs = Date.now()) {
     sports: directive.sports,
     minEdge,
     perSport,
+    oddsApi: oddsApi || null,
     priced,
     board: debated,
+    dkBoard,
     alsoRan: tradeable.filter(c => !top.includes(c)).slice(0, 12)
       .map(c => ({ game: c.game, team: c.team, vegasProb: c.vegasProb, buyPrice: c.buyPrice, edge: c.edge, startTime: c.startTime, dkOdds: c.dkOdds })),
     counts,
@@ -445,32 +613,41 @@ export async function runCrewHunt(env, deps, nowMs = Date.now()) {
   // Report to the chat on the first sweep of an order, or when picks change.
   if (!last || last.directiveId !== directive.id || fresh.length > 0) {
     const label = directive.sports.map(s => SPORT_LABEL[s]).join(' + ');
+    const am = (n) => (n > 0 ? `+${n}` : `${n}`);
+    const feed = oddsApi && oddsApi.ok === false
+      ? ` (Sportsbook consensus feed is down: The Odds API answered HTTP ${oddsApi.status}${oddsApi.error ? ` "${String(oddsApi.error).slice(0, 80)}"` : ''}; using DraftKings via ESPN instead.)`
+      : '';
     let msg;
     if (priced === 0) {
       const why = Object.entries(perSport).map(([s, p]) => p.error ? `${SPORT_LABEL[s]}: ${p.error}` :
-        `${SPORT_LABEL[s]}: ${p.markets} Polymarket games, ${p.oddsGames} sportsbook games, ${p.matched} matched`).join('; ');
-      msg = `${label} sweep: nothing priced yet (${why}). Games that already kicked off are skipped. Trying again in 15 min.`;
+        `${SPORT_LABEL[s]}: ${p.markets} Polymarket games, ${p.dkGames} DraftKings games, ${p.oddsGames} consensus games, ${p.matched} matched`).join('; ');
+      msg = `${label} sweep: nothing priced yet (${why}). Games that already kicked off are skipped. Trying again in 15 min.${feed}`;
     } else {
+      const plusEv = dkBoard.filter(d => d.ev > 0);
+      const dkLine = plusEv.length
+        ? `DraftKings value: ${plusEv.slice(0, 4).map(d => `${d.team} ML ${am(d.odds)} (+${d.ev}% EV)`).join(', ')}. Full list with links on the board.`
+        : dkBoard.length ? `DraftKings: no moneyline pays more than fair right now (best is ${dkBoard[0].team} ${am(dkBoard[0].odds)}, ${dkBoard[0].ev}% EV).` : '';
       const best = debated.slice(0, 3).map(d => `${d.team} ${d.edge > 0 ? '+' : ''}${d.edge} (${d.buyPrice}¢ vs ${d.vegasProb}%)`).join(', ');
-      msg = `${label} sweep: ${priced} pregame games priced against the books. Biggest gaps: ${best || 'none'}. ` +
-        `Council: ${counts.APPROVE} approve, ${counts.TRIM} split, ${counts.VETO} veto. ` +
-        (fresh.length ? `Submitting ${fresh.length}: ${fresh.map(d => `${d.team} @ ${d.buyPrice}¢`).join(', ')}.`
-          : debated.some(d => d.edge >= minEdge) ? 'Nothing new cleared the council.' : `No gap reaches ${minEdge} pts. Books and Polymarket agree right now; no bet beats forcing one.`);
+      msg = `${label} sweep: ${priced} pregame games priced. ${dkLine} ` +
+        `Polymarket gaps: ${best || 'none'}. Council: ${counts.APPROVE} approve, ${counts.TRIM} split, ${counts.VETO} veto. ` +
+        (fresh.length ? `Submitting ${fresh.length} paper: ${fresh.map(d => `${d.team} @ ${d.buyPrice}¢`).join(', ')}.`
+          : debated.some(d => d.edge >= minEdge) ? 'No new paper bet cleared the council.' : `No Polymarket gap reaches ${minEdge} pts; no paper bet beats forcing one.`) + feed;
     }
     await appendCrewChat(env, 'crew', msg);
   }
 
-  return { priced, debated: debated.length, queued: fresh.length, counts, perSport };
+  return { priced, debated: debated.length, queued: fresh.length, dkPlusEv: dkBoard.filter(d => d.ev > 0).length, counts, perSport };
 }
 
 export async function getCrewState(env, deps) {
-  const [directive, chat, hunt, picks, history, open] = await Promise.all([
+  const [directive, chat, hunt, picks, history, open, oddsApi] = await Promise.all([
     getActiveDirective(env),
     kvJson(env, CREW_KEYS.CHAT),
     kvJson(env, CREW_KEYS.HUNT),
     kvJson(env, CREW_KEYS.PICKS),
     deps.getTradeHistory(env, 1000).catch(() => []),
     deps.getOpenPositions(env).catch(() => []),
+    kvJson(env, 'odds_api_status'),
   ]);
   const crewOpen = (open || []).filter(p => p.strategySource === 'crew_hunt').map(p => ({
     id: p.id, title: p.marketTitle, side: p.directionRaw || p.direction, entry: p.entryPrice, size: p.size,
@@ -489,5 +666,6 @@ export async function getCrewState(env, deps) {
     open: crewOpen,
     recent: crewClosed,
     huntable: HUNTABLE,
+    oddsApi: oddsApi || null,
   };
 }
