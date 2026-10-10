@@ -54,6 +54,38 @@ const DIMENSIONS = {
     "WHEN wallet_best_excess >= 3 THEN 'edge3-10' WHEN wallet_best_excess <= -5 THEN 'square' ELSE 'flat' END",
 };
 
+// JS mirror of DIMENSIONS for live matching (the forge-lane entry path).
+// Must bucket exactly like the SQL; test/forge.test.mjs checks parity points.
+export function bucketSignal(sig, ledger = null) {
+  const p = Number(sig.avgEntryPrice ?? sig.entryPrice);
+  const big = Number(sig.largestBet || 0);
+  const nw = Number(sig.numWallets ?? sig.uniqueWallets ?? 0);
+  let horizon = 'unknown';
+  if (sig.eventDate && sig.detectedAt) {
+    const d = (new Date(sig.eventDate).getTime() - new Date(sig.detectedAt).getTime()) / 86400e3;
+    if (!isNaN(d)) horizon = d <= 0.25 ? '<6h' : d <= 2 ? '6h-2d' : '2d+';
+  }
+  const sc = Number(sig.score || 0);
+  let walletEdge = 'nodata';
+  if (ledger && ledger.wallets_logged === 1 && ledger.wallet_scored_at) {
+    const n = ledger.wallet_best_n || 0, x = ledger.wallet_best_excess;
+    walletEdge = n < 10 ? 'thin' : x >= 10 ? 'sharp10+' : x >= 3 ? 'edge3-10' : x <= -5 ? 'square' : 'flat';
+  }
+  return {
+    side: p >= 60 ? 'fav60+' : p >= 40 ? 'mid40-59' : 'dog<40',
+    size: big >= 50000 ? '50k+' : big >= 20000 ? '20-50k' : big >= 5000 ? '5-20k' : '<5k',
+    wallets: nw >= 3 ? '3+' : '1-2',
+    type: sig.d1MarketType || sig.marketTypeD1 || 'other',
+    horizon,
+    score: sc >= 100 ? '100+' : sc >= 60 ? '60-99' : '<60',
+    walletEdge,
+  };
+}
+
+export function matchesFilter(buckets, filter) {
+  return Object.entries(filter || {}).every(([k, v]) => buckets[k] === v);
+}
+
 // Pairs of dimensions (single dims are covered by grouping on one).
 const COMBOS = [
   ['side'], ['size'], ['wallets'], ['type'], ['horizon'], ['score'],

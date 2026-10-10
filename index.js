@@ -4078,6 +4078,7 @@ function adaptSignalForAutotrader(signal) {
     priceAtSignal: entry,
     title: signal.marketTitle,
     marketType: detectMarketType(signal.marketTitle, signal.marketSlug),
+    d1MarketType: detectMarketType(signal.marketTitle),   // same classifier signals_log stores (forge lane parity)
     hoursUntilEnd: signal.hoursUntilEvent,
     whaleIsSelling: false,
     hasWinningWallet,

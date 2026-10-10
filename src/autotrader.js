@@ -19,6 +19,7 @@ import {
   conveneCouncil, llmTiebreak, getCouncilStats, recordCouncilSession,
   compactSession, recordCouncilOutcome, applyOutcomeToStats,
 } from './council.js';
+import { bucketSignal, matchesFilter } from './forge.js';
 
 const GAMMA_API = 'https://gamma-api.polymarket.com';
 const CLOB_API = 'https://clob.polymarket.com';
@@ -558,6 +559,14 @@ const DEFAULT_CONFIG = {
   // settling opportunities regardless, so the lane still builds its record.
   vegasEdgeRequireProven: true,
   vegasEdgeProvenMinSettled: 30,
+  // Forge lane: paper-trade signals matching strategies the Strategy Forge
+  // PROMOTED (walk-forward + slippage + significance). Auto-demotes a rule
+  // whose own live paper ledger goes negative.
+  forgeLaneEnabled: true,
+  forgeSize: 5,
+  forgeMaxPerDay: 5,
+  forgeMaxPerCycle: 2,
+  forgeDemoteMinN: 20,
   vegasEdgeMinEdge: 10,
   // v21.3.0 EXPLORATION FLOOR. Even with the 14d rolling edge window
   // (edge_profile_v2), a strict edgeNet>0 gate can deadlock: when every band
@@ -2582,6 +2591,13 @@ export async function processSignals(env, signals) {
     console.error('Vegas edge entry error:', e.message);
   }
 
+  // FORGE LANE: third entry source — strategies the forge promoted.
+  try {
+    await enterForgeStrategies(env, config, dailyStats, stillOpen, results, signals);
+  } catch (e) {
+    console.error('Forge lane entry error:', e.message);
+  }
+
   // Save updated state
   await savePositions(env, stillOpen);
   await saveDailyStats(env, dailyStats);
@@ -2604,6 +2620,126 @@ export async function processSignals(env, signals) {
 // beats Polymarket by >= vegasEdgeMinEdge points (the proven 10-15 band),
 // at full size, filled at the LIVE Gamma price, held to resolution. Paper
 // mode only — live promotion is a separate human decision.
+// Per-rule live paper ledger from closed history (for auto-demotion).
+export function forgeRuleLedger(history, ruleId) {
+  const out = { n: 0, wins: 0, pnl: 0 };
+  for (const t of history || []) {
+    if (!t || t.strategySource !== 'forge' || t.forgeRule !== ruleId) continue;
+    if (t.outcome !== 'win' && t.outcome !== 'loss') continue;
+    out.n++; if (t.outcome === 'win') out.wins++;
+    out.pnl = Math.round((out.pnl + (t.pnl || 0)) * 100) / 100;
+  }
+  return out;
+}
+
+// FORGE LANE: paper-enter signals that match a strategy the Strategy Forge
+// promoted. Same caps/positions/exit engine as the other lanes; hold to
+// resolution because that is what the forge measured.
+async function enterForgeStrategies(env, config, dailyStats, stillOpen, results, signals) {
+  if (config.forgeLaneEnabled === false || !config.paperTradeMode) return;
+  const stat = { entered: 0, skips: {} };
+  results.forgeLane = stat;
+  const skip = (why) => { stat.skips[why] = (stat.skips[why] || 0) + 1; };
+
+  let report = null;
+  try { report = await env.SIGNALS_CACHE.get('forge_report', { type: 'json' }); } catch (e) {}
+  const promoted = (report && report.promoted) || [];
+  if (!promoted.length) { skip('no promoted strategies'); return; }
+  if (config.dailyLossLimit && (dailyStats.realizedPnL || 0) <= -Math.abs(config.dailyLossLimit)) { skip('daily loss limit'); return; }
+  const slip = (report.rules && report.rules.slippageCents) ?? 2;
+
+  const history = await getTradeHistory(env, 1000);
+  const live = promoted.filter(r => {
+    const l = forgeRuleLedger(history, r.id);
+    if (l.n >= (config.forgeDemoteMinN ?? 20) && l.pnl < 0) { skip(`demoted: ${r.id}`); return false; }
+    return true;
+  });
+  if (!live.length) return;
+  const needsLedger = live.some(r => r.filter && 'walletEdge' in r.filter);
+
+  let entered = [];
+  try { entered = (await env.SIGNALS_CACHE.get('forge_entered_keys', { type: 'json' })) || []; } catch (e) {}
+  const enteredSet = new Set(entered);
+  let openedToday = dailyStats.forgeOpened || 0, openedCycle = 0;
+
+  for (const signal of signals || []) {
+    if (openedCycle >= (config.forgeMaxPerCycle ?? 2) || openedToday >= (config.forgeMaxPerDay ?? 5)) break;
+    if (!signal || !signal.marketSlug) continue;
+    const side = signal.directionRaw || signal.direction;
+    const key = `${signal.marketSlug}::${side}`;
+    if (enteredSet.has(key)) continue;
+    if (stillOpen.some(p => p.marketSlug === signal.marketSlug)) continue;
+
+    let ledgerRow = null;
+    if (needsLedger && env.DB && signal.id) {
+      try {
+        ledgerRow = await env.DB.prepare('SELECT wallets_logged, wallet_scored_at, wallet_best_n, wallet_best_excess FROM signals_log WHERE id=?1').bind(signal.id).first();
+      } catch (e) {}
+    }
+    const buckets = bucketSignal(signal, ledgerRow);
+    const rule = live.find(r => matchesFilter(buckets, r.filter));
+    if (!rule) continue;
+
+    // Shared risk caps
+    if (config.maxDailyTrades > 0 && dailyStats.tradesOpened >= config.maxDailyTrades) { skip('daily trade cap'); break; }
+    const size = Math.min(config.forgeSize ?? 5, config.maxPositionSize || 30);
+    if (config.maxDailySpend > 0 && dailyStats.totalSpent + size > config.maxDailySpend) { skip('daily spend cap'); break; }
+    if (config.maxOpenPositions > 0 && stillOpen.length >= config.maxOpenPositions) { skip('max open'); break; }
+
+    // Honest fill at OUR side's live price; the forge assumed whale + slip.
+    let gamma = null;
+    try { gamma = await lookupMarketTokens(signal.marketSlug); } catch (e) {}
+    if (!gamma || gamma.closed) { skip(!gamma ? 'gamma miss' : 'market closed'); continue; }
+    const liveP = liveEntryPriceFor(gamma, side);
+    if (liveP === null) { skip('no live price'); continue; }
+    if (liveP <= 3 || liveP >= 97) { skip('market decided'); continue; }
+    const whale = Number(signal.avgEntryPrice);
+    if (whale && liveP > whale + slip) { skip('live price past forge slippage'); continue; }
+
+    const position = {
+      id: `at_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      marketSlug: signal.marketSlug,
+      marketTitle: signal.marketTitle,
+      marketType: signal.marketType,
+      signalSubType: signal.signalSubType || 'moneyline',
+      direction: signal.direction,
+      directionRaw: side,
+      whaleAction: 'BUY',
+      entryPrice: Math.round(liveP * 100) / 100,
+      size,
+      walletTier: 'FORGE',
+      strategySource: 'forge',
+      forgeRule: rule.id,
+      forgeTestRoi: rule.test ? rule.test.roi : null,
+      openedAt: new Date().toISOString(),
+      paperTrade: true,
+      marketCategory: categorizeMarket(signal.marketTitle || ''),
+      holdToResolution: true,
+      shares: size / (liveP / 100),
+    };
+    stillOpen.push(position);
+    enteredSet.add(key);
+    openedCycle++; openedToday++;
+    stat.entered++;
+    dailyStats.tradesOpened++;
+    dailyStats.totalSpent += size;
+    dailyStats.forgeOpened = openedToday;
+    results.tradesPaperTraded = (results.tradesPaperTraded || 0) + 1;
+    await logDecision(env, {
+      type: 'PAPER_TRADE',
+      market: signal.marketTitle,
+      size,
+      entryPrice: position.entryPrice,
+      walletTier: 'FORGE',
+      reason: `Forge rule ${rule.id} (test ROI ${rule.test ? rule.test.roi : '?'}% n=${rule.test ? rule.test.n : '?'}) — hold to resolution`,
+      marketCategory: position.marketCategory,
+    });
+  }
+  if (enteredSet.size !== entered.length) {
+    try { await env.SIGNALS_CACHE.put('forge_entered_keys', JSON.stringify([...enteredSet].slice(-1000)), { expirationTtl: 30 * 86400 }); } catch (e) {}
+  }
+}
+
 async function enterVegasEdgeOpportunities(env, config, dailyStats, stillOpen, results) {
   if (config.vegasEdgeEntries === false) return;
   if (!config.paperTradeMode) return;
