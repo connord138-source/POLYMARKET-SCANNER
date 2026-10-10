@@ -255,6 +255,9 @@ const deps = (signals = []) => ({
   const msg = J(env, CREW_KEYS.CHAT).slice(-1)[0].text;
   check("dk hunt: chat names DK value + dead feed", /DraftKings value: James Madison ML -150/.test(msg) && /HTTP 401/.test(msg), msg);
   check("dk hunt: picks carry the order's cap", J(env, CREW_KEYS.PICKS).every(p => p.maxBets === 12));
+  const pg = hunt.polyGames.find(g => g.slug === "cfb-jmad-gas-2026-10-10");
+  check("dk hunt: Polymarket prices published for the browser board", hunt.polyGames.length === 3 && pg && pg.mid[0] === 62 && pg.outcomes[0] === "James Madison" && pg.sport === "cfb",
+    JSON.stringify(hunt.polyGames.map(g => g.slug)));
   globalThis.__espn = null;
 }
 
