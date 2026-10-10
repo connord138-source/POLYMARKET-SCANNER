@@ -2969,7 +2969,7 @@ async function enterCrewPicks(env, config, dailyStats, stillOpen, results) {
       reason: `Crew pick: ${pick.team} ${q.buy}¢ vs books ${pick.vegasProb}% (+${liveEdge}), ${verdictWord} — hold to resolution`,
       marketCategory: 'sports_binary',
     });
-    await appendCrewChat(env, 'crew', `Placed: ${pick.team} moneyline @ ${q.buy}¢, $${size} paper (books ${pick.vegasProb}%, +${liveEdge} pts, ${verdictWord}).`);
+    await appendCrewChat(env, 'crew', `Placed: ${pick.team} moneyline @ ${q.buy}¢, $${size.toFixed(2)} paper (books ${pick.vegasProb}%, +${liveEdge} pts, ${verdictWord}).`);
   }
 
   try {
