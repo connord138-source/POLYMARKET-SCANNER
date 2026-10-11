@@ -1,27 +1,27 @@
 {
-  "fetchedAt": "2026-10-11T16:36:31Z",
+  "fetchedAt": "2026-10-11T16:43:16Z",
   "health": {
     "status": "ok",
-    "timestamp": "2026-10-11T16:36:32.163Z",
+    "timestamp": "2026-10-11T16:43:17.011Z",
     "version": "21.1.0 - Modularize: extract src/odds.js + src/gamma.js from index.js",
     "cache": {
-      "signalCount": 14171,
-      "oldestSignal": "2026-10-04T16:31:55.000Z",
-      "newestSignal": "2026-10-11T16:28:09.000Z"
+      "signalCount": 14145,
+      "oldestSignal": "2026-10-04T16:41:14.000Z",
+      "newestSignal": "2026-10-11T16:37:25.000Z"
     }
   },
   "cronStatus": {
     "success": true,
     "lastRun": {
-      "startedAt": "2026-10-11T16:31:24.622Z",
+      "startedAt": "2026-10-11T16:35:54.959Z",
       "scan": {
-        "signals": 618,
+        "signals": 622,
         "success": true
       },
       "settlement": {
-        "processed": 2,
-        "wins": 2,
-        "losses": 0,
+        "processed": 1,
+        "wins": 0,
+        "losses": 1,
         "errors": 0
       },
       "investigations": {
@@ -34,7 +34,7 @@
       },
       "overround": {
         "scanned": 70,
-        "flagged": 46
+        "flagged": 45
       },
       "sweep": {
         "skipped": "daily cap reached"
@@ -53,24 +53,24 @@
             "factor": "concentrated",
             "winRate": 53,
             "samples": 3124,
-            "oldWeight": 1.295,
-            "newWeight": 1.22,
-            "change": -0.07
+            "oldWeight": 1.22,
+            "newWeight": 1.16,
+            "change": -0.06
+          },
+          {
+            "factor": "whaleSize15k",
+            "winRate": 55,
+            "samples": 2090,
+            "oldWeight": 1.3250000000000002,
+            "newWeight": 1.25,
+            "change": -0.08
           },
           {
             "factor": "strongWallet",
             "winRate": 58,
             "samples": 2872,
-            "oldWeight": 1.3699999999999999,
-            "newWeight": 1.29,
-            "change": -0.08
-          },
-          {
-            "factor": "cryptoMarket",
-            "winRate": 61,
-            "samples": 57,
-            "oldWeight": 1.33,
-            "newWeight": 1.27,
+            "oldWeight": 1.29,
+            "newWeight": 1.23,
             "change": -0.06
           }
         ]
@@ -79,11 +79,35 @@
       "edgeScan": {
         "skipped": "throttled (credit saver)",
         "remaining": 334,
-        "nextInMin": 21
+        "nextInMin": 17
       },
       "crewHunt": {
-        "skipped": "throttled",
-        "nextInMin": 4
+        "priced": 12,
+        "debated": 8,
+        "queued": 0,
+        "dkPlusEv": 0,
+        "counts": {
+          "APPROVE": 3,
+          "TRIM": 5,
+          "VETO": 0
+        },
+        "perSport": {
+          "nfl": {
+            "markets": 12,
+            "oddsGames": 24,
+            "dkGames": 0,
+            "matched": 12,
+            "dkMatched": 0,
+            "unmatched": 0,
+            "unmatchedGames": [],
+            "dkFeed": [
+              "20261011/-: 13 events, 0 pregame w/ DK",
+              "20261012/-: 1 events, 0 pregame w/ DK"
+            ],
+            "lines": 200
+          }
+        },
+        "debate": "failed: HTTP 400: {\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.\"},\"request_id\":\"req_011CfvnCUfGMLPN7FAp8y34P\"}"
       },
       "edgeSettle": {
         "checked": 0,
@@ -105,18 +129,18 @@
         "phase": "done"
       },
       "autotrader": {
-        "evaluated": 618,
+        "evaluated": 622,
         "tradesOpened": 0,
         "tradesPaperTraded": 0,
         "tradesQueued": 0,
-        "skipped": 618,
+        "skipped": 622,
         "skipReasons": {
           "AI confidence too low: 28% (min 35%, time:28%)": 6,
           "Entry price too high for sports_binary (49% > 40%)": 2,
           "Entry price too high for sports_binary (67% > 40%)": 1,
           "Entry price too high for sports_binary (56% > 40%)": 2,
           "Entry price too high for other (72% > 40%)": 1,
-          "No winning wallet on signal": 462,
+          "No winning wallet on signal": 465,
           "Entry price too high for other (52% > 40%)": 2,
           "Entry price too high for sports_binary (68% > 40%)": 4,
           "Market already closed/resolved on Gamma": 4,
@@ -128,7 +152,7 @@
           "AI confidence too low: 29% (min 35%, time:29%)": 2,
           "Entry price too high for sports_other (50% > 40%)": 6,
           "Entry price too high for sports_binary (55% > 40%)": 2,
-          "Entry price too high for sports_binary (77% > 40%)": 4,
+          "Entry price too high for sports_binary (77% > 40%)": 5,
           "Entry price too high for sports_binary (65% > 40%)": 6,
           "Entry price too high for sports_binary (69% > 40%)": 2,
           "Entry price too high for sports_binary (48% > 40%)": 1,
@@ -154,6 +178,7 @@
           "Event too far out (82d > 7d horizon)": 5,
           "Entry price too high for sports_binary (61% > 40%)": 1,
           "Entry price too high for sports_binary (45% > 40%)": 3,
+          "Entry price too high for sports_other (47% > 40%)": 2,
           "Event too far out (9d > 7d horizon)": 3,
           "Entry price too high for sports_binary (79% > 40%)": 1,
           "Entry price too high for sports_binary (73% > 40%)": 1,
@@ -167,13 +192,12 @@
           "Entry price too high for sports_binary (42% > 40%)": 1,
           "Entry price too high for sports_binary (44% > 40%)": 1,
           "Entry price too high for other (80% > 40%)": 1,
-          "Entry price too high for sports_other (47% > 40%)": 1,
           "Entry price too high for sports_binary (52% > 40%)": 1,
           "Entry price too high for sports_other (48% > 40%)": 1,
           "Event too far out (11d > 7d horizon)": 3,
           "Signal has no market slug — cannot price or settle": 10,
           "Event too far out (37d > 7d horizon)": 1,
-          "Event too far out (22d > 7d horizon)": 7,
+          "Event too far out (22d > 7d horizon)": 6,
           "Event too far out (814d > 7d horizon)": 1,
           "Event too far out (448d > 7d horizon)": 1,
           "Event too far out (36d > 7d horizon)": 1,
@@ -216,14 +240,14 @@
       },
       "speed": {
         "watching": 19,
-        "priced": 12,
-        "dropped": 5
+        "priced": 5,
+        "dropped": 4
       },
       "forge": {
         "skipped": "ran recently",
         "lastRun": "2026-10-11T05:44:43.122Z"
       },
-      "completedAt": "2026-10-11T16:36:03.406Z"
+      "completedAt": "2026-10-11T16:40:14.885Z"
     },
     "cronSchedule": "Every 5 minutes",
     "note": "Settlement runs automatically. Sports events settle ~12h after game ends."
@@ -859,10 +883,10 @@
         "wins": 1653,
         "losses": 1219,
         "winRate": 58,
-        "weight": 1.29,
+        "weight": 1.23,
         "lastUpdated": "2026-10-11T16:34:36.957Z",
-        "previousWeight": 1.3699999999999999,
-        "optimizedAt": "2026-10-11T16:36:02.912Z",
+        "previousWeight": 1.29,
+        "optimizedAt": "2026-10-11T16:40:14.388Z",
         "total": 2872
       },
       {
@@ -901,13 +925,13 @@
       {
         "name": "whaleSize15k",
         "wins": 1155,
-        "losses": 934,
+        "losses": 935,
         "winRate": 55,
-        "weight": 1.19,
-        "lastUpdated": "2026-10-11T16:05:30.905Z",
-        "previousWeight": 1.25,
-        "optimizedAt": "2026-10-11T16:16:19.512Z",
-        "total": 2089
+        "weight": 1.25,
+        "lastUpdated": "2026-10-11T16:39:05.281Z",
+        "previousWeight": 1.3250000000000002,
+        "optimizedAt": "2026-10-11T16:40:14.388Z",
+        "total": 2090
       }
     ],
     "bottomFactors": [
@@ -938,22 +962,22 @@
         "wins": 1668,
         "losses": 1456,
         "winRate": 53,
-        "weight": 1.22,
+        "weight": 1.16,
         "lastUpdated": "2026-10-11T16:34:36.957Z",
-        "previousWeight": 1.295,
-        "optimizedAt": "2026-10-11T16:36:02.912Z",
+        "previousWeight": 1.22,
+        "optimizedAt": "2026-10-11T16:40:14.388Z",
         "total": 3124
       },
       {
         "name": "whaleSize15k",
         "wins": 1155,
-        "losses": 934,
+        "losses": 935,
         "winRate": 55,
-        "weight": 1.19,
-        "lastUpdated": "2026-10-11T16:05:30.905Z",
-        "previousWeight": 1.25,
-        "optimizedAt": "2026-10-11T16:16:19.512Z",
-        "total": 2089
+        "weight": 1.25,
+        "lastUpdated": "2026-10-11T16:39:05.281Z",
+        "previousWeight": 1.3250000000000002,
+        "optimizedAt": "2026-10-11T16:40:14.388Z",
+        "total": 2090
       },
       {
         "name": "whaleSize25k",
@@ -993,10 +1017,10 @@
         "wins": 1653,
         "losses": 1219,
         "winRate": 58,
-        "weight": 1.29,
+        "weight": 1.23,
         "lastUpdated": "2026-10-11T16:34:36.957Z",
-        "previousWeight": 1.3699999999999999,
-        "optimizedAt": "2026-10-11T16:36:02.912Z",
+        "previousWeight": 1.29,
+        "optimizedAt": "2026-10-11T16:40:14.388Z",
         "total": 2872
       },
       {
@@ -2954,9 +2978,9 @@
     "success": true,
     "overview": {
       "totalFactorsTracked": 13,
-      "totalSignalsProcessed": 17013,
+      "totalSignalsProcessed": 17014,
       "overallWinRate": 55,
-      "pendingSignals": 435
+      "pendingSignals": 440
     },
     "walletEdge": {
       "totalTracked": 500,
@@ -3089,19 +3113,19 @@
         "wins": 1668,
         "losses": 1456,
         "winRate": 53,
-        "weight": 1.22,
+        "weight": 1.16,
         "lastUpdated": "2026-10-11T16:34:36.957Z",
-        "previousWeight": 1.295,
-        "optimizedAt": "2026-10-11T16:36:02.912Z"
+        "previousWeight": 1.22,
+        "optimizedAt": "2026-10-11T16:40:14.388Z"
       },
       "whaleSize15k": {
         "wins": 1155,
-        "losses": 934,
+        "losses": 935,
         "winRate": 55,
-        "weight": 1.19,
-        "lastUpdated": "2026-10-11T16:05:30.905Z",
-        "previousWeight": 1.25,
-        "optimizedAt": "2026-10-11T16:16:19.512Z"
+        "weight": 1.25,
+        "lastUpdated": "2026-10-11T16:39:05.281Z",
+        "previousWeight": 1.3250000000000002,
+        "optimizedAt": "2026-10-11T16:40:14.388Z"
       },
       "freshWallet": {
         "wins": 139,
@@ -3116,10 +3140,10 @@
         "wins": 1653,
         "losses": 1219,
         "winRate": 58,
-        "weight": 1.29,
+        "weight": 1.23,
         "lastUpdated": "2026-10-11T16:34:36.957Z",
-        "previousWeight": 1.3699999999999999,
-        "optimizedAt": "2026-10-11T16:36:02.912Z"
+        "previousWeight": 1.29,
+        "optimizedAt": "2026-10-11T16:40:14.388Z"
       },
       "eliteWallet": {
         "wins": 629,
@@ -3211,11 +3235,11 @@
   "learningInsights": {
     "success": true,
     "systemPerformance": {
-      "totalSignalsProcessed": 17013,
+      "totalSignalsProcessed": 17014,
       "wins": 9383,
-      "losses": 7630,
+      "losses": 7631,
       "winRate": 55,
-      "pendingSignals": 435
+      "pendingSignals": 440
     },
     "insights": {
       "bestFactors": [
@@ -3293,7 +3317,7 @@
         "winRate": 58,
         "wins": 1653,
         "losses": 1219,
-        "weight": 1.29,
+        "weight": 1.23,
         "performance": "AVERAGE"
       },
       {
@@ -3324,8 +3348,8 @@
         "factor": "whaleSize15k",
         "winRate": 55,
         "wins": 1155,
-        "losses": 934,
-        "weight": 1.19,
+        "losses": 935,
+        "weight": 1.25,
         "performance": "AVERAGE"
       },
       {
@@ -3333,7 +3357,7 @@
         "winRate": 53,
         "wins": 1668,
         "losses": 1456,
-        "weight": 1.22,
+        "weight": 1.16,
         "performance": "AVERAGE"
       },
       {
@@ -3396,11 +3420,11 @@
         "key": "all",
         "label": "Follow all signals",
         "side": "follow",
-        "settled": 9787,
+        "settled": 9788,
         "wins": 5403,
-        "losses": 4384,
-        "staked": 978700,
-        "pnl": 1847.05,
+        "losses": 4385,
+        "staked": 978800,
+        "pnl": 1747.05,
         "roi": 0.2,
         "winRate": 55,
         "readyForAuto": true
@@ -3409,12 +3433,12 @@
         "key": "underdog",
         "label": "Underdog entries (≤40¢)",
         "side": "follow",
-        "settled": 1210,
+        "settled": 1211,
         "wins": 395,
-        "losses": 815,
-        "staked": 121000,
-        "pnl": -409.65,
-        "roi": -0.3,
+        "losses": 816,
+        "staked": 121100,
+        "pnl": -509.65,
+        "roi": -0.4,
         "winRate": 33,
         "readyForAuto": false
       },
@@ -7124,12 +7148,12 @@
   "speed": {
     "success": true,
     "overall": {
-      "n": 471,
-      "avg_lag_sec": 342,
+      "n": 473,
+      "avg_lag_sec": 341,
       "lag_cost_c": 0.24,
-      "drift_5m_c": 0.19,
+      "drift_5m_c": 0.23,
       "drift_15m_c": 0.14,
-      "drift_60m_c": -0.45
+      "drift_60m_c": -0.34
     },
     "byLag": [
       {
@@ -7140,21 +7164,21 @@
       },
       {
         "lag": "2-5m",
-        "n": 170,
+        "n": 171,
         "lag_cost_c": -0.02,
         "drift_15m_c": 1.41
       },
       {
         "lag": "5-15m",
-        "n": 285,
+        "n": 286,
         "lag_cost_c": 0.39,
         "drift_15m_c": -0.44
       }
     ],
     "settled": {
-      "n": 316,
-      "roi_at_whale": 0.8,
-      "roi_at_detect": 1.3
+      "n": 317,
+      "roi_at_whale": 0.4,
+      "roi_at_detect": 1
     },
     "read": "lag_cost_c = cents the price moved against us before we saw it; drift = movement after. roi_at_whale vs roi_at_detect = the value of being as fast as the whale."
   },
@@ -7309,7 +7333,7 @@
       }
     ],
     "hunt": {
-      "at": "2026-10-11T16:25:08.968Z",
+      "at": "2026-10-11T16:39:33.913Z",
       "directiveId": "ord_mv41877i",
       "sports": [
         "nfl"
@@ -7327,7 +7351,8 @@
           "dkFeed": [
             "20261011/-: 13 events, 0 pregame w/ DK",
             "20261012/-: 1 events, 0 pregame w/ DK"
-          ]
+          ],
+          "lines": 200
         }
       },
       "oddsApi": {
@@ -7358,7 +7383,7 @@
           "midPrice": 25.5,
           "spread": 0.01,
           "edge": 0.7,
-          "volume": 715542,
+          "volume": 720942,
           "whale": {
             "wallets": 1,
             "largestBet": 6293
@@ -7463,7 +7488,7 @@
           "midPrice": 30.5,
           "spread": 0.01,
           "edge": 0.6,
-          "volume": 6328,
+          "volume": 6335,
           "whale": null,
           "verdict": "TRIM",
           "reason": "Split 2-2 (margin -0.08)",
@@ -7548,6 +7573,111 @@
           "qualifies": false
         },
         {
+          "id": "nfl-chi-gb-2026-10-11:0",
+          "sport": "nfl",
+          "marketSlug": "nfl-chi-gb-2026-10-11",
+          "game": "Bears vs. Packers",
+          "team": "Bears",
+          "teamFull": "Chicago Bears",
+          "outcomeIndex": 0,
+          "startTime": "2026-10-11T17:00:00.000Z",
+          "vegasProb": 52.4,
+          "refSource": "books",
+          "books": 9,
+          "dkOdds": -125,
+          "dk": null,
+          "buyPrice": 52,
+          "midPrice": 51.5,
+          "spread": 0.01,
+          "edge": 0.4,
+          "volume": 399370,
+          "whale": {
+            "wallets": 2,
+            "largestBet": 9867
+          },
+          "verdict": "APPROVE",
+          "reason": "2-1 (margin 0.21)",
+          "margin": 0.21,
+          "votes": [
+            {
+              "agent": "GREED",
+              "vote": "ABSTAIN",
+              "conviction": 0,
+              "line": "No band history. Nothing to count yet."
+            },
+            {
+              "agent": "FOMO",
+              "vote": "ABSTAIN",
+              "conviction": 0.1,
+              "line": "Lukewarm flow."
+            },
+            {
+              "agent": "PANIC",
+              "vote": "YES",
+              "conviction": 0.2,
+              "line": "Nothing on fire. Fine. FINE."
+            },
+            {
+              "agent": "DOUBT",
+              "vote": "NO",
+              "conviction": 0.5,
+              "line": "wallet only 0 bets, band n=0. Could be luck."
+            },
+            {
+              "agent": "QUANT",
+              "vote": "ABSTAIN",
+              "conviction": 0,
+              "line": "No independent price. Abstain."
+            },
+            {
+              "agent": "RISK",
+              "vote": "YES",
+              "conviction": 0.56,
+              "line": "Book at 4%. Room for it."
+            }
+          ],
+          "tiebreak": null,
+          "council": {
+            "v": [
+              [
+                "GREED",
+                "ABSTAIN",
+                0
+              ],
+              [
+                "FOMO",
+                "ABSTAIN",
+                0.1
+              ],
+              [
+                "PANIC",
+                "YES",
+                0.2
+              ],
+              [
+                "DOUBT",
+                "NO",
+                0.5
+              ],
+              [
+                "QUANT",
+                "ABSTAIN",
+                0
+              ],
+              [
+                "RISK",
+                "YES",
+                0.56
+              ]
+            ],
+            "m": 0.21,
+            "verdict": "APPROVE",
+            "tb": null,
+            "mode": "crew"
+          },
+          "qualifies": false
+        },
+        {
           "id": "nfl-ind-pit-2026-10-11:1",
           "sport": "nfl",
           "marketSlug": "nfl-ind-pit-2026-10-11",
@@ -7565,7 +7695,7 @@
           "midPrice": 58.5,
           "spread": 0.01,
           "edge": 0.1,
-          "volume": 149646,
+          "volume": 154867,
           "whale": {
             "wallets": 3,
             "largestBet": 12188
@@ -7772,7 +7902,7 @@
           "midPrice": 37.5,
           "spread": 0.01,
           "edge": -0.1,
-          "volume": 52936,
+          "volume": 57186,
           "whale": null,
           "verdict": "TRIM",
           "reason": "Split 2-2 (margin -0.08)",
@@ -7874,7 +8004,7 @@
           "midPrice": 43.5,
           "spread": 0.01,
           "edge": -0.2,
-          "volume": 405766,
+          "volume": 432348,
           "whale": null,
           "verdict": "TRIM",
           "reason": "Split 2-2 (margin -0.08)",
@@ -7976,7 +8106,7 @@
           "midPrice": 36.5,
           "spread": 0.01,
           "edge": -0.3,
-          "volume": 17243,
+          "volume": 17637,
           "whale": null,
           "verdict": "TRIM",
           "reason": "Split 2-2 (margin -0.08)",
@@ -8059,111 +8189,6 @@
             "mode": "crew"
           },
           "qualifies": false
-        },
-        {
-          "id": "nfl-min-no-2026-10-11:0",
-          "sport": "nfl",
-          "marketSlug": "nfl-min-no-2026-10-11",
-          "game": "Vikings vs. Saints",
-          "team": "Vikings",
-          "teamFull": "Minnesota Vikings",
-          "outcomeIndex": 0,
-          "startTime": "2026-10-11T17:00:00.000Z",
-          "vegasProb": 55.6,
-          "refSource": "books",
-          "books": 9,
-          "dkOdds": -142,
-          "dk": null,
-          "buyPrice": 56,
-          "midPrice": 55.5,
-          "spread": 0.01,
-          "edge": -0.4,
-          "volume": 404442,
-          "whale": {
-            "wallets": 2,
-            "largestBet": 8400
-          },
-          "verdict": "APPROVE",
-          "reason": "2-1 (margin 0.21)",
-          "margin": 0.21,
-          "votes": [
-            {
-              "agent": "GREED",
-              "vote": "ABSTAIN",
-              "conviction": 0,
-              "line": "No band history. Nothing to count yet."
-            },
-            {
-              "agent": "FOMO",
-              "vote": "ABSTAIN",
-              "conviction": 0.1,
-              "line": "Lukewarm flow."
-            },
-            {
-              "agent": "PANIC",
-              "vote": "YES",
-              "conviction": 0.2,
-              "line": "Nothing on fire. Fine. FINE."
-            },
-            {
-              "agent": "DOUBT",
-              "vote": "NO",
-              "conviction": 0.5,
-              "line": "wallet only 0 bets, band n=0. Could be luck."
-            },
-            {
-              "agent": "QUANT",
-              "vote": "ABSTAIN",
-              "conviction": 0,
-              "line": "No independent price. Abstain."
-            },
-            {
-              "agent": "RISK",
-              "vote": "YES",
-              "conviction": 0.56,
-              "line": "Book at 4%. Room for it."
-            }
-          ],
-          "tiebreak": null,
-          "council": {
-            "v": [
-              [
-                "GREED",
-                "ABSTAIN",
-                0
-              ],
-              [
-                "FOMO",
-                "ABSTAIN",
-                0.1
-              ],
-              [
-                "PANIC",
-                "YES",
-                0.2
-              ],
-              [
-                "DOUBT",
-                "NO",
-                0.5
-              ],
-              [
-                "QUANT",
-                "ABSTAIN",
-                0
-              ],
-              [
-                "RISK",
-                "YES",
-                0.56
-              ]
-            ],
-            "m": 0.21,
-            "verdict": "APPROVE",
-            "tb": null,
-            "mode": "crew"
-          },
-          "qualifies": false
         }
       ],
       "dkBoard": [],
@@ -8185,6 +8210,190 @@
             75.5,
             24.5
           ],
+          "lines": [
+            {
+              "t": "s",
+              "l": -3.5,
+              "o": [
+                "Dolphins",
+                "Bengals"
+              ],
+              "m": [
+                16.5,
+                83.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -6.5,
+              "o": [
+                "Bengals",
+                "Dolphins"
+              ],
+              "m": [
+                53.5,
+                46.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -7.5,
+              "o": [
+                "Bengals",
+                "Dolphins"
+              ],
+              "m": [
+                46.5,
+                53.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -14.5,
+              "o": [
+                "Bengals",
+                "Dolphins"
+              ],
+              "m": [
+                27.5,
+                72.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 44.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                50.5,
+                49.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 42.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                56.5,
+                43.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 46.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                43.5,
+                56.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 40.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                63.5,
+                36.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 54.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                23.5,
+                76.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 48.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                39.5,
+                60.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 60.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                11.5,
+                88.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 66.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                5.9,
+                94.1
+              ],
+              "w": 0.011
+            },
+            {
+              "t": "t",
+              "l": 36.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                74,
+                26
+              ],
+              "w": 0.02
+            },
+            {
+              "t": "t",
+              "l": 56.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                19,
+                81
+              ],
+              "w": 0.04
+            }
+          ],
           "sport": "nfl"
         },
         {
@@ -8203,6 +8412,190 @@
           "books": [
             37.9,
             62.1
+          ],
+          "lines": [
+            {
+              "t": "s",
+              "l": -3.5,
+              "o": [
+                "Patriots",
+                "Raiders"
+              ],
+              "m": [
+                48.5,
+                51.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -10.5,
+              "o": [
+                "Patriots",
+                "Raiders"
+              ],
+              "m": [
+                26.5,
+                73.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -4.5,
+              "o": [
+                "Patriots",
+                "Raiders"
+              ],
+              "m": [
+                45.5,
+                54.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -1.5,
+              "o": [
+                "Patriots",
+                "Raiders"
+              ],
+              "m": [
+                59.5,
+                40.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -6.5,
+              "o": [
+                "Raiders",
+                "Patriots"
+              ],
+              "m": [
+                20.5,
+                79.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -13.5,
+              "o": [
+                "Raiders",
+                "Patriots"
+              ],
+              "m": [
+                9,
+                91
+              ],
+              "w": 0.02
+            },
+            {
+              "t": "s",
+              "l": -9.5,
+              "o": [
+                "Raiders",
+                "Patriots"
+              ],
+              "m": [
+                13.5,
+                86.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -2.5,
+              "o": [
+                "Patriots",
+                "Raiders"
+              ],
+              "m": [
+                57.5,
+                42.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 44.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                52.5,
+                47.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 45.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                48.5,
+                51.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 43.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                57.5,
+                42.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 56.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                21,
+                79
+              ],
+              "w": 0.02
+            },
+            {
+              "t": "t",
+              "l": 50.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                35.5,
+                64.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 41.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                61.5,
+                38.5
+              ],
+              "w": 0.01
+            }
           ],
           "sport": "nfl"
         },
@@ -8223,6 +8616,294 @@
             55.6,
             44.4
           ],
+          "lines": [
+            {
+              "t": "s",
+              "l": -2.5,
+              "o": [
+                "Vikings",
+                "Saints"
+              ],
+              "m": [
+                49.5,
+                50.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -3.5,
+              "o": [
+                "Saints",
+                "Vikings"
+              ],
+              "m": [
+                32.5,
+                67.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -1.5,
+              "o": [
+                "Vikings",
+                "Saints"
+              ],
+              "m": [
+                52.5,
+                47.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -3.5,
+              "o": [
+                "Vikings",
+                "Saints"
+              ],
+              "m": [
+                41.5,
+                58.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -6.5,
+              "o": [
+                "Vikings",
+                "Saints"
+              ],
+              "m": [
+                33.5,
+                66.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -10.5,
+              "o": [
+                "Vikings",
+                "Saints"
+              ],
+              "m": [
+                21,
+                79
+              ],
+              "w": 0.02
+            },
+            {
+              "t": "s",
+              "l": -6.5,
+              "o": [
+                "Saints",
+                "Vikings"
+              ],
+              "m": [
+                25,
+                75
+              ],
+              "w": 0.02
+            },
+            {
+              "t": "s",
+              "l": -1.5,
+              "o": [
+                "Saints",
+                "Vikings"
+              ],
+              "m": [
+                41.5,
+                58.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -4.5,
+              "o": [
+                "Vikings",
+                "Saints"
+              ],
+              "m": [
+                38.5,
+                61.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -5.5,
+              "o": [
+                "Vikings",
+                "Saints"
+              ],
+              "m": [
+                36,
+                64
+              ],
+              "w": 0.02
+            },
+            {
+              "t": "s",
+              "l": -2.5,
+              "o": [
+                "Saints",
+                "Vikings"
+              ],
+              "m": [
+                39,
+                61
+              ],
+              "w": 0.02
+            },
+            {
+              "t": "t",
+              "l": 42.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                46.5,
+                53.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 41.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                50.5,
+                49.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 45.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                37.5,
+                62.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 59.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                9.5,
+                90.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 62.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                6.5,
+                93.5
+              ],
+              "w": 0.03
+            },
+            {
+              "t": "t",
+              "l": 56.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                13.5,
+                86.5
+              ],
+              "w": 0.03
+            },
+            {
+              "t": "t",
+              "l": 50.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                25,
+                75
+              ],
+              "w": 0.02
+            },
+            {
+              "t": "t",
+              "l": 46.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                35,
+                65
+              ],
+              "w": 0.02
+            },
+            {
+              "t": "t",
+              "l": 43.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                43.5,
+                56.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 38.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                59.5,
+                40.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 54.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                15,
+                85
+              ],
+              "w": 0.04
+            }
+          ],
           "sport": "nfl"
         },
         {
@@ -8241,6 +8922,268 @@
           "books": [
             43.8,
             56.2
+          ],
+          "lines": [
+            {
+              "t": "s",
+              "l": -2.5,
+              "o": [
+                "Jets",
+                "Browns"
+              ],
+              "m": [
+                51.5,
+                48.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -7.5,
+              "o": [
+                "Jets",
+                "Browns"
+              ],
+              "m": [
+                28.5,
+                71.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -1.5,
+              "o": [
+                "Jets",
+                "Browns"
+              ],
+              "m": [
+                53.5,
+                46.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -2.5,
+              "o": [
+                "Browns",
+                "Jets"
+              ],
+              "m": [
+                39.5,
+                60.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -6.5,
+              "o": [
+                "Browns",
+                "Jets"
+              ],
+              "m": [
+                24.5,
+                75.5
+              ],
+              "w": 0.03
+            },
+            {
+              "t": "s",
+              "l": -9.5,
+              "o": [
+                "Jets",
+                "Browns"
+              ],
+              "m": [
+                26.5,
+                73.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -6.5,
+              "o": [
+                "Jets",
+                "Browns"
+              ],
+              "m": [
+                34,
+                66
+              ],
+              "w": 0.02
+            },
+            {
+              "t": "s",
+              "l": -10.5,
+              "o": [
+                "Jets",
+                "Browns"
+              ],
+              "m": [
+                21.5,
+                78.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -3.5,
+              "o": [
+                "Jets",
+                "Browns"
+              ],
+              "m": [
+                42.5,
+                57.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -19.5,
+              "o": [
+                "Jets",
+                "Browns"
+              ],
+              "m": [
+                7.5,
+                92.5
+              ],
+              "w": 0.05
+            },
+            {
+              "t": "s",
+              "l": -5.5,
+              "o": [
+                "Jets",
+                "Browns"
+              ],
+              "m": [
+                37.5,
+                62.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -8.5,
+              "o": [
+                "Jets",
+                "Browns"
+              ],
+              "m": [
+                25.5,
+                74.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -1.5,
+              "o": [
+                "Browns",
+                "Jets"
+              ],
+              "m": [
+                40.5,
+                59.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 38.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                49.5,
+                50.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 40.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                42.5,
+                57.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 32.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                68.5,
+                31.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 28.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                80.5,
+                19.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 42.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                37.5,
+                62.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 30.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                74,
+                26
+              ],
+              "w": 0.02
+            },
+            {
+              "t": "t",
+              "l": 34.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                62,
+                38
+              ],
+              "w": 0.02
+            }
           ],
           "sport": "nfl"
         },
@@ -8261,6 +9204,229 @@
             40.9,
             59.1
           ],
+          "lines": [
+            {
+              "t": "s",
+              "l": -7.5,
+              "o": [
+                "Steelers",
+                "Colts"
+              ],
+              "m": [
+                29.5,
+                70.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -3.5,
+              "o": [
+                "Steelers",
+                "Colts"
+              ],
+              "m": [
+                44.5,
+                55.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -2.5,
+              "o": [
+                "Steelers",
+                "Colts"
+              ],
+              "m": [
+                53.5,
+                46.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -3.5,
+              "o": [
+                "Colts",
+                "Steelers"
+              ],
+              "m": [
+                28.5,
+                71.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -6.5,
+              "o": [
+                "Colts",
+                "Steelers"
+              ],
+              "m": [
+                22.5,
+                77.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -4.5,
+              "o": [
+                "Steelers",
+                "Colts"
+              ],
+              "m": [
+                41.5,
+                58.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -16.5,
+              "o": [
+                "Steelers",
+                "Colts"
+              ],
+              "m": [
+                13.5,
+                86.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -1.5,
+              "o": [
+                "Steelers",
+                "Colts"
+              ],
+              "m": [
+                56.5,
+                43.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -13.5,
+              "o": [
+                "Steelers",
+                "Colts"
+              ],
+              "m": [
+                18.5,
+                81.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 42.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                47.5,
+                52.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 44.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                40.5,
+                59.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 40.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                53.5,
+                46.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 46.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                35.5,
+                64.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 52.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                21,
+                79
+              ],
+              "w": 0.02
+            },
+            {
+              "t": "t",
+              "l": 62.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                7,
+                93
+              ],
+              "w": 0.04
+            },
+            {
+              "t": "t",
+              "l": 56.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                14.5,
+                85.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 58.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                10,
+                90
+              ],
+              "w": 0.02
+            }
+          ],
           "sport": "nfl"
         },
         {
@@ -8279,6 +9445,294 @@
           "books": [
             73.3,
             26.7
+          ],
+          "lines": [
+            {
+              "t": "s",
+              "l": -3.5,
+              "o": [
+                "Titans",
+                "Texans"
+              ],
+              "m": [
+                17.5,
+                82.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -6.5,
+              "o": [
+                "Texans",
+                "Titans"
+              ],
+              "m": [
+                50.5,
+                49.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -7.5,
+              "o": [
+                "Texans",
+                "Titans"
+              ],
+              "m": [
+                42.5,
+                57.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -10.5,
+              "o": [
+                "Texans",
+                "Titans"
+              ],
+              "m": [
+                35.5,
+                64.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -14.5,
+              "o": [
+                "Texans",
+                "Titans"
+              ],
+              "m": [
+                24.5,
+                75.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -13.5,
+              "o": [
+                "Titans",
+                "Texans"
+              ],
+              "m": [
+                5.6,
+                94.5
+              ],
+              "w": 0.007
+            },
+            {
+              "t": "s",
+              "l": -6.5,
+              "o": [
+                "Titans",
+                "Texans"
+              ],
+              "m": [
+                12,
+                88
+              ],
+              "w": 0.02
+            },
+            {
+              "t": "s",
+              "l": -5.5,
+              "o": [
+                "Texans",
+                "Titans"
+              ],
+              "m": [
+                54.5,
+                45.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -8.5,
+              "o": [
+                "Texans",
+                "Titans"
+              ],
+              "m": [
+                40.5,
+                59.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -9.5,
+              "o": [
+                "Texans",
+                "Titans"
+              ],
+              "m": [
+                39.5,
+                60.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 38.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                46.5,
+                53.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 36.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                53.5,
+                46.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 40.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                40.5,
+                59.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 54.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                10.5,
+                89.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 48.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                21.5,
+                78.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 26.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                81.5,
+                18.5
+              ],
+              "w": 0.03
+            },
+            {
+              "t": "t",
+              "l": 32.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                67.5,
+                32.5
+              ],
+              "w": 0.03
+            },
+            {
+              "t": "t",
+              "l": 30.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                72.5,
+                27.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 44.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                30.5,
+                69.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 24.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                88,
+                12
+              ],
+              "w": 0.02
+            },
+            {
+              "t": "t",
+              "l": 56.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                9,
+                91
+              ],
+              "w": 0.02
+            },
+            {
+              "t": "t",
+              "l": 42.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                35,
+                65
+              ],
+              "w": 0.02
+            }
           ],
           "sport": "nfl"
         },
@@ -8299,6 +9753,255 @@
             37.4,
             62.6
           ],
+          "lines": [
+            {
+              "t": "s",
+              "l": -3.5,
+              "o": [
+                "Commanders",
+                "Giants"
+              ],
+              "m": [
+                47.5,
+                52.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -10.5,
+              "o": [
+                "Commanders",
+                "Giants"
+              ],
+              "m": [
+                26.5,
+                73.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -4.5,
+              "o": [
+                "Commanders",
+                "Giants"
+              ],
+              "m": [
+                44.5,
+                55.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -2.5,
+              "o": [
+                "Commanders",
+                "Giants"
+              ],
+              "m": [
+                57.5,
+                42.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -6.5,
+              "o": [
+                "Giants",
+                "Commanders"
+              ],
+              "m": [
+                19.5,
+                80.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -4.5,
+              "o": [
+                "Giants",
+                "Commanders"
+              ],
+              "m": [
+                24,
+                76
+              ],
+              "w": 0.02
+            },
+            {
+              "t": "s",
+              "l": -3.5,
+              "o": [
+                "Giants",
+                "Commanders"
+              ],
+              "m": [
+                25.5,
+                74.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -6.5,
+              "o": [
+                "Commanders",
+                "Giants"
+              ],
+              "m": [
+                39.5,
+                60.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -14.5,
+              "o": [
+                "Commanders",
+                "Giants"
+              ],
+              "m": [
+                18.5,
+                81.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -16.5,
+              "o": [
+                "Commanders",
+                "Giants"
+              ],
+              "m": [
+                16.5,
+                83.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -17.5,
+              "o": [
+                "Commanders",
+                "Giants"
+              ],
+              "m": [
+                13.5,
+                86.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 41.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                48.5,
+                51.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 43.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                42.5,
+                57.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 42.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                45.5,
+                54.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 44.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                39.5,
+                60.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 45.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                36.5,
+                63.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 36.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                65.5,
+                34.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 56.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                13.5,
+                86.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 40.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                52.5,
+                47.5
+              ],
+              "w": 0.01
+            }
+          ],
           "sport": "nfl"
         },
         {
@@ -8317,6 +10020,125 @@
           "books": [
             63.3,
             36.7
+          ],
+          "lines": [
+            {
+              "t": "s",
+              "l": -3.5,
+              "o": [
+                "Broncos",
+                "Chargers"
+              ],
+              "m": [
+                49.5,
+                50.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -3.5,
+              "o": [
+                "Chargers",
+                "Broncos"
+              ],
+              "m": [
+                25.5,
+                74.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -6.5,
+              "o": [
+                "Broncos",
+                "Chargers"
+              ],
+              "m": [
+                39.5,
+                60.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -2.5,
+              "o": [
+                "Broncos",
+                "Chargers"
+              ],
+              "m": [
+                59.5,
+                40.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -1.5,
+              "o": [
+                "Broncos",
+                "Chargers"
+              ],
+              "m": [
+                60.5,
+                39.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -6.5,
+              "o": [
+                "Chargers",
+                "Broncos"
+              ],
+              "m": [
+                19.5,
+                80.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -13.5,
+              "o": [
+                "Broncos",
+                "Chargers"
+              ],
+              "m": [
+                22.5,
+                77.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 42.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                48.5,
+                51.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 40.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                55.5,
+                44.5
+              ],
+              "w": 0.01
+            }
           ],
           "sport": "nfl"
         },
@@ -8337,6 +10159,112 @@
             68.4,
             31.6
           ],
+          "lines": [
+            {
+              "t": "s",
+              "l": -3.5,
+              "o": [
+                "Cardinals",
+                "Lions"
+              ],
+              "m": [
+                20.5,
+                79.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -4.5,
+              "o": [
+                "Lions",
+                "Cardinals"
+              ],
+              "m": [
+                51.5,
+                48.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -5.5,
+              "o": [
+                "Lions",
+                "Cardinals"
+              ],
+              "m": [
+                48.5,
+                51.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -6.5,
+              "o": [
+                "Lions",
+                "Cardinals"
+              ],
+              "m": [
+                44.5,
+                55.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -2.5,
+              "o": [
+                "Lions",
+                "Cardinals"
+              ],
+              "m": [
+                62.5,
+                37.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 54.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                50.5,
+                49.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 52.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                56.5,
+                43.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 46.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                73,
+                27
+              ],
+              "w": 0.02
+            }
+          ],
           "sport": "nfl"
         },
         {
@@ -8348,13 +10276,262 @@
           ],
           "startTime": "2026-10-11T17:00:00.000Z",
           "mid": [
-            52.5,
-            47.5
+            51.5,
+            48.5
           ],
           "spread": 0.01,
           "books": [
             52.4,
             47.6
+          ],
+          "lines": [
+            {
+              "t": "s",
+              "l": -2.5,
+              "o": [
+                "Bears",
+                "Packers"
+              ],
+              "m": [
+                45.5,
+                54.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -3.5,
+              "o": [
+                "Packers",
+                "Bears"
+              ],
+              "m": [
+                33.5,
+                66.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -1.5,
+              "o": [
+                "Bears",
+                "Packers"
+              ],
+              "m": [
+                48.5,
+                51.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -1.5,
+              "o": [
+                "Packers",
+                "Bears"
+              ],
+              "m": [
+                45.5,
+                54.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -3.5,
+              "o": [
+                "Bears",
+                "Packers"
+              ],
+              "m": [
+                38.5,
+                61.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -6.5,
+              "o": [
+                "Bears",
+                "Packers"
+              ],
+              "m": [
+                30.5,
+                69.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -2.5,
+              "o": [
+                "Packers",
+                "Bears"
+              ],
+              "m": [
+                41.5,
+                58.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -4.5,
+              "o": [
+                "Bears",
+                "Packers"
+              ],
+              "m": [
+                35.5,
+                64.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -9.5,
+              "o": [
+                "Bears",
+                "Packers"
+              ],
+              "m": [
+                24.5,
+                75.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -8.5,
+              "o": [
+                "Packers",
+                "Bears"
+              ],
+              "m": [
+                20.5,
+                79.5
+              ],
+              "w": 0.03
+            },
+            {
+              "t": "t",
+              "l": 46.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                50.5,
+                49.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 44.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                56.5,
+                43.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 50.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                38.5,
+                61.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 48.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                43.5,
+                56.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 62.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                10.5,
+                89.5
+              ],
+              "w": 0.03
+            },
+            {
+              "t": "t",
+              "l": 52.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                32,
+                68
+              ],
+              "w": 0.02
+            },
+            {
+              "t": "t",
+              "l": 42.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                62.5,
+                37.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 36.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                78.5,
+                21.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 34.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                83.5,
+                16.5
+              ],
+              "w": 0.03
+            }
           ],
           "sport": "nfl"
         },
@@ -8375,6 +10552,255 @@
             39.1,
             60.9
           ],
+          "lines": [
+            {
+              "t": "s",
+              "l": -3.5,
+              "o": [
+                "49ers",
+                "Seahawks"
+              ],
+              "m": [
+                27.5,
+                72.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -4.5,
+              "o": [
+                "Seahawks",
+                "49ers"
+              ],
+              "m": [
+                43.5,
+                56.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -3.5,
+              "o": [
+                "Seahawks",
+                "49ers"
+              ],
+              "m": [
+                46.5,
+                53.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -2.5,
+              "o": [
+                "Seahawks",
+                "49ers"
+              ],
+              "m": [
+                57.5,
+                42.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -6.5,
+              "o": [
+                "Seahawks",
+                "49ers"
+              ],
+              "m": [
+                38.5,
+                61.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 46.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                51.5,
+                48.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 47.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                47.5,
+                52.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 44.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                56.5,
+                43.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 45.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                54.5,
+                45.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 39.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                71.5,
+                28.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 56.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                23.5,
+                76.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 57.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                20,
+                80
+              ],
+              "w": 0.04
+            },
+            {
+              "t": "t",
+              "l": 58.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                18.5,
+                81.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 52.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                32,
+                68
+              ],
+              "w": 0.02
+            },
+            {
+              "t": "t",
+              "l": 54.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                27.5,
+                72.5
+              ],
+              "w": 0.03
+            },
+            {
+              "t": "t",
+              "l": 53.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                29.5,
+                70.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 59.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                15.5,
+                84.5
+              ],
+              "w": 0.03
+            },
+            {
+              "t": "t",
+              "l": 55.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                24.5,
+                75.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 49.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                40.5,
+                59.5
+              ],
+              "w": 0.01
+            }
+          ],
           "sport": "nfl"
         },
         {
@@ -8394,11 +10820,243 @@
             38.6,
             61.4
           ],
+          "lines": [
+            {
+              "t": "s",
+              "l": -3.5,
+              "o": [
+                "Ravens",
+                "Falcons"
+              ],
+              "m": [
+                27.5,
+                72.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -3.5,
+              "o": [
+                "Falcons",
+                "Ravens"
+              ],
+              "m": [
+                47.5,
+                52.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -2.5,
+              "o": [
+                "Ravens",
+                "Falcons"
+              ],
+              "m": [
+                33.5,
+                66.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -2.5,
+              "o": [
+                "Falcons",
+                "Ravens"
+              ],
+              "m": [
+                57.5,
+                42.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -14.5,
+              "o": [
+                "Falcons",
+                "Ravens"
+              ],
+              "m": [
+                18.5,
+                81.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -13.5,
+              "o": [
+                "Falcons",
+                "Ravens"
+              ],
+              "m": [
+                22.5,
+                77.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -5.5,
+              "o": [
+                "Falcons",
+                "Ravens"
+              ],
+              "m": [
+                42.5,
+                57.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 49.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                32.5,
+                67.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 43.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                50.5,
+                49.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 45.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                42.5,
+                57.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 44.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                45.5,
+                54.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 40.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                59.5,
+                40.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 46.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                40.5,
+                59.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 42.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                53.5,
+                46.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 41.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                56.5,
+                43.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 52.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                23.5,
+                76.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
+              "l": 61.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                9.5,
+                90.5
+              ],
+              "w": 0.01
+            }
+          ],
           "sport": "nfl"
         }
       ],
       "dkFairMaxSpread": 0.04,
       "alsoRan": [
+        {
+          "game": "Vikings vs. Saints",
+          "team": "Vikings",
+          "vegasProb": 55.6,
+          "buyPrice": 56,
+          "edge": -0.4,
+          "startTime": "2026-10-11T17:00:00.000Z",
+          "dkOdds": -142
+        },
         {
           "game": "Giants vs. Commanders",
           "team": "Commanders",
@@ -8407,15 +11065,6 @@
           "edge": -0.4,
           "startTime": "2026-10-11T17:00:00.000Z",
           "dkOdds": -192
-        },
-        {
-          "game": "Bears vs. Packers",
-          "team": "Packers",
-          "vegasProb": 47.6,
-          "buyPrice": 48,
-          "edge": -0.4,
-          "startTime": "2026-10-11T17:00:00.000Z",
-          "dkOdds": 105
         },
         {
           "game": "Ravens vs. Falcons",
@@ -8463,15 +11112,6 @@
           "dkOdds": 160
         },
         {
-          "game": "Bears vs. Packers",
-          "team": "Bears",
-          "vegasProb": 52.4,
-          "buyPrice": 53,
-          "edge": -0.6,
-          "startTime": "2026-10-11T17:00:00.000Z",
-          "dkOdds": -125
-        },
-        {
           "game": "Ravens vs. Falcons",
           "team": "Falcons",
           "vegasProb": 61.4,
@@ -8506,6 +11146,15 @@
           "edge": -0.9,
           "startTime": "2026-10-11T17:00:00.000Z",
           "dkOdds": -180
+        },
+        {
+          "game": "Colts vs. Steelers",
+          "team": "Colts",
+          "vegasProb": 40.9,
+          "buyPrice": 42,
+          "edge": -1.1,
+          "startTime": "2026-10-11T17:00:00.000Z",
+          "dkOdds": 136
         }
       ],
       "counts": {
@@ -8514,6 +11163,15 @@
         "VETO": 0
       },
       "queued": [],
+      "markets": [
+        "moneyline",
+        "spread",
+        "total"
+      ],
+      "debate": {
+        "at": "2026-10-11T16:39:33.913Z",
+        "error": "HTTP 400: {\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.\"},\"request_id\":\"req_011CfvnCUfGMLPN7FAp8y34P\"}"
+      },
       "reportedAt": "2026-10-11T16:25:08.968Z"
     },
     "queue": [],
@@ -8547,8 +11205,8 @@
       "used": "166"
     },
     "claude": {
-      "on": true,
-      "why": null,
+      "on": false,
+      "why": "Anthropic credits exhausted",
       "spentToday": 0,
       "dailyCap": 3
     }
