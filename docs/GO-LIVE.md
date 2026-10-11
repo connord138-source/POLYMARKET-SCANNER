@@ -52,6 +52,13 @@ vegasEdgeEntries: true  // stays PAPER-ONLY by code until separately proven
 
 - [ ] Kill switch verified reachable before the first order: emergency stop
       endpoint + flipping `paperTradeMode` back via apply-config.
+- [ ] Agent Crew back on Claude Opus (owner's call, Oct 2026: Haiku while
+      paper, Opus once live). In `src/crew-llm.js` set `MODEL` to
+      `claude-opus-5-5` and `PRICE_IN`/`PRICE_OUT` to its rates ($4 / $20 per
+      MTok), restore the refusal fallback (`fallbacks: "default"` + the
+      `server-side-fallback-2026-07-01` beta header), and raise
+      `CREW_LLM_DAILY_USD` (Opus is ~40x the cost: ~$0.05-0.10 per debate).
+      Revisit `INVESTIGATION_DAILY_USD` (cut to $1 while credits were tight).
 - [ ] Owner monitoring: check the dashboard daily for the first two weeks.
 
 ## 5. Scale-up rule
