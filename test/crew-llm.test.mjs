@@ -88,13 +88,14 @@ const nflOrder = (extra = {}) => JSON.stringify({ id: "ord_nfl", text: "focus on
   const chat = J(env, CREW_KEYS.CHAT);
   check("chief: reply in chat, tagged", chat.length === 4 && chat[3].from === "crew" && chat[3].by === "chief");
   const req = claudeCalls[0];
-  check("chief: model + structured output + low effort", req.body.model === "claude-opus-5-5" && req.body.output_config.format.type === "json_schema" && req.body.output_config.effort === "low");
-  check("chief: refusal fallback on", req.body.fallbacks === "default" && req.headers["anthropic-beta"] === "server-side-fallback-2026-07-01");
+  check("chief: haiku 5.5 + structured output + medium effort", req.body.model === "claude-haiku-5-5" && req.body.output_config.format.type === "json_schema" && req.body.output_config.effort === "medium");
+  check("chief: no server-side fallback (Haiku has none)", req.body.fallbacks === undefined && req.headers["anthropic-beta"] === undefined);
   const msgs = req.body.messages;
   check("chief: history + state, ends on the operator", msgs[0].role === "user" && msgs[msgs.length - 1].role === "user" &&
     /<state>/.test(msgs[msgs.length - 1].content) && /only nfl nothing else today/.test(msgs[msgs.length - 1].content) && msgs.some(m => m.role === "assistant"), JSON.stringify(msgs.map(m => m.role)));
   check("chief: state carries the live orders", /"sports":\["nfl"\]/.test(msgs[msgs.length - 1].content));
-  check("chief: spend tracked", parseFloat(env.store[`crew_llm_usd:${today()}`]) > 0.02, env.store[`crew_llm_usd:${today()}`]);
+  // 3000 in + 800 out at Haiku 5.5 rates = $0.0007
+  check("chief: spend tracked at Haiku rates", Math.abs(parseFloat(env.store[`crew_llm_usd:${today()}`]) - 0.0007) < 0.00005, env.store[`crew_llm_usd:${today()}`]);
 }
 {
   // "everything from game lines to player bets": widen markets, keep the order, honest about props
@@ -133,7 +134,7 @@ const nflOrder = (extra = {}) => JSON.stringify({ id: "ord_nfl", text: "focus on
 }
 {
   // over budget -> no Claude call at all
-  const env = makeEnv({ [`crew_llm_usd:${today()}`]: "3.5" });
+  const env = makeEnv({ [`crew_llm_usd:${today()}`]: "1.2" });
   claudeCalls = [];
   const r = await handleCrewOrder(env, "focus on nfl today", CFG, NOW);
   check("budget: no call when the daily cap is spent", claudeCalls.length === 0 && r.via === "parser" && /budget/.test(r.reply), r.reply);
@@ -179,7 +180,7 @@ const nflOrder = (extra = {}) => JSON.stringify({ id: "ord_nfl", text: "focus on
   const sent = JSON.parse(claudeCalls[0].body.messages[0].content.replace(/<\/?sweep>/g, ""));
   check("debate: real numbers + opening votes + DK board sent", sent.candidates.length >= 1 && sent.candidates[0].openingVotes.length === 6 &&
     typeof sent.candidates[0].edgePts === "number" && sent.dkBoard[0].pick === "Raiders +3.5", JSON.stringify(sent.candidates[0]).slice(0, 300));
-  check("debate: effort medium", claudeCalls[0].body.output_config.effort === "medium");
+  check("debate: haiku at effort high", claudeCalls[0].body.model === "claude-haiku-5-5" && claudeCalls[0].body.output_config.effort === "high");
   check("debate: transcript + summary stored", hunt.debate.lines.length === 3 && /Raiders \+3\.5/.test(hunt.debate.summary));
   const chiefs = hunt.board.find(d => d.team === "Chiefs");
   check("debate: chair's veto overrides the rule vote and blocks the pick", chiefs && chiefs.verdict === "VETO" && chiefs.ruleVerdict && !chiefs.qualifies &&
