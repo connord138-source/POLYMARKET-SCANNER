@@ -10,6 +10,9 @@ check("kind", kindOf("nfl-sf-sea-2026-10-11") === "nfl" && kindOf("will-x-happen
     g({ slug: "nfl-a-b-2026-10-12", gameStartTime: "2026-10-12 00:20:00+00", clobRewards: [{ rewardsDailyRate: 15771 }], rewardsMinSize: 1000, rewardsMaxSpread: 2.5 }), g({})], { max: 10 });
   check("pick: pool floor, closed, not-accepting dropped; sorted by pool", picked.length === 2 && picked[0].pool === 15771 && picked[0].kind === "nfl" && picked[0].gameStart === Math.floor(Date.parse("2026-10-12T00:20:00Z") / 1000) && picked[0].tokenId === "t0", JSON.stringify(picked));
   check("pick: cap", pickMarkets(Array.from({ length: 80 }, () => g({})), { max: 60 }).length === 60);
+  const z = pickMarkets([g({ slug: "nfl-x-y-2026-10-12", rewardsMaxSpread: 0, clobRewards: [{ rewardsDailyRate: 400 }] }), g({ slug: "will-z", rewardsMaxSpread: "0" })]);
+  const bySlug = Object.fromEntries(z.map(x => [x.slug, x.maxSpread]));
+  check("pick: Gamma max spread 0 falls back to the kind's standard band", bySlug["nfl-x-y-2026-10-12"] === 2.5 && bySlug["will-z"] === 3.5, JSON.stringify(bySlug));
 }
 {
   // v = 2.5c; mid 0.345; a 1c spread puts the touch 0.5c from mid -> weight ((2.5-0.5)/2.5)^2 = 0.64
