@@ -24,6 +24,7 @@
 
 import { conveneCouncil, llmTiebreak, getCouncilStats, compactSession } from './council.js';
 import { americanToProb, teamNamesOverlap, SPORT_KEY_MAP } from './odds.js';
+import { crewLlmStatus, chief, debate } from './crew-llm.js';
 
 export const CREW_KEYS = {
   DIRECTIVE: 'crew_directive',
@@ -31,7 +32,9 @@ export const CREW_KEYS = {
   HUNT: 'crew_hunt_last',
   PICKS: 'crew_picks',
   ENTERED: 'crew_entered_ids',
+  DK_BOARD: 'crew_dk_board',      // DraftKings value board as the operator's browser last computed it
 };
+const ALL_MARKETS = ['moneyline', 'spread', 'total'];
 
 const GAMMA_API = 'https://gamma-api.polymarket.com';
 const CHAT_MAX = 40;
@@ -111,10 +114,103 @@ function fmtEt(ms) {
   } catch (e) { return new Date(ms).toISOString(); }
 }
 
-// Handle a message from the chat box. Returns the crew's reply text.
+// Next ~6am ET (10:00 UTC) after `ms`: "today" covers late West Coast games.
+function endOfSportsDay(ms) {
+  const d = new Date(ms);
+  const t = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 10, 0, 0);
+  return t > ms + 2 * 3600e3 ? t : t + 86400e3;
+}
+
+// Apply the chief's structured decision. The code — not the model — owns
+// validation: unknown sports/markets dropped, numbers clamped, durations capped.
+async function applyChiefAction(env, decision, config, nowMs) {
+  const current = await getActiveDirective(env, nowMs);
+  if (decision.action === 'stand_down') {
+    await env.SIGNALS_CACHE.delete(CREW_KEYS.DIRECTIVE);
+    await env.SIGNALS_CACHE.put(CREW_KEYS.PICKS, '[]');
+    return { changed: true, directive: null };
+  }
+  if ((decision.action !== 'set_focus' && decision.action !== 'update_focus') || !decision.focus) return { changed: false, directive: current };
+  const f = decision.focus;
+  let sports = (f.sports || []).filter(x => SPORT_TAG[x]);
+  if (!sports.length) sports = current ? current.sports : [];
+  if (!sports.length) return { changed: false, directive: current };
+  const markets = (f.markets || []).filter(m => ALL_MARKETS.includes(m));
+  const minEdge = typeof f.minEdge === 'number' ? Math.max(1, Math.min(15, f.minEdge)) : (current ? current.minEdge : (config.crewMinEdge ?? 3));
+  const maxBets = Number.isInteger(f.maxBets) ? Math.max(1, Math.min(MAX_BETS_CAP, f.maxBets)) : (current ? current.maxBets : (config.crewMaxPerDay ?? 6));
+  const expiresMs = f.until === 'stand_down' ? nowMs + OPEN_ENDED_DAYS * 86400e3
+    : f.until === 'hours' && typeof f.hours === 'number' ? nowMs + Math.max(1, Math.min(168, f.hours)) * 3600e3
+    : endOfSportsDay(nowMs);
+  const sameSports = current && [...current.sports].sort().join() === [...sports].sort().join();
+  const directive = {
+    id: sameSports ? current.id : `ord_${nowMs.toString(36)}`,
+    text: current && sameSports ? current.text : 'set in chat',
+    sports, markets: markets.length ? markets : ALL_MARKETS, minEdge, maxBets,
+    createdAt: sameSports ? current.createdAt : new Date(nowMs).toISOString(),
+    updatedAt: new Date(nowMs).toISOString(),
+    expiresAt: new Date(expiresMs).toISOString(),
+    openEnded: f.until === 'stand_down',
+  };
+  await env.SIGNALS_CACHE.put(CREW_KEYS.DIRECTIVE, JSON.stringify(directive));
+  if (!sameSports) await env.SIGNALS_CACHE.put(CREW_KEYS.PICKS, '[]');
+  return { changed: true, directive };
+}
+
+const fmtEtShort = (iso) => {
+  try { return new Date(iso).toLocaleString('en-US', { timeZone: 'America/New_York', weekday: 'short', hour: 'numeric', minute: '2-digit' }) + ' ET'; }
+  catch (e) { return iso; }
+};
+
+// What the chief sees: the crew's live view, compact.
+async function crewStateForLlm(env, config, nowMs) {
+  const [directive, hunt, queue, browserDk, llm] = await Promise.all([
+    getActiveDirective(env, nowMs), kvJson(env, CREW_KEYS.HUNT), kvJson(env, CREW_KEYS.PICKS),
+    kvJson(env, CREW_KEYS.DK_BOARD), crewLlmStatus(env),
+  ]);
+  const dkFresh = browserDk && nowMs - Date.parse(browserDk.at) < 45 * 60e3 ? browserDk : null;
+  return {
+    now: fmtEtShort(new Date(nowMs).toISOString()),
+    orders: directive ? {
+      sports: directive.sports, markets: directive.markets || ALL_MARKETS, minEdge: directive.minEdge, maxBetsPerDay: directive.maxBets,
+      until: directive.openEnded ? 'until the operator says stand down' : fmtEtShort(directive.expiresAt),
+    } : null,
+    lastSweep: hunt ? {
+      at: fmtEtShort(hunt.at), sports: hunt.sports, gamesPriced: hunt.priced,
+      polymarketGaps: (hunt.board || []).slice(0, 6).map(d => ({
+        team: d.team, game: d.game, kickoff: fmtEtShort(d.startTime), polymarketPrice: d.buyPrice, fairProb: d.vegasProb,
+        edgePts: d.edge, councilVerdict: d.verdict, chairReason: d.chairReason || null,
+      })),
+      chairSummary: hunt.debate && hunt.debate.summary ? hunt.debate.summary : null,
+    } : null,
+    draftKingsBoard: dkFresh ? {
+      computed: fmtEtShort(dkFresh.at),
+      rows: dkFresh.rows.slice(0, 10).map(r => ({ pick: r.label || `${r.team} ML`, odds: r.odds, fair: r.fair, dkImplied: r.implied, per100: r.ev, kickoff: fmtEtShort(r.startTime) })),
+    } : 'not reported yet (the operator\'s browser computes it when the Agent Crew page is open)',
+    paperBetsQueued: (queue || []).map(q => `${q.team} @ ${q.buyPrice}c (${q.verdict})`),
+    claudeBudget: { spentToday: Math.round(llm.spent * 100) / 100, dailyCap: llm.cap },
+  };
+}
+
+// Handle a message from the chat box. Claude (the chief) when available,
+// the keyword parser otherwise. Returns the crew's reply text.
 export async function handleCrewOrder(env, text, config = {}, nowMs = Date.now()) {
-  const p = parseDirective(text);
+  const priorChat = (await kvJson(env, CREW_KEYS.CHAT)) || [];
   await appendCrewChat(env, 'you', text);
+  const llm = await crewLlmStatus(env);
+  let fallbackNote = '';
+  if (llm.ok) {
+    const r = await chief(env, { text, chat: priorChat, state: await crewStateForLlm(env, config, nowMs) });
+    if (r.ok && r.data && typeof r.data.reply === 'string' && r.data.reply.trim()) {
+      const applied = await applyChiefAction(env, r.data, config, nowMs);
+      await appendCrewChat(env, 'crew', r.data.reply, { by: 'chief' });
+      return { reply: r.data.reply, parsed: { kind: r.data.action, focus: r.data.focus, applied: applied.changed }, via: 'claude' };
+    }
+    fallbackNote = ` (The chief couldn't answer just now: ${r.error || 'empty reply'}. Using the basic parser.)`;
+  } else if (env.ANTHROPIC_API_KEY) {
+    fallbackNote = ` (Basic parser only: ${llm.why}.)`;
+  }
+
+  const p = parseDirective(text);
   let reply;
   if (p.kind === 'stand_down') {
     await env.SIGNALS_CACHE.delete(CREW_KEYS.DIRECTIVE);
@@ -126,8 +222,8 @@ export async function handleCrewOrder(env, text, config = {}, nowMs = Date.now()
     const minEdge = p.minEdge ?? config.crewMinEdge ?? 3;
     const maxBets = p.maxBets ?? config.crewMaxPerDay ?? 6;
     const directive = {
-      id: `ord_${nowMs.toString(36)}`, text: String(text).slice(0, 300), sports: p.sports, minEdge, maxBets,
-      createdAt: new Date(nowMs).toISOString(), expiresAt: new Date(expiresMs).toISOString(),
+      id: `ord_${nowMs.toString(36)}`, text: String(text).slice(0, 300), sports: p.sports, markets: ALL_MARKETS, minEdge, maxBets,
+      createdAt: new Date(nowMs).toISOString(), expiresAt: new Date(expiresMs).toISOString(), openEnded,
     };
     await env.SIGNALS_CACHE.put(CREW_KEYS.DIRECTIVE, JSON.stringify(directive));
     await env.SIGNALS_CACHE.put(CREW_KEYS.PICKS, '[]');
@@ -141,8 +237,24 @@ export async function handleCrewOrder(env, text, config = {}, nowMs = Date.now()
   } else {
     reply = `I didn't catch a sport. Try "Focus CFB today", "NFL tomorrow, min edge 4", or "stand down".`;
   }
+  reply += fallbackNote;
   await appendCrewChat(env, 'crew', reply);
-  return { reply, parsed: p };
+  return { reply, parsed: p, via: 'parser' };
+}
+
+// The operator's browser computes the DraftKings value board (ESPN only
+// serves odds to US visitors) and reports it so the chief and the debate
+// can talk about DraftKings value too.
+export async function saveBrowserDkBoard(env, rows) {
+  const clean = (Array.isArray(rows) ? rows : []).slice(0, 25).map(r => ({
+    id: String(r.id || '').slice(0, 120), label: String(r.label || '').slice(0, 80), team: String(r.team || '').slice(0, 60),
+    game: String(r.game || '').slice(0, 120), market: String(r.market || 'moneyline').slice(0, 12),
+    odds: Number(r.odds), fair: Number(r.fair), implied: Number(r.implied), ev: Number(r.ev),
+    startTime: String(r.startTime || '').slice(0, 30),
+  })).filter(r => isFinite(r.odds) && isFinite(r.ev));
+  const board = { at: new Date().toISOString(), rows: clean };
+  await env.SIGNALS_CACHE.put(CREW_KEYS.DK_BOARD, JSON.stringify(board), { expirationTtl: 6 * 3600 });
+  return board;
 }
 
 // ---------- DraftKings lines (ESPN scoreboard, free) ----------
@@ -430,6 +542,34 @@ async function fetchSportMoneylines(sport, nowMs) {
   return all;
 }
 
+// Full-game spread and total markets, most-traded first so each game's main
+// lines come back without pulling every alternate line (a CFB Saturday has
+// ~3k of them). Polymarket frames spreads as "Spread: Ravens (-1.5)",
+// outcomes [Ravens, Falcons], line -1.5: P(outcome 0) = Ravens cover -1.5.
+async function fetchSportLines(sport, type, nowMs, pages) {
+  const tag = SPORT_TAG[sport];
+  if (!tag) return [];
+  const min = new Date(nowMs).toISOString(), max = new Date(nowMs + HORIZON_MS).toISOString();
+  const out = [];
+  for (let i = 0; i < pages; i++) {
+    try {
+      const res = await fetch(`${GAMMA_API}/markets?closed=false&limit=100&offset=${i * 100}&sports_market_types=${type}&tag_id=${tag}&order=volumeNum&ascending=false&end_date_min=${encodeURIComponent(min)}&end_date_max=${encodeURIComponent(max)}`);
+      if (!res.ok) break;
+      const page = await res.json();
+      if (!Array.isArray(page) || !page.length) break;
+      for (const m of page) {
+        if (!String(m.slug || '').startsWith(`${sport}-`) || typeof m.line !== 'number') continue;
+        const outcomes = parseArr(m.outcomes) || [];
+        if (outcomes.length !== 2) continue;
+        const q0 = quoteOutcome(m, 0), q1 = quoteOutcome(m, 1);
+        out.push({ slug: m.slug, t: type === 'spreads' ? 's' : 't', l: m.line, o: outcomes.map(String), m: [q0.mid, q1.mid], w: q0.spread });
+      }
+      if (page.length < 100) break;
+    } catch (e) { break; }
+  }
+  return out;
+}
+
 // Live quote for one queued pick, used by the auto-trader at entry time.
 export async function fetchMoneylineQuote(slug, outcomeIndex) {
   try {
@@ -501,7 +641,7 @@ export function crewLedger(history, openPositions) {
 // prices (and the books consensus where matched). The Agent Crew page pairs
 // these with DraftKings lines fetched in the operator's browser: ESPN only
 // serves betting odds to US visitors, and the Worker's cron runs elsewhere.
-export function polyGameRows(markets, candidates, nowMs = Date.now()) {
+export function polyGameRows(markets, candidates, nowMs = Date.now(), lines = []) {
   const byId = new Map((candidates || []).map(c => [c.id, c]));
   const rows = [];
   for (const m of markets || []) {
@@ -519,6 +659,7 @@ export function polyGameRows(markets, candidates, nowMs = Date.now()) {
       mid: [q0.mid, q1.mid],
       spread: q0.spread,
       books: [c0 && c0.refSource === 'books' ? c0.vegasProb : null, c1 && c1.refSource === 'books' ? c1.vegasProb : null],
+      lines: (lines || []).filter(x => x.slug.startsWith(`${m.slug}-`)).map(({ slug, ...rest }) => rest),
     });
   }
   return rows;
@@ -552,10 +693,14 @@ export async function runCrewHunt(env, deps, nowMs = Date.now()) {
   const polyGames = [];
   for (const sport of directive.sports.filter(s => SPORT_TAG[s])) {
     try {
-      const [markets, odds, dk] = await Promise.all([
-        fetchSportMoneylines(sport, nowMs),
+      const markets = await fetchSportMoneylines(sport, nowMs);
+      const wanted = directive.markets || ALL_MARKETS;
+      const linePages = Math.max(1, Math.min(5, Math.ceil((markets.length * 6) / 100)));
+      const [odds, dk, spreads, totals] = await Promise.all([
         useOddsApi ? Promise.resolve(getGameOdds(env, SPORT_KEY_MAP[sport], 'h2h,spreads')).catch(() => null) : null,
         fetchDkLines(sport, nowMs),
+        wanted.includes('spread') ? fetchSportLines(sport, 'spreads', nowMs, linePages) : [],
+        wanted.includes('total') ? fetchSportLines(sport, 'totals', nowMs, linePages) : [],
       ]);
       const built = buildCandidates(sport, markets, odds || [], nowMs, dk.games);
       perSport[sport] = {
@@ -564,7 +709,8 @@ export async function runCrewHunt(env, deps, nowMs = Date.now()) {
         unmatchedGames: built.unmatchedGames, dkFeed: dk.diag,
       };
       candidates.push(...built.candidates);
-      polyGames.push(...polyGameRows(markets, built.candidates, nowMs).map(r => ({ ...r, sport })));
+      polyGames.push(...polyGameRows(markets, built.candidates, nowMs, [...spreads, ...totals]).map(r => ({ ...r, sport })));
+      perSport[sport].lines = spreads.length + totals.length;
     } catch (e) {
       perSport[sport] = { error: e.message };
     }
@@ -626,6 +772,58 @@ export async function runCrewHunt(env, deps, nowMs = Date.now()) {
     });
   }
 
+  // THE DEBATE (Claude): the personas argue the board with the real numbers
+  // and the chair rules. Runs on a new order, when the top plays change
+  // (30 min apart at most), or every 90 min; otherwise the last ruling stands.
+  const browserDk = await kvJson(env, CREW_KEYS.DK_BOARD);
+  const dkForDebate = browserDk && nowMs - Date.parse(browserDk.at) < 45 * 60e3 ? browserDk.rows.slice(0, 10)
+    : dkBoard.length ? dkBoard.slice(0, 10).map(r => ({ label: `${r.team} ML`, odds: r.odds, fair: r.fair, implied: r.implied, ev: r.ev, startTime: r.startTime })) : null;
+  const topSet = debated.slice(0, 5).map(d => d.id).sort().join(',');
+  const lastDebate = last && last.debate && last.directiveId === directive.id ? last.debate : null;
+  const sinceDebate = lastDebate ? nowMs - Date.parse(lastDebate.at) : Infinity;
+  const needDebate = debated.length > 0 &&
+    (!lastDebate || (lastDebate.ids !== topSet && sinceDebate >= 30 * 60e3) || sinceDebate >= 90 * 60e3);
+  let debateOut = lastDebate;
+  let debatedNow = false;
+  if (needDebate) {
+    const llm = await crewLlmStatus(env);
+    if (llm.ok) {
+      const r = await debate(env, {
+        candidates: debated.map(d => ({
+          id: d.id, game: d.game, team: d.team, kickoff: fmtEtShort(d.startTime),
+          polymarketPriceCents: d.buyPrice, fairProbPct: d.vegasProb,
+          fairSource: d.refSource === 'books' ? `sportsbook consensus (${d.books} books)` : 'DraftKings no-vig line',
+          edgePts: d.edge, draftKingsOdds: d.dkOdds, whaleFlow: d.whale, placeable: d.edge >= minEdge,
+          openingVotes: d.votes.map(v => `${v.agent}: ${v.vote.toLowerCase()} (${v.conviction}) — ${v.line}`),
+        })),
+        dkBoard: dkForDebate && dkForDebate.map(r => ({ pick: r.label, odds: r.odds, fairPct: r.fair, dkImpliedPct: r.implied, per100: r.ev, kickoff: fmtEtShort(r.startTime) })),
+        context: {
+          now: fmtEtShort(new Date(nowMs).toISOString()), sports: directive.sports, minEdgePts: minEdge,
+          paperBetsLeftToday: Math.max(0, (directive.maxBets ?? 6) - (dailyStats.crewOpened || 0)),
+          openPositions: openPositions.length, crewLaneRecord: 'no settled crew bets yet unless stated', betSize: config.crewBetSize ?? 5,
+        },
+      });
+      debatedNow = r.ok;
+      debateOut = r.ok
+        ? { at: new Date(nowMs).toISOString(), ids: topSet, lines: (r.data.debate || []).slice(0, 14), verdicts: r.data.verdicts || [], summary: r.data.summary, usd: Math.round((r.usd || 0) * 1000) / 1000 }
+        : { ...(lastDebate || {}), at: lastDebate ? lastDebate.at : new Date(nowMs).toISOString(), error: r.error };
+    } else if (!lastDebate) {
+      debateOut = { at: new Date(nowMs).toISOString(), ids: topSet, skipped: llm.why };
+    }
+  }
+  if (debateOut && Array.isArray(debateOut.verdicts)) {
+    const byId = new Map(debateOut.verdicts.map(v => [v.id, v]));
+    for (const d of debated) {
+      const v = byId.get(d.id);
+      if (!v) continue;
+      d.ruleVerdict = d.verdict;
+      d.verdict = v.verdict;
+      d.chairReason = v.reason;
+      d.qualifies = d.edge >= minEdge && v.verdict !== 'VETO';
+      d.council = { ...d.council, verdict: v.verdict, tb: null, chair: 'claude' };
+    }
+  }
+
   // Queue: keep still-pending older picks, add new qualifiers (capped).
   const entered = new Set((await kvJson(env, CREW_KEYS.ENTERED)) || []);
   const prevQueue = ((await kvJson(env, CREW_KEYS.PICKS)) || []).filter(p => !entered.has(p.id) && Date.parse(p.startTime) - nowMs > PREGAME_MIN_MS);
@@ -657,6 +855,8 @@ export async function runCrewHunt(env, deps, nowMs = Date.now()) {
       .map(c => ({ game: c.game, team: c.team, vegasProb: c.vegasProb, buyPrice: c.buyPrice, edge: c.edge, startTime: c.startTime, dkOdds: c.dkOdds })),
     counts,
     queued: fresh.map(d => d.id),
+    markets: directive.markets || ALL_MARKETS,
+    debate: debateOut || null,
   };
   await env.SIGNALS_CACHE.put(CREW_KEYS.HUNT, JSON.stringify(hunt));
 
@@ -664,7 +864,7 @@ export async function runCrewHunt(env, deps, nowMs = Date.now()) {
   // Report on the first sweep of an order, when picks change, when pricing
   // recovers from nothing, and at least hourly so the chat never goes stale.
   const lastReport = last && (last.reportedAt || last.at);
-  const report = !last || last.directiveId !== directive.id || fresh.length > 0 ||
+  const report = !last || last.directiveId !== directive.id || fresh.length > 0 || debatedNow ||
     ((last.priced || 0) === 0 && priced > 0) || !lastReport || nowMs - Date.parse(lastReport) >= 60 * 60 * 1000;
   if (report) hunt.reportedAt = hunt.at;
   else hunt.reportedAt = lastReport;
@@ -676,7 +876,10 @@ export async function runCrewHunt(env, deps, nowMs = Date.now()) {
       ? ` (Sportsbook consensus feed is down: The Odds API answered HTTP ${oddsApi.status}${oddsApi.error ? ` "${String(oddsApi.error).slice(0, 80)}"` : ''}; using DraftKings via ESPN instead.)`
       : '';
     let msg;
-    if (priced === 0) {
+    if (debatedNow && debateOut.summary) {
+      msg = `${label} sweep: ${priced} games priced, ${debated.length} plays debated (read it on the board). ${debateOut.summary}` +
+        (fresh.length ? ` Placing ${fresh.length} paper: ${fresh.map(d => `${d.team} @ ${d.buyPrice}¢`).join(', ')}.` : '') + feed;
+    } else if (priced === 0) {
       const why = Object.entries(perSport).map(([s, p]) => p.error ? `${SPORT_LABEL[s]}: ${p.error}` :
         `${SPORT_LABEL[s]}: ${p.markets} Polymarket games, ${p.dkGames} DraftKings games, ${p.oddsGames} consensus games, ${p.matched} matched`).join('; ');
       msg = `${label} sweep: nothing priced yet (${why}). Games that already kicked off are skipped. Trying again in 15 min.${feed}`;
@@ -694,11 +897,12 @@ export async function runCrewHunt(env, deps, nowMs = Date.now()) {
     await appendCrewChat(env, 'crew', msg);
   }
 
-  return { priced, debated: debated.length, queued: fresh.length, dkPlusEv: dkBoard.filter(d => d.ev > 0).length, counts, perSport };
+  return { priced, debated: debated.length, queued: fresh.length, dkPlusEv: dkBoard.filter(d => d.ev > 0).length, counts, perSport,
+    debate: debatedNow ? `ran ($${debateOut.usd})` : debateOut && debateOut.error ? `failed: ${debateOut.error}` : debateOut && debateOut.skipped ? `skipped: ${debateOut.skipped}` : 'carried over' };
 }
 
 export async function getCrewState(env, deps) {
-  const [directive, chat, hunt, picks, history, open, oddsApi] = await Promise.all([
+  const [directive, chat, hunt, picks, history, open, oddsApi, llm] = await Promise.all([
     getActiveDirective(env),
     kvJson(env, CREW_KEYS.CHAT),
     kvJson(env, CREW_KEYS.HUNT),
@@ -706,6 +910,7 @@ export async function getCrewState(env, deps) {
     deps.getTradeHistory(env, 1000).catch(() => []),
     deps.getOpenPositions(env).catch(() => []),
     kvJson(env, 'odds_api_status'),
+    crewLlmStatus(env),
   ]);
   const crewOpen = (open || []).filter(p => p.strategySource === 'crew_hunt').map(p => ({
     id: p.id, title: p.marketTitle, side: p.directionRaw || p.direction, entry: p.entryPrice, size: p.size,
@@ -725,5 +930,6 @@ export async function getCrewState(env, deps) {
     recent: crewClosed,
     huntable: HUNTABLE,
     oddsApi: oddsApi || null,
+    claude: { on: llm.ok, why: llm.ok ? null : llm.why, spentToday: Math.round((llm.spent || 0) * 100) / 100, dailyCap: llm.cap },
   };
 }

@@ -22,7 +22,7 @@ import { runForge, maybeRunForge, getForgeReport } from "./src/forge.js";
 import { logSignalWallets, backfillWalletLedger, topWallets } from "./src/wallet-ledger.js";
 import { trackSpeed, updateSpeed, speedReport } from "./src/speed.js";
 import { buildAgentHub } from "./src/agent-hub.js";
-import { handleCrewOrder, runCrewHunt, getCrewState } from "./src/crew.js";
+import { handleCrewOrder, runCrewHunt, getCrewState, saveBrowserDkBoard } from "./src/crew.js";
 import {
   getCouncilStats, getCouncilFeed, leaderboard as councilLeaderboard
 } from "./src/council.js";
@@ -4793,6 +4793,14 @@ export default {
         const config = await getAutotraderConfig(env);
         const r = await handleCrewOrder(env, text, config);
         return atJson({ ...(await getCrewState(env, { getTradeHistory, getOpenPositions })), reply: r.reply, parsed: r.parsed });
+      }
+
+      // The operator's browser reports the DraftKings value board it computed
+      // (ESPN only serves odds to US visitors) so the chief and the debate can use it.
+      if (path === "/agents/crew/dk-board" && request.method === "POST") {
+        const body = await request.json().catch(() => ({}));
+        const board = await saveBrowserDkBoard(env, body.rows);
+        return atJson({ success: true, saved: board.rows.length, at: board.at });
       }
 
       // Speed telemetry: what the cron lag costs vs post-detection drift.
