@@ -50,6 +50,13 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   books' devigged consensus, the persona council debates the biggest gaps,
   and non-vetoed picks are paper-entered by `enterCrewPicks` (own lane,
   `strategySource: 'crew_hunt'`, filled at the ask). `GET /agents/crew`.
+  `src/crew-llm.js` is the reasoning: a Claude "chief" answers the chat and
+  returns a structured order change (code validates and applies it), and a
+  per-sweep debate where the personas argue the top plays and a chair rules
+  (its verdict decides what is queued). Own daily cap `CREW_LLM_DAILY_USD`
+  (default $3); falls back to the keyword parser / rule council. ESPN only
+  serves DraftKings odds to US clients, so the page computes the DraftKings
+  board in the browser and POSTs it to `/agents/crew/dk-board`.
 - `src/odds.js` — The Odds API client (KV-cached; `ODDS_API_KEY` secret).
 - `src/gamma.js` — Gamma API settlement (`findGammaMarket` handles
   closed markets + multi-market moneyline preference).
