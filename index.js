@@ -24,6 +24,7 @@ import { trackSpeed, updateSpeed, speedReport } from "./src/speed.js";
 import { buildAgentHub } from "./src/agent-hub.js";
 import { handleCrewOrder, runCrewHunt, getCrewState, saveBrowserDkBoard } from "./src/crew.js";
 import { settleDkPicks } from "./src/dk-picks.js";
+import { collectBooks, MM_SCHEMA } from "./src/mm-collector.js";
 import {
   getCouncilStats, getCouncilFeed, leaderboard as councilLeaderboard
 } from "./src/council.js";
@@ -1069,7 +1070,8 @@ async function d1UpsertInvestigation(env, inv) {
 // EXISTS); anything destructive still deserves a human-run migration.
 var SCHEMA_MIGRATIONS = [
   "ALTER TABLE investigations ADD COLUMN market_impact TEXT",  // migrations/0004_market_impact.sql
-  "ALTER TABLE investigations ADD COLUMN last_error TEXT"      // investigation failure visibility (half of day-1 runs were error_transient with no stored reason)
+  "ALTER TABLE investigations ADD COLUMN last_error TEXT",     // investigation failure visibility (half of day-1 runs were error_transient with no stored reason)
+  ...MM_SCHEMA,                                               // migrations/0007_mm_books.sql (market-making depth snapshots)
 ];
 var schemaEnsured = false;
 async function ensureSchema(env) {
@@ -6856,6 +6858,9 @@ export default {
         console.error("Crew hunt error:", e.message);
         cronStatus.crewHunt = { error: e.message };
       }
+      // Market-making study: snapshot reward-market order books (D1 mm_books).
+      try { cronStatus.mmBooks = await collectBooks(env); }
+      catch (e) { cronStatus.mmBooks = { error: e.message }; }
       // Settle the DraftKings value board's recorded picks from final scores.
       try { cronStatus.dkPicks = await settleDkPicks(env); }
       catch (e) { cronStatus.dkPicks = { error: e.message }; }
