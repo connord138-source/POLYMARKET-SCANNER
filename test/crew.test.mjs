@@ -215,6 +215,7 @@ const deps = (signals = []) => ({
 
   const st = await getCrewState(env, deps());
   check("state: open crew bet + ledger", st.open.length === 1 && st.ledger.open === 1 && st.directive && st.chat.length >= 3);
+  check("state: no browser board reported yet", st.dkBoardReport === null);
 
   // stand down clears the order and the queue
   await handleCrewOrder(env, "stand down", J(env, "autotrader_config"), NOW);

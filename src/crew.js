@@ -910,7 +910,7 @@ export async function runCrewHunt(env, deps, nowMs = Date.now()) {
 }
 
 export async function getCrewState(env, deps) {
-  const [directive, chat, hunt, picks, history, open, oddsApi, llm, dkRecord] = await Promise.all([
+  const [directive, chat, hunt, picks, history, open, oddsApi, llm, dkRecord, browserDk] = await Promise.all([
     getActiveDirective(env),
     kvJson(env, CREW_KEYS.CHAT),
     kvJson(env, CREW_KEYS.HUNT),
@@ -920,6 +920,7 @@ export async function getCrewState(env, deps) {
     kvJson(env, 'odds_api_status'),
     crewLlmStatus(env),
     getDkPicksLedger(env),
+    kvJson(env, CREW_KEYS.DK_BOARD),
   ]);
   const crewOpen = (open || []).filter(p => p.strategySource === 'crew_hunt').map(p => ({
     id: p.id, title: p.marketTitle, side: p.directionRaw || p.direction, entry: p.entryPrice, size: p.size,
@@ -941,5 +942,7 @@ export async function getCrewState(env, deps) {
     oddsApi: oddsApi || null,
     claude: { on: llm.ok, why: llm.ok ? null : llm.why, spentToday: Math.round((llm.spent || 0) * 100) / 100, dailyCap: llm.cap },
     dkRecord,
+    // When the operator's browser last shared its DraftKings board with the crew.
+    dkBoardReport: browserDk ? { at: browserDk.at, rows: (browserDk.rows || []).length } : null,
   };
 }
