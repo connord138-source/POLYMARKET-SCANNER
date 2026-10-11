@@ -259,7 +259,11 @@ const deps = (signals = []) => ({
   check("dk hunt: priced off DraftKings", h.priced === 2 && hunt.dkBoard.length === 2, JSON.stringify(h));
   check("dk hunt: board sorted by EV, links kept", hunt.dkBoard[0].ev >= hunt.dkBoard[1].ev && /draftkings\.com/.test(hunt.dkBoard[0].link), JSON.stringify(hunt.dkBoard.map(x => [x.team, x.ev])));
   const msg = J(env, CREW_KEYS.CHAT).slice(-1)[0].text;
-  check("dk hunt: chat names DK value + dead feed", /DraftKings value: James Madison ML -150/.test(msg) && /HTTP 401/.test(msg), msg);
+  check("dk hunt: chat names DK value + dead feed", /DraftKings value: James Madison ML -150 \(\+\$3\.30 per \$100\)/.test(msg) && /HTTP 401/.test(msg), msg);
+  check("dk hunt: server built the full board with the page's row ids", hunt.dkBoard[0].id === "cfb-jmad-gas-2026-10-10:ml:0" && hunt.dkBoard[0].market === "moneyline" && hunt.dkBoard[0].espnId === "1", JSON.stringify(hunt.dkBoard[0]));
+  const rec = J(env, "crew_dk_picks") || [];
+  check("dk hunt: value pick recorded server-side (page not needed)", rec.length === 1 && rec[0].id === "cfb-jmad-gas-2026-10-10:ml:0" && rec[0].side === "away", JSON.stringify(rec.map(p => [p.id, p.ev])));
+  check("dk hunt: board shared with the chief", J(env, CREW_KEYS.DK_BOARD).source === "server");
   check("dk hunt: picks carry the order's cap", J(env, CREW_KEYS.PICKS).every(p => p.maxBets === 12));
   const pg = hunt.polyGames.find(g => g.slug === "cfb-jmad-gas-2026-10-10");
   check("dk hunt: Polymarket prices published for the browser board", hunt.polyGames.length === 3 && pg && pg.mid[0] === 62 && pg.outcomes[0] === "James Madison" && pg.sport === "cfb",

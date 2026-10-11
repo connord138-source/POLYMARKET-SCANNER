@@ -25,7 +25,7 @@
 import { conveneCouncil, llmTiebreak, getCouncilStats, compactSession } from './council.js';
 import { americanToProb, teamNamesOverlap, SPORT_KEY_MAP } from './odds.js';
 import { crewLlmStatus, chief, debate } from './crew-llm.js';
-import { recordDkValuePicks, getDkPicksLedger } from './dk-picks.js';
+import { recordDkValuePicks, getDkPicksLedger, VALUE_EV_MIN } from './dk-picks.js';
 
 export const CREW_KEYS = {
   DIRECTIVE: 'crew_directive',
@@ -673,6 +673,78 @@ export function polyGameRows(markets, candidates, nowMs = Date.now(), lines = []
   return rows;
 }
 
+// Pure: the full DraftKings value board (moneyline + spread + total), same
+// math and same row ids as the page's dkValue.js, so a pick recorded by the
+// server and by the operator's browser is the same pick. Used when ESPN
+// serves the worker DraftKings odds (it depends on the cron's location).
+export function buildFullDkBoard(polyGames, dkGames, { maxSpread = DK_FAIR_MAX_SPREAD, nowMs = Date.now(), limit = 25, markets = ALL_MARKETS } = {}) {
+  const rows = [];
+  const am = (n) => (n > 0 ? `+${n}` : `${n}`);
+  const tight = (mid, width) => typeof mid === 'number' && typeof width === 'number' && width <= maxSpread && mid > 2 && mid < 98;
+  const mk = (base, odds, fairPct) => {
+    const implied = r1(americanToProb(odds) * 100);
+    return { ...base, odds, implied, fair: r1(fairPct), ev: r1((fairPct / implied - 1) * 100) };
+  };
+  for (const pg of polyGames || []) {
+    const startMs = Date.parse(pg.startTime);
+    if (!startMs || startMs - nowMs < 5 * 60e3) continue;
+    const m = matchGame(pg.outcomes, startMs, dkGames, g => g.away.name, g => g.home.name, g => g.startMs);
+    if (!m) continue;
+    const g = m.g, dk = g.dk;
+    const sideOf = (i) => ((i === 0) !== m.swapped ? 'away' : 'home');
+    const base = { game: pg.game, startTime: pg.startTime, espnId: g.id, sport: pg.sport, home: g.home.name, away: g.away.name };
+    if (markets.includes('moneyline') && typeof dk.ml.home.odds === 'number' && typeof dk.ml.away.odds === 'number') {
+      let best = null;
+      for (let i = 0; i < 2; i++) {
+        const mid = pg.mid && pg.mid[i];
+        if (!tight(mid, pg.spread)) continue;
+        const side = sideOf(i);
+        const books = pg.books && pg.books[i];
+        const r = mk({ ...base, id: `${pg.slug}:ml:${i}`, market: 'moneyline', side, line: null, team: pg.outcomes[i],
+          label: `${pg.outcomes[i]} ML ${am(dk.ml[side].odds)}`, link: dk.ml[side].link }, dk.ml[side].odds, typeof books === 'number' ? (mid + books) / 2 : mid);
+        if (!best || r.ev > best.ev) best = r;
+      }
+      if (best) rows.push(best);
+    }
+    const lines = pg.lines || [];
+    if (markets.includes('spread')) {
+      let best = null;
+      for (const side of ['home', 'away']) {
+        const sp = dk.spread[side];
+        if (!sp || typeof sp.line !== 'number' || typeof sp.odds !== 'number') continue;
+        const team = g[side].name;
+        let fair = null;
+        for (const ln of lines) {
+          if (ln.t !== 's' || !tight(ln.m && ln.m[0], ln.w)) continue;
+          if (nameScore(ln.o[0], team) && ln.l === sp.line) { fair = ln.m[0]; break; }
+          if (nameScore(ln.o[1], team) && ln.l === -sp.line) { fair = ln.m[1]; break; }
+        }
+        if (fair === null) continue;
+        const label = `${pg.outcomes.find(o => nameScore(o, team)) || team} ${sp.line > 0 ? '+' : ''}${sp.line} (${am(sp.odds)})`;
+        const r = mk({ ...base, id: `${pg.slug}:sp:${side}`, market: 'spread', side, line: sp.line, team, label, link: sp.link }, sp.odds, fair);
+        if (!best || r.ev > best.ev) best = r;
+      }
+      if (best) rows.push(best);
+    }
+    if (markets.includes('total') && dk.total && typeof dk.total.line === 'number') {
+      const ln = lines.find(x => x.t === 't' && x.l === dk.total.line && tight(x.m && x.m[0], x.w));
+      if (ln) {
+        let best = null;
+        for (const [k, idx] of [['over', 0], ['under', 1]]) {
+          const odds = dk.total[k] && dk.total[k].odds;
+          if (typeof odds !== 'number') continue;
+          const r = mk({ ...base, id: `${pg.slug}:tot:${k}`, market: 'total', side: k, line: dk.total.line, team: k === 'over' ? 'Over' : 'Under',
+            label: `${k === 'over' ? 'Over' : 'Under'} ${dk.total.line} (${am(odds)})`, link: dk.total[k].link }, odds, ln.m[idx]);
+          if (!best || r.ev > best.ev) best = r;
+        }
+        if (best) rows.push(best);
+      }
+    }
+  }
+  rows.sort((a, b) => b.ev - a.ev);
+  return rows.slice(0, limit);
+}
+
 // ---------- the hunt (cron) ----------
 
 export async function runCrewHunt(env, deps, nowMs = Date.now()) {
@@ -699,6 +771,7 @@ export async function runCrewHunt(env, deps, nowMs = Date.now()) {
   const perSport = {};
   let candidates = [];
   const polyGames = [];
+  const allDkGames = [];
   for (const sport of directive.sports.filter(s => SPORT_TAG[s])) {
     try {
       const markets = await fetchSportMoneylines(sport, nowMs);
@@ -717,6 +790,7 @@ export async function runCrewHunt(env, deps, nowMs = Date.now()) {
         unmatchedGames: built.unmatchedGames, dkFeed: dk.diag,
       };
       candidates.push(...built.candidates);
+      allDkGames.push(...dk.games);
       polyGames.push(...polyGameRows(markets, built.candidates, nowMs, [...spreads, ...totals]).map(r => ({ ...r, sport })));
       perSport[sport].lines = spreads.length + totals.length;
     } catch (e) {
@@ -739,6 +813,22 @@ export async function runCrewHunt(env, deps, nowMs = Date.now()) {
       spread: c.dk.spread, total: c.dk.total,
     });
     if (dkBoard.length >= DK_BOARD_SIZE) break;
+  }
+
+  // When ESPN served the worker DraftKings odds, build the full board here
+  // too: it records value picks without the operator's page open, and the
+  // chief / council get it unless the browser shared a fresher one.
+  const fullDk = allDkGames.length ? buildFullDkBoard(polyGames, allDkGames, { markets: directive.markets || ALL_MARKETS, nowMs }) : [];
+  if (fullDk.length) {
+    dkBoard.length = 0;
+    dkBoard.push(...fullDk);
+    try {
+      const shared = await kvJson(env, CREW_KEYS.DK_BOARD);
+      if (!shared || shared.source === 'server' || nowMs - Date.parse(shared.at) > 10 * 60e3) {
+        await env.SIGNALS_CACHE.put(CREW_KEYS.DK_BOARD, JSON.stringify({ at: new Date(nowMs).toISOString(), rows: fullDk, source: 'server' }), { expirationTtl: 6 * 3600 });
+      }
+      await recordDkValuePicks(env, fullDk, nowMs);
+    } catch (e) {}
   }
 
   // Rank tradeable sides by edge at the ask; one side per game.
@@ -892,10 +982,11 @@ export async function runCrewHunt(env, deps, nowMs = Date.now()) {
         `${SPORT_LABEL[s]}: ${p.markets} Polymarket games, ${p.dkGames} DraftKings games, ${p.oddsGames} consensus games, ${p.matched} matched`).join('; ');
       msg = `${label} sweep: nothing priced yet (${why}). Games that already kicked off are skipped. Trying again in 15 min.${feed}`;
     } else {
-      const plusEv = dkBoard.filter(d => d.ev > 0);
+      const plusEv = dkBoard.filter(d => d.ev >= VALUE_EV_MIN);
+      const dkName = (d) => d.label || `${d.team} ML ${am(d.odds)}`;
       const dkLine = plusEv.length
-        ? `DraftKings value: ${plusEv.slice(0, 4).map(d => `${d.team} ML ${am(d.odds)} (+${d.ev}% EV)`).join(', ')}. Full list with links on the board.`
-        : dkBoard.length ? `DraftKings: no moneyline pays more than fair right now (best is ${dkBoard[0].team} ${am(dkBoard[0].odds)}, ${dkBoard[0].ev}% EV).` : '';
+        ? `DraftKings value: ${plusEv.slice(0, 4).map(d => `${dkName(d)} (+$${d.ev.toFixed(2)} per $100)`).join(', ')}. Full list with links on the board.`
+        : dkBoard.length ? `DraftKings: nothing clears the value bar (+$1.50 per $100); best is ${dkName(dkBoard[0])} at ${dkBoard[0].ev >= 0 ? '+' : '-'}$${Math.abs(dkBoard[0].ev).toFixed(2)}.` : '';
       const best = debated.slice(0, 3).map(d => `${d.team} ${d.edge > 0 ? '+' : ''}${d.edge} (${d.buyPrice}¢ vs ${d.vegasProb}%)`).join(', ');
       msg = `${label} sweep: ${priced} pregame games priced. ${dkLine} ` +
         `Polymarket gaps: ${best || 'none'}. Council: ${counts.APPROVE} approve, ${counts.TRIM} split, ${counts.VETO} veto. ` +
@@ -905,7 +996,7 @@ export async function runCrewHunt(env, deps, nowMs = Date.now()) {
     await appendCrewChat(env, 'crew', msg);
   }
 
-  return { priced, debated: debated.length, queued: fresh.length, dkPlusEv: dkBoard.filter(d => d.ev > 0).length, counts, perSport,
+  return { priced, debated: debated.length, queued: fresh.length, dkPlusEv: dkBoard.filter(d => d.ev >= VALUE_EV_MIN).length, dkServerBoard: fullDk.length, counts, perSport,
     debate: debatedNow ? `ran ($${debateOut.usd})` : debateOut && debateOut.error ? `failed: ${debateOut.error}` : debateOut && debateOut.skipped ? `skipped: ${debateOut.skipped}` : 'carried over' };
 }
 
