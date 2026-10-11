@@ -23,6 +23,7 @@ import { logSignalWallets, backfillWalletLedger, topWallets } from "./src/wallet
 import { trackSpeed, updateSpeed, speedReport } from "./src/speed.js";
 import { buildAgentHub } from "./src/agent-hub.js";
 import { handleCrewOrder, runCrewHunt, getCrewState, saveBrowserDkBoard } from "./src/crew.js";
+import { settleDkPicks } from "./src/dk-picks.js";
 import {
   getCouncilStats, getCouncilFeed, leaderboard as councilLeaderboard
 } from "./src/council.js";
@@ -4800,7 +4801,7 @@ export default {
       if (path === "/agents/crew/dk-board" && request.method === "POST") {
         const body = await request.json().catch(() => ({}));
         const board = await saveBrowserDkBoard(env, body.rows);
-        return atJson({ success: true, saved: board.rows.length, at: board.at });
+        return atJson({ success: true, saved: board.rows.length, recorded: board.recorded, at: board.at });
       }
 
       // Speed telemetry: what the cron lag costs vs post-detection drift.
@@ -6850,6 +6851,9 @@ export default {
         console.error("Crew hunt error:", e.message);
         cronStatus.crewHunt = { error: e.message };
       }
+      // Settle the DraftKings value board's recorded picks from final scores.
+      try { cronStatus.dkPicks = await settleDkPicks(env); }
+      catch (e) { cronStatus.dkPicks = { error: e.message }; }
       // Settle finished edge opportunities into the vegas_edge track record.
       try {
         cronStatus.edgeSettle = await settleEdgeOpportunities(env);
