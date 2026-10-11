@@ -25,6 +25,7 @@
 import { conveneCouncil, llmTiebreak, getCouncilStats, compactSession } from './council.js';
 import { americanToProb, teamNamesOverlap, SPORT_KEY_MAP } from './odds.js';
 import { crewLlmStatus, chief, debate } from './crew-llm.js';
+import { recordDkValuePicks, getDkPicksLedger } from './dk-picks.js';
 
 export const CREW_KEYS = {
   DIRECTIVE: 'crew_directive',
@@ -187,6 +188,7 @@ async function crewStateForLlm(env, config, nowMs) {
       rows: dkFresh.rows.slice(0, 10).map(r => ({ pick: r.label || `${r.team} ML`, odds: r.odds, fair: r.fair, dkImplied: r.implied, per100: r.ev, kickoff: fmtEtShort(r.startTime) })),
     } : 'not reported yet (the operator\'s browser computes it when the Agent Crew page is open)',
     paperBetsQueued: (queue || []).map(q => `${q.team} @ ${q.buyPrice}c (${q.verdict})`),
+    draftKingsValuePicksRecord: await getDkPicksLedger(env).then(l => ({ graded: l.graded, wins: l.wins, losses: l.losses, pushes: l.pushes, profitOn100PerPick: l.pnl, roiPct: l.roi, pending: l.pending })),
     claudeBudget: { spentToday: Math.round(llm.spent * 100) / 100, dailyCap: llm.cap },
   };
 }
@@ -251,9 +253,15 @@ export async function saveBrowserDkBoard(env, rows) {
     game: String(r.game || '').slice(0, 120), market: String(r.market || 'moneyline').slice(0, 12),
     odds: Number(r.odds), fair: Number(r.fair), implied: Number(r.implied), ev: Number(r.ev),
     startTime: String(r.startTime || '').slice(0, 30),
+    side: ['home', 'away', 'over', 'under'].includes(r.side) ? r.side : null,
+    line: typeof r.line === 'number' && isFinite(r.line) ? r.line : null,
+    espnId: r.espnId != null ? String(r.espnId).slice(0, 20) : null,
+    sport: SPORT_TAG[r.sport] ? r.sport : null,
+    home: String(r.home || '').slice(0, 60), away: String(r.away || '').slice(0, 60),
   })).filter(r => isFinite(r.odds) && isFinite(r.ev));
   const board = { at: new Date().toISOString(), rows: clean };
   await env.SIGNALS_CACHE.put(CREW_KEYS.DK_BOARD, JSON.stringify(board), { expirationTtl: 6 * 3600 });
+  board.recorded = await recordDkValuePicks(env, clean);
   return board;
 }
 
@@ -902,7 +910,7 @@ export async function runCrewHunt(env, deps, nowMs = Date.now()) {
 }
 
 export async function getCrewState(env, deps) {
-  const [directive, chat, hunt, picks, history, open, oddsApi, llm] = await Promise.all([
+  const [directive, chat, hunt, picks, history, open, oddsApi, llm, dkRecord] = await Promise.all([
     getActiveDirective(env),
     kvJson(env, CREW_KEYS.CHAT),
     kvJson(env, CREW_KEYS.HUNT),
@@ -911,6 +919,7 @@ export async function getCrewState(env, deps) {
     deps.getOpenPositions(env).catch(() => []),
     kvJson(env, 'odds_api_status'),
     crewLlmStatus(env),
+    getDkPicksLedger(env),
   ]);
   const crewOpen = (open || []).filter(p => p.strategySource === 'crew_hunt').map(p => ({
     id: p.id, title: p.marketTitle, side: p.directionRaw || p.direction, entry: p.entryPrice, size: p.size,
@@ -931,5 +940,6 @@ export async function getCrewState(env, deps) {
     huntable: HUNTABLE,
     oddsApi: oddsApi || null,
     claude: { on: llm.ok, why: llm.ok ? null : llm.why, spentToday: Math.round((llm.spent || 0) * 100) / 100, dailyCap: llm.cap },
+    dkRecord,
   };
 }
