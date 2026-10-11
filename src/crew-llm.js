@@ -29,6 +29,7 @@ const MODEL = 'claude-haiku-5-5';
 const PRICE_IN = 0.10 / 1e6;   // $/input token  (claude-haiku-5-5, prompts <= 100K)
 const PRICE_OUT = 0.50 / 1e6;  // $/output token (thinking included)
 const SPEND_KEY = 'crew_llm_usd:';
+const BILLING_REPROBE_MS = 10 * 60 * 1000;
 
 const day = () => new Date().toISOString().slice(0, 10);
 
@@ -46,8 +47,13 @@ async function addSpend(env, usd) {
 export async function crewLlmStatus(env) {
   const cap = parseFloat(env.CREW_LLM_DAILY_USD || '1');
   if (!env.ANTHROPIC_API_KEY) return { ok: false, why: 'no Anthropic key', cap, spent: 0 };
+  // A failed call costs nothing, so re-probe 10 min after an out-of-credits
+  // flag instead of waiting out its hour: topped-up credits come back fast.
   let down = false;
-  try { down = !!(await env.SIGNALS_CACHE.get('anthropic_billing_down')); } catch (e) {}
+  try {
+    const f = await env.SIGNALS_CACHE.get('anthropic_billing_down', { type: 'json' });
+    down = !!f && !(f.at && Date.now() - f.at > BILLING_REPROBE_MS);
+  } catch (e) {}
   const spent = await crewLlmSpend(env);
   if (down) return { ok: false, why: 'the Anthropic account is out of credits (add them at console.anthropic.com, Plans & Billing)', cap, spent };
   if (spent >= cap) return { ok: false, why: `crew's daily $${cap} Claude budget used`, cap, spent };
