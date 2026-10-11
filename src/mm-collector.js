@@ -41,7 +41,12 @@ export function pickMarkets(list, { minPool = MM_MIN_POOL_USD, max = MM_MAX_MARK
     out.push({
       conditionId: m.conditionId, tokenId: String(tokens[0]), slug: m.slug, question: String(m.question || '').slice(0, 120),
       kind: kindOf(m.slug), gameStart: isNaN(gs) ? null : Math.floor(gs / 1000), pool,
-      minSize: Number(m.rewardsMinSize) || 0, maxSpread: Number(m.rewardsMaxSpread) || 0,
+      minSize: Number(m.rewardsMinSize) || 0,
+      // Gamma sometimes reports 0 for a market the CLOB configures at the
+      // standard band (seen on a pregame NFL total: Gamma 0, CLOB 2.5c), and a
+      // 0 band scores nothing. Fall back to the band every market of that kind
+      // has carried: 2.5c for sports, 3.5c otherwise.
+      maxSpread: Number(m.rewardsMaxSpread) || (kindOf(m.slug) === 'other' ? 3.5 : 2.5),
     });
   }
   return out.sort((a, b) => b.pool - a.pool).slice(0, max);
