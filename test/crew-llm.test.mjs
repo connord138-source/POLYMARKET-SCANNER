@@ -148,6 +148,18 @@ const nflOrder = (extra = {}) => JSON.stringify({ id: "ord_nfl", text: "focus on
   check("credits: plain-English reason in chat", /out of credits/.test(J(env, CREW_KEYS.CHAT).slice(-1)[0].text), J(env, CREW_KEYS.CHAT).slice(-1)[0].text);
 }
 
+{
+  // credits topped up: a fresh out-of-credits flag blocks, a 10-min-old one re-probes
+  const fresh = makeEnv({ anthropic_billing_down: JSON.stringify({ at: Date.now() - 2 * 60e3 }) });
+  claudeCalls = [];
+  await handleCrewOrder(fresh, "focus on nfl", CFG, NOW);
+  check("credits: fresh flag blocks the call", claudeCalls.length === 0);
+  const stale = makeEnv({ anthropic_billing_down: JSON.stringify({ at: Date.now() - 11 * 60e3 }) });
+  claudeReplies = [claudeResponse({ reply: "Back online. NFL only.", action: "none", focus: null })];
+  const r = await handleCrewOrder(stale, "you there?", CFG, NOW);
+  check("credits: 10-min-old flag re-probes and recovers", claudeCalls.length === 1 && r.via === "claude", JSON.stringify(r));
+}
+
 // ---------- spreads / totals published for the browser ----------
 {
   const lines = [

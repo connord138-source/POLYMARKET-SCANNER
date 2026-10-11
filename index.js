@@ -6753,7 +6753,12 @@ export default {
       // Anthropic account out of credits => every call 400s. Skip both
       // agent phases until the hourly flag expires and re-probes.
       let anthropicDown = false;
-      try { anthropicDown = !!(await env.SIGNALS_CACHE.get("anthropic_billing_down")); } catch (e) {}
+      // Re-probe 10 min after an out-of-credits flag (a failed call is free),
+      // so topped-up credits are picked up quickly instead of after an hour.
+      try {
+        const f = await env.SIGNALS_CACHE.get("anthropic_billing_down", { type: "json" });
+        anthropicDown = !!f && !(f.at && Date.now() - f.at > 10 * 60 * 1000);
+      } catch (e) {}
       if (anthropicDown) {
         cronStatus.investigations = { skipped: "anthropic credits exhausted" };
         cronStatus.sweep = { skipped: "anthropic credits exhausted" };
