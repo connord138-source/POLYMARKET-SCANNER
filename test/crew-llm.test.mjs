@@ -144,6 +144,7 @@ const nflOrder = (extra = {}) => JSON.stringify({ id: "ord_nfl", text: "focus on
   claudeReplies = [claudeResponse({ error: { message: "Your credit balance is too low to access the Anthropic API." } }, { status: 400 })];
   await handleCrewOrder(env, "focus on nfl", CFG, NOW);
   check("credits: billing-down flag set", !!env.store.anthropic_billing_down);
+  check("credits: plain-English reason in chat", /out of credits/.test(J(env, CREW_KEYS.CHAT).slice(-1)[0].text), J(env, CREW_KEYS.CHAT).slice(-1)[0].text);
 }
 
 // ---------- spreads / totals published for the browser ----------
