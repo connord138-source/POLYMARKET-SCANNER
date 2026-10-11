@@ -45,7 +45,7 @@ export async function crewLlmStatus(env) {
   let down = false;
   try { down = !!(await env.SIGNALS_CACHE.get('anthropic_billing_down')); } catch (e) {}
   const spent = await crewLlmSpend(env);
-  if (down) return { ok: false, why: 'Anthropic credits exhausted', cap, spent };
+  if (down) return { ok: false, why: 'the Anthropic account is out of credits (add them at console.anthropic.com, Plans & Billing)', cap, spent };
   if (spent >= cap) return { ok: false, why: `crew's daily $${cap} Claude budget used`, cap, spent };
   return { ok: true, cap, spent };
 }
@@ -74,11 +74,12 @@ async function callClaude(env, { system, messages, schema, effort, maxTokens, ti
     });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) {
-      const err = JSON.stringify(body).slice(0, 300);
-      if (/credit balance is too low/i.test(err)) {
+      const msg = String((body && body.error && body.error.message) || JSON.stringify(body)).slice(0, 300);
+      if (/credit balance is too low/i.test(msg)) {
         try { await env.SIGNALS_CACHE.put('anthropic_billing_down', JSON.stringify({ at: Date.now() }), { expirationTtl: 3600 }); } catch (e) {}
+        return { ok: false, error: 'the Anthropic account is out of credits (add them at console.anthropic.com, Plans & Billing)' };
       }
-      return { ok: false, error: `HTTP ${res.status}: ${err}` };
+      return { ok: false, error: `Claude API error ${res.status}: ${msg.slice(0, 140)}` };
     }
     const u = body.usage || {};
     const usd = ((u.input_tokens || 0) + (u.cache_creation_input_tokens || 0)) * PRICE_IN +
