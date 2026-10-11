@@ -25,6 +25,7 @@ import { buildAgentHub } from "./src/agent-hub.js";
 import { handleCrewOrder, runCrewHunt, getCrewState, saveBrowserDkBoard } from "./src/crew.js";
 import { settleDkPicks } from "./src/dk-picks.js";
 import { collectBooks, MM_SCHEMA } from "./src/mm-collector.js";
+import { addToWaitlist, loadWaitlist, waitlistSummary, isIpThrottled, markIpSubmitted } from "./src/waitlist.js";
 import {
   getCouncilStats, getCouncilFeed, leaderboard as councilLeaderboard
 } from "./src/council.js";
@@ -3628,6 +3629,7 @@ function requiresAdmin(path, url, method) {
   if (path.startsWith("/autotrader") && method === "POST") return true;
   if (path.startsWith("/forge") && method === "POST") return true;      // /forge/run spends D1 reads
   if (path.startsWith("/agents/crew") && method === "POST") return true; // crew orders steer paper bets
+  if (path === "/waitlist" && method === "GET") return true;        // lists sign-up emails (PII); POST stays public
   if (path.startsWith("/admin")) return true;                       // /admin/ping, /admin/reprocess-wallets, ...
   if (path.startsWith("/debug")) return true;                       // internal diagnostics
   if (path.startsWith("/learning/debug")) return true;              // internal diagnostics
@@ -4804,6 +4806,25 @@ export default {
         const body = await request.json().catch(() => ({}));
         const board = await saveBrowserDkBoard(env, body.rows);
         return atJson({ success: true, saved: board.rows.length, recorded: board.recorded, at: board.at });
+      }
+
+      // Pro waitlist (the "will people pay?" test). POST is public: honeypot,
+      // email validation and a 60s per-IP throttle (hashed IP) are the only
+      // defences. GET is admin-only — it lists emails.
+      if (path === "/waitlist" && request.method === "POST") {
+        const body = await request.json().catch(() => ({}));
+        const ip = request.headers.get("CF-Connecting-IP") || "";
+        if (await isIpThrottled(env, ip)) return atJson({ success: false, error: "Slow down" }, 429);
+        const r = await addToWaitlist(env, {
+          email: body.email, wants: body.wants, source: body.source, website: body.website,
+          country: (request.cf && request.cf.country) || null
+        });
+        if (!r.success) return atJson({ success: false, error: r.error }, r.status || 400);
+        await markIpSubmitted(env, ip);
+        return atJson({ success: true, position: r.position, count: r.count });
+      }
+      if (path === "/waitlist" && request.method === "GET") {
+        return atJson(waitlistSummary(await loadWaitlist(env)));
       }
 
       // Speed telemetry: what the cron lag costs vs post-detection drift.
