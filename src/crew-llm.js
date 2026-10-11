@@ -15,15 +15,19 @@
 //              then the chair rules APPROVE / TRIM / VETO per play and
 //              writes the operator summary.
 //
-// Spend has its own daily cap (CREW_LLM_DAILY_USD, default $3), tracked
-// from response usage at claude-opus-5-5 rates. Over the cap, out of
-// credits, or on any error, callers fall back to the rule-based paths.
+// Runs on claude-haiku-5-5 (operator's call, Oct 2026: ~40x cheaper than
+// Opus, so a debate costs ~a quarter of a cent). Haiku is given more room to
+// think (effort medium for chat, high for the debate) since the cost is
+// negligible either way. Spend has its own daily cap (CREW_LLM_DAILY_USD,
+// default $1), tracked from response usage. Over the cap, out of credits,
+// or on any error, callers fall back to the rule-based paths. Haiku has no
+// server-side refusal fallback; a decline just falls back like an error.
 // Same raw-HTTP pattern as the investigator and the council tiebreak.
 // ============================================================
 
-const MODEL = 'claude-opus-5-5';
-const PRICE_IN = 4 / 1e6;      // $/input token  (claude-opus-5-5)
-const PRICE_OUT = 20 / 1e6;    // $/output token (thinking included)
+const MODEL = 'claude-haiku-5-5';
+const PRICE_IN = 0.10 / 1e6;   // $/input token  (claude-haiku-5-5, prompts <= 100K)
+const PRICE_OUT = 0.50 / 1e6;  // $/output token (thinking included)
 const SPEND_KEY = 'crew_llm_usd:';
 
 const day = () => new Date().toISOString().slice(0, 10);
@@ -40,7 +44,7 @@ async function addSpend(env, usd) {
 }
 
 export async function crewLlmStatus(env) {
-  const cap = parseFloat(env.CREW_LLM_DAILY_USD || '3');
+  const cap = parseFloat(env.CREW_LLM_DAILY_USD || '1');
   if (!env.ANTHROPIC_API_KEY) return { ok: false, why: 'no Anthropic key', cap, spent: 0 };
   let down = false;
   try { down = !!(await env.SIGNALS_CACHE.get('anthropic_billing_down')); } catch (e) {}
@@ -60,7 +64,6 @@ async function callClaude(env, { system, messages, schema, effort, maxTokens, ti
       headers: {
         'x-api-key': env.ANTHROPIC_API_KEY,
         'anthropic-version': '2023-06-01',
-        'anthropic-beta': 'server-side-fallback-2026-07-01',
         'content-type': 'application/json',
       },
       body: JSON.stringify({
@@ -69,7 +72,6 @@ async function callClaude(env, { system, messages, schema, effort, maxTokens, ti
         system,
         messages,
         output_config: { effort, format: { type: 'json_schema', schema } },
-        fallbacks: 'default',   // a safety decline re-runs on Anthropic's recommended fallback model
       }),
     });
     const body = await res.json().catch(() => ({}));
@@ -137,6 +139,7 @@ Hard limits — say them plainly when relevant, never pretend otherwise:
 - Halves, quarters and team totals are not compared (DraftKings' feed here only has full-game lines).
 - Sports it can hunt: cfb, nfl, nba, wnba, mlb, nhl, ncaab. Not soccer, tennis, golf, UFC, esports, politics, crypto.
 - Most of the time DraftKings and Polymarket agree; DraftKings' cut (~2-2.5% per side) makes most lines slightly negative. Say so rather than inventing value. Never invent injuries, news, or numbers that aren't in the state you're given.
+- Polymarket prices move in 1-cent steps, so the fair price itself is only good to about +/-1%. Treat anything under +$1.50 per $100 as fair/noise, not value; only recommend a DraftKings line at +$1.50 per $100 or better, and say plainly when nothing clears that bar. The operator wants to make money, not to bet for the sake of it.
 
 Deciding the action:
 - "none": questions, chit-chat, or a message that restates the current orders (e.g. "only nfl nothing else" when the orders are already NFL only) — answer, don't reset anything.
@@ -158,7 +161,7 @@ export async function chief(env, { text, chat, state }) {
   const final = `<state>\n${JSON.stringify(state)}\n</state>\n\nOperator: ${text}`;
   if (history.length && history[history.length - 1].role === 'user') history[history.length - 1].content += `\n\n${final}`;
   else history.push({ role: 'user', content: final });
-  return callClaude(env, { system: CHIEF_SYSTEM, messages: history, schema: CHIEF_SCHEMA, effort: 'low', maxTokens: 4000, timeoutMs: 40000 });
+  return callClaude(env, { system: CHIEF_SYSTEM, messages: history, schema: CHIEF_SCHEMA, effort: 'medium', maxTokens: 8000, timeoutMs: 40000 });
 }
 
 // ---------- the debate (each sweep) ----------
@@ -197,7 +200,7 @@ Each agent's opening position (from the rule-based scoring) is given; agents may
 
 Then the chair rules on EVERY Polymarket candidate listed: APPROVE (full paper bet), TRIM (half size), or VETO, with a one-sentence reason. Only candidates whose edge meets the order's min edge can be placed at all; ruling on the rest still matters for the record. Be skeptical: a few points of gap between two efficient markets is usually noise or timing, and the crew's lane has no settled track record yet.
 
-Finally the summary: 2-3 plain-English sentences for the operator — what the crew would play (paper) and, if a DraftKings board is provided, whether any DraftKings line is worth a slip, naming teams and the "per $100" figure. If nothing is worth it, say so directly.`;
+Finally the summary: 2-3 plain-English sentences for the operator — what the crew would play (paper) and, if a DraftKings board is provided, whether any DraftKings line is worth a slip, naming teams and the "per $100" figure. Polymarket's 1-cent price steps make the fair price good to only about +/-1%, so a DraftKings line under +$1.50 per $100 is noise, not a play. If nothing clears that bar, say so directly — the goal is profit, not action.`;
 
 export async function debate(env, { candidates, dkBoard, context }) {
   const payload = { context, candidates, dkBoard: dkBoard || null };
@@ -205,8 +208,8 @@ export async function debate(env, { candidates, dkBoard, context }) {
     system: DEBATE_SYSTEM,
     messages: [{ role: 'user', content: `<sweep>\n${JSON.stringify(payload)}\n</sweep>` }],
     schema: DEBATE_SCHEMA,
-    effort: 'medium',
-    maxTokens: 12000,
+    effort: 'high',
+    maxTokens: 16000,
     timeoutMs: 90000,
   });
 }

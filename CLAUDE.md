@@ -53,8 +53,10 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   `src/crew-llm.js` is the reasoning: a Claude "chief" answers the chat and
   returns a structured order change (code validates and applies it), and a
   per-sweep debate where the personas argue the top plays and a chair rules
-  (its verdict decides what is queued). Own daily cap `CREW_LLM_DAILY_USD`
-  (default $3); falls back to the keyword parser / rule council. ESPN only
+  (its verdict decides what is queued). Runs on `claude-haiku-5-5` (operator's
+  choice for cost); own daily cap `CREW_LLM_DAILY_USD` (default $1); falls
+  back to the keyword parser / rule council. The investigator shares the
+  Anthropic account (`INVESTIGATION_DAILY_USD`, $1 since Oct 2026). ESPN only
   serves DraftKings odds to US clients, so the page computes the DraftKings
   board in the browser and POSTs it to `/agents/crew/dk-board`.
 - `src/odds.js` — The Odds API client (KV-cached; `ODDS_API_KEY` secret).
