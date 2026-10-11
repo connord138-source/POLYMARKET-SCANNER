@@ -1,27 +1,27 @@
 {
-  "fetchedAt": "2026-10-11T21:02:16Z",
+  "fetchedAt": "2026-10-11T21:13:19Z",
   "health": {
     "status": "ok",
-    "timestamp": "2026-10-11T21:02:17.634Z",
+    "timestamp": "2026-10-11T21:13:19.951Z",
     "version": "21.1.0 - Modularize: extract src/odds.js + src/gamma.js from index.js",
     "cache": {
-      "signalCount": 14311,
-      "oldestSignal": "2026-10-04T20:57:04.000Z",
-      "newestSignal": "2026-10-11T20:46:01.000Z"
+      "signalCount": 14288,
+      "oldestSignal": "2026-10-04T21:10:55.000Z",
+      "newestSignal": "2026-10-11T21:04:25.000Z"
     }
   },
   "cronStatus": {
     "success": true,
     "lastRun": {
-      "startedAt": "2026-10-11T20:55:47.070Z",
+      "startedAt": "2026-10-11T21:05:47.460Z",
       "scan": {
-        "signals": 888,
+        "signals": 890,
         "success": true
       },
       "settlement": {
-        "processed": 5,
-        "wins": 3,
-        "losses": 2,
+        "processed": 1,
+        "wins": 1,
+        "losses": 0,
         "errors": 0
       },
       "investigations": {
@@ -34,7 +34,7 @@
       },
       "overround": {
         "scanned": 71,
-        "flagged": 44
+        "flagged": 45
       },
       "sweep": {
         "skipped": "daily cap reached"
@@ -47,39 +47,31 @@
       "optimization": {
         "optimized": true,
         "totalFactors": 13,
-        "totalOptimized": 4,
+        "totalOptimized": 3,
         "optimizations": [
           {
-            "factor": "whaleSize50k",
+            "factor": "lastMinute6h",
             "winRate": 56,
-            "samples": 483,
+            "samples": 2086,
             "oldWeight": 1.34,
             "newWeight": 1.26,
             "change": -0.08
           },
           {
-            "factor": "concentrated",
-            "winRate": 53,
-            "samples": 3162,
-            "oldWeight": 1.295,
-            "newWeight": 1.22,
-            "change": -0.07
-          },
-          {
             "factor": "whaleSize15k",
             "winRate": 55,
-            "samples": 2110,
+            "samples": 2111,
             "oldWeight": 1.3250000000000002,
             "newWeight": 1.25,
             "change": -0.08
           },
           {
-            "factor": "sportsMarket",
-            "winRate": 53,
-            "samples": 2825,
-            "oldWeight": 1.295,
-            "newWeight": 1.22,
-            "change": -0.07
+            "factor": "strongWallet",
+            "winRate": 57,
+            "samples": 2898,
+            "oldWeight": 1.27,
+            "newWeight": 1.21,
+            "change": -0.06
           }
         ]
       },
@@ -87,11 +79,35 @@
       "edgeScan": {
         "skipped": "throttled (credit saver)",
         "remaining": 300,
-        "nextInMin": 10
+        "nextInMin": 1
       },
       "crewHunt": {
-        "skipped": "throttled",
-        "nextInMin": 9
+        "priced": 2,
+        "debated": 2,
+        "queued": 0,
+        "dkPlusEv": 0,
+        "counts": {
+          "APPROVE": 0,
+          "TRIM": 0,
+          "VETO": 2
+        },
+        "perSport": {
+          "nfl": {
+            "markets": 2,
+            "oddsGames": 6,
+            "dkGames": 0,
+            "matched": 2,
+            "dkMatched": 0,
+            "unmatched": 0,
+            "unmatchedGames": [],
+            "dkFeed": [
+              "20261011/-: 13 events, 0 pregame w/ DK",
+              "20261012/-: 1 events, 0 pregame w/ DK"
+            ],
+            "lines": 136
+          }
+        },
+        "debate": "ran ($0.001)"
       },
       "dkPicks": {
         "pending": 0,
@@ -102,7 +118,7 @@
         "settled": 0
       },
       "invSettle": {
-        "checked": 0,
+        "checked": 1,
         "scored": 0
       },
       "signalBackfill": {
@@ -117,11 +133,11 @@
         "phase": "done"
       },
       "autotrader": {
-        "evaluated": 888,
+        "evaluated": 890,
         "tradesOpened": 0,
         "tradesPaperTraded": 0,
         "tradesQueued": 0,
-        "skipped": 888,
+        "skipped": 890,
         "skipReasons": {
           "Entry price too high for sports_binary (79% > 40%)": 3,
           "Market already closed/resolved on Gamma": 18,
@@ -131,7 +147,7 @@
           "Entry price too high for other (72% > 40%)": 1,
           "Entry price too high for sports_binary (66% > 40%)": 4,
           "AI confidence too low: 26% (min 35%, time:26%)": 4,
-          "No winning wallet on signal": 682,
+          "No winning wallet on signal": 685,
           "Entry price too high for sports_binary (69% > 40%)": 5,
           "Entry price too high for other (52% > 40%)": 2,
           "Entry price too high for sports_binary (68% > 40%)": 5,
@@ -171,7 +187,7 @@
           "Entry price too high for other (78% > 40%)": 1,
           "Entry price too high for sports_other (46% > 40%)": 1,
           "Entry price too high for other (57% > 40%)": 2,
-          "Signal has no market slug — cannot price or settle": 11,
+          "Signal has no market slug — cannot price or settle": 10,
           "Event too far out (21d > 7d horizon)": 9,
           "Entry price too high for other (49% > 40%)": 2,
           "Entry price too high for other (55% > 40%)": 1,
@@ -237,15 +253,15 @@
         "totalPnL": -27.719999999999978
       },
       "speed": {
-        "watching": 10,
-        "priced": 4,
-        "dropped": 4
+        "watching": 8,
+        "priced": 1,
+        "dropped": 1
       },
       "forge": {
         "skipped": "ran recently",
         "lastRun": "2026-10-11T05:44:43.122Z"
       },
-      "completedAt": "2026-10-11T21:00:21.120Z"
+      "completedAt": "2026-10-11T21:09:50.098Z"
     },
     "cronSchedule": "Every 5 minutes",
     "note": "Settlement runs automatically. Sports events settle ~12h after game ends."
@@ -808,46 +824,46 @@
       {
         "name": "strongWallet",
         "wins": 1666,
-        "losses": 1231,
-        "winRate": 58,
-        "weight": 1.23,
-        "lastUpdated": "2026-10-11T20:39:26.823Z",
-        "previousWeight": 1.29,
-        "optimizedAt": "2026-10-11T20:44:51.549Z",
-        "total": 2897
+        "losses": 1232,
+        "winRate": 57,
+        "weight": 1.21,
+        "lastUpdated": "2026-10-11T21:04:14.403Z",
+        "previousWeight": 1.27,
+        "optimizedAt": "2026-10-11T21:09:49.627Z",
+        "total": 2898
       },
       {
         "name": "whaleSize50k",
         "wins": 269,
         "losses": 214,
         "winRate": 56,
-        "weight": 1.26,
+        "weight": 1.2,
         "lastUpdated": "2026-10-11T20:59:00.562Z",
-        "previousWeight": 1.34,
-        "optimizedAt": "2026-10-11T21:00:20.632Z",
+        "previousWeight": 1.26,
+        "optimizedAt": "2026-10-11T21:04:59.117Z",
         "total": 483
       },
       {
         "name": "lastMinute6h",
-        "wins": 1156,
-        "losses": 927,
-        "winRate": 55,
-        "weight": 1.19,
-        "lastUpdated": "2026-10-11T20:39:26.823Z",
-        "previousWeight": 1.25,
-        "optimizedAt": "2026-10-11T20:44:51.549Z",
-        "total": 2083
+        "wins": 1158,
+        "losses": 928,
+        "winRate": 56,
+        "weight": 1.26,
+        "lastUpdated": "2026-10-11T21:08:41.010Z",
+        "previousWeight": 1.34,
+        "optimizedAt": "2026-10-11T21:09:49.627Z",
+        "total": 2086
       },
       {
         "name": "whaleSize15k",
-        "wins": 1168,
+        "wins": 1169,
         "losses": 942,
         "winRate": 55,
         "weight": 1.25,
-        "lastUpdated": "2026-10-11T20:58:54.724Z",
+        "lastUpdated": "2026-10-11T21:08:41.010Z",
         "previousWeight": 1.3250000000000002,
-        "optimizedAt": "2026-10-11T21:00:20.632Z",
-        "total": 2110
+        "optimizedAt": "2026-10-11T21:09:49.627Z",
+        "total": 2111
       },
       {
         "name": "whaleSize25k",
@@ -878,10 +894,10 @@
         "wins": 1506,
         "losses": 1319,
         "winRate": 53,
-        "weight": 1.22,
+        "weight": 1.16,
         "lastUpdated": "2026-10-11T20:59:15.532Z",
-        "previousWeight": 1.295,
-        "optimizedAt": "2026-10-11T21:00:20.632Z",
+        "previousWeight": 1.22,
+        "optimizedAt": "2026-10-11T21:04:59.117Z",
         "total": 2825
       },
       {
@@ -889,10 +905,10 @@
         "wins": 1690,
         "losses": 1472,
         "winRate": 53,
-        "weight": 1.22,
+        "weight": 1.16,
         "lastUpdated": "2026-10-11T20:59:15.532Z",
-        "previousWeight": 1.295,
-        "optimizedAt": "2026-10-11T21:00:20.632Z",
+        "previousWeight": 1.22,
+        "optimizedAt": "2026-10-11T21:04:59.117Z",
         "total": 3162
       },
       {
@@ -908,47 +924,47 @@
       },
       {
         "name": "whaleSize15k",
-        "wins": 1168,
+        "wins": 1169,
         "losses": 942,
         "winRate": 55,
         "weight": 1.25,
-        "lastUpdated": "2026-10-11T20:58:54.724Z",
+        "lastUpdated": "2026-10-11T21:08:41.010Z",
         "previousWeight": 1.3250000000000002,
-        "optimizedAt": "2026-10-11T21:00:20.632Z",
-        "total": 2110
+        "optimizedAt": "2026-10-11T21:09:49.627Z",
+        "total": 2111
       },
       {
         "name": "lastMinute6h",
-        "wins": 1156,
-        "losses": 927,
-        "winRate": 55,
-        "weight": 1.19,
-        "lastUpdated": "2026-10-11T20:39:26.823Z",
-        "previousWeight": 1.25,
-        "optimizedAt": "2026-10-11T20:44:51.549Z",
-        "total": 2083
+        "wins": 1158,
+        "losses": 928,
+        "winRate": 56,
+        "weight": 1.26,
+        "lastUpdated": "2026-10-11T21:08:41.010Z",
+        "previousWeight": 1.34,
+        "optimizedAt": "2026-10-11T21:09:49.627Z",
+        "total": 2086
       },
       {
         "name": "whaleSize50k",
         "wins": 269,
         "losses": 214,
         "winRate": 56,
-        "weight": 1.26,
+        "weight": 1.2,
         "lastUpdated": "2026-10-11T20:59:00.562Z",
-        "previousWeight": 1.34,
-        "optimizedAt": "2026-10-11T21:00:20.632Z",
+        "previousWeight": 1.26,
+        "optimizedAt": "2026-10-11T21:04:59.117Z",
         "total": 483
       },
       {
         "name": "strongWallet",
         "wins": 1666,
-        "losses": 1231,
-        "winRate": 58,
-        "weight": 1.23,
-        "lastUpdated": "2026-10-11T20:39:26.823Z",
-        "previousWeight": 1.29,
-        "optimizedAt": "2026-10-11T20:44:51.549Z",
-        "total": 2897
+        "losses": 1232,
+        "winRate": 57,
+        "weight": 1.21,
+        "lastUpdated": "2026-10-11T21:04:14.403Z",
+        "previousWeight": 1.27,
+        "optimizedAt": "2026-10-11T21:09:49.627Z",
+        "total": 2898
       },
       {
         "name": "freshWallet",
@@ -1116,29 +1132,6 @@
     "totalFactors": 13
   },
   "tradeLog": [
-    {
-      "type": "SKIP",
-      "market": "Bengals vs. Dolphins",
-      "reason": "AI confidence too low: 28% (min 35%, time:28%)",
-      "aiConfidence": 28,
-      "aiComponents": [
-        {
-          "source": "time",
-          "confidence": 28,
-          "weight": 0.5
-        }
-      ],
-      "marketCategory": "sports_binary",
-      "timestamp": "2026-10-11T19:06:08.510Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "Vikings vs. Saints",
-      "reason": "Entry price too high for sports_binary (79% > 40%)",
-      "walletTier": "ELITE",
-      "marketCategory": "sports_binary",
-      "timestamp": "2026-10-11T19:20:27.388Z"
-    },
     {
       "type": "SKIP",
       "market": "Will Cagliari Calcio win on 2026-10-11?",
@@ -1442,6 +1435,29 @@
       "reason": "Market already closed/resolved on Gamma",
       "marketCategory": "other",
       "timestamp": "2026-10-11T20:54:58.970Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Broncos vs. Chargers",
+      "reason": "AI confidence too low: 26% (min 35%, time:26%)",
+      "aiConfidence": 26,
+      "aiComponents": [
+        {
+          "source": "time",
+          "confidence": 26,
+          "weight": 0.5
+        }
+      ],
+      "marketCategory": "sports_binary",
+      "timestamp": "2026-10-11T21:04:49.607Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Counter-Strike: Vitality vs MOUZ (BO5) - ESL Pro League Playoffs",
+      "reason": "Entry price too high for sports_binary (65% > 40%)",
+      "walletTier": "STRONG",
+      "marketCategory": "esports",
+      "timestamp": "2026-10-11T21:09:40.638Z"
     }
   ],
   "tradeHistory": [
@@ -2924,9 +2940,9 @@
     "success": true,
     "overview": {
       "totalFactorsTracked": 13,
-      "totalSignalsProcessed": 17211,
+      "totalSignalsProcessed": 17216,
       "overallWinRate": 55,
-      "pendingSignals": 344
+      "pendingSignals": 340
     },
     "walletEdge": {
       "totalTracked": 500,
@@ -3023,19 +3039,19 @@
         "wins": 269,
         "losses": 214,
         "winRate": 56,
-        "weight": 1.26,
+        "weight": 1.2,
         "lastUpdated": "2026-10-11T20:59:00.562Z",
-        "previousWeight": 1.34,
-        "optimizedAt": "2026-10-11T21:00:20.632Z"
+        "previousWeight": 1.26,
+        "optimizedAt": "2026-10-11T21:04:59.117Z"
       },
       "lastMinute6h": {
-        "wins": 1156,
-        "losses": 927,
-        "winRate": 55,
-        "weight": 1.19,
-        "lastUpdated": "2026-10-11T20:39:26.823Z",
-        "previousWeight": 1.25,
-        "optimizedAt": "2026-10-11T20:44:51.549Z"
+        "wins": 1158,
+        "losses": 928,
+        "winRate": 56,
+        "weight": 1.26,
+        "lastUpdated": "2026-10-11T21:08:41.010Z",
+        "previousWeight": 1.34,
+        "optimizedAt": "2026-10-11T21:09:49.627Z"
       },
       "lastMinute2h": {
         "wins": 560,
@@ -3059,19 +3075,19 @@
         "wins": 1690,
         "losses": 1472,
         "winRate": 53,
-        "weight": 1.22,
+        "weight": 1.16,
         "lastUpdated": "2026-10-11T20:59:15.532Z",
-        "previousWeight": 1.295,
-        "optimizedAt": "2026-10-11T21:00:20.632Z"
+        "previousWeight": 1.22,
+        "optimizedAt": "2026-10-11T21:04:59.117Z"
       },
       "whaleSize15k": {
-        "wins": 1168,
+        "wins": 1169,
         "losses": 942,
         "winRate": 55,
         "weight": 1.25,
-        "lastUpdated": "2026-10-11T20:58:54.724Z",
+        "lastUpdated": "2026-10-11T21:08:41.010Z",
         "previousWeight": 1.3250000000000002,
-        "optimizedAt": "2026-10-11T21:00:20.632Z"
+        "optimizedAt": "2026-10-11T21:09:49.627Z"
       },
       "freshWallet": {
         "wins": 141,
@@ -3084,12 +3100,12 @@
       },
       "strongWallet": {
         "wins": 1666,
-        "losses": 1231,
-        "winRate": 58,
-        "weight": 1.23,
-        "lastUpdated": "2026-10-11T20:39:26.823Z",
-        "previousWeight": 1.29,
-        "optimizedAt": "2026-10-11T20:44:51.549Z"
+        "losses": 1232,
+        "winRate": 57,
+        "weight": 1.21,
+        "lastUpdated": "2026-10-11T21:04:14.403Z",
+        "previousWeight": 1.27,
+        "optimizedAt": "2026-10-11T21:09:49.627Z"
       },
       "eliteWallet": {
         "wins": 637,
@@ -3104,10 +3120,10 @@
         "wins": 1506,
         "losses": 1319,
         "winRate": 53,
-        "weight": 1.22,
+        "weight": 1.16,
         "lastUpdated": "2026-10-11T20:59:15.532Z",
-        "previousWeight": 1.295,
-        "optimizedAt": "2026-10-11T21:00:20.632Z"
+        "previousWeight": 1.22,
+        "optimizedAt": "2026-10-11T21:04:59.117Z"
       },
       "cryptoMarket": {
         "wins": 35,
@@ -3181,11 +3197,11 @@
   "learningInsights": {
     "success": true,
     "systemPerformance": {
-      "totalSignalsProcessed": 17211,
-      "wins": 9492,
-      "losses": 7719,
+      "totalSignalsProcessed": 17216,
+      "wins": 9495,
+      "losses": 7721,
       "winRate": 55,
-      "pendingSignals": 344
+      "pendingSignals": 340
     },
     "insights": {
       "bestFactors": [
@@ -3260,10 +3276,10 @@
       },
       {
         "factor": "strongWallet",
-        "winRate": 58,
+        "winRate": 57,
         "wins": 1666,
-        "losses": 1231,
-        "weight": 1.23,
+        "losses": 1232,
+        "weight": 1.21,
         "performance": "AVERAGE"
       },
       {
@@ -3271,21 +3287,21 @@
         "winRate": 56,
         "wins": 269,
         "losses": 214,
-        "weight": 1.26,
+        "weight": 1.2,
         "performance": "AVERAGE"
       },
       {
         "factor": "lastMinute6h",
-        "winRate": 55,
-        "wins": 1156,
-        "losses": 927,
-        "weight": 1.19,
+        "winRate": 56,
+        "wins": 1158,
+        "losses": 928,
+        "weight": 1.26,
         "performance": "AVERAGE"
       },
       {
         "factor": "whaleSize15k",
         "winRate": 55,
-        "wins": 1168,
+        "wins": 1169,
         "losses": 942,
         "weight": 1.25,
         "performance": "AVERAGE"
@@ -3303,7 +3319,7 @@
         "winRate": 53,
         "wins": 1690,
         "losses": 1472,
-        "weight": 1.22,
+        "weight": 1.16,
         "performance": "AVERAGE"
       },
       {
@@ -3311,7 +3327,7 @@
         "winRate": 53,
         "wins": 1506,
         "losses": 1319,
-        "weight": 1.22,
+        "weight": 1.16,
         "performance": "AVERAGE"
       },
       {
@@ -3366,11 +3382,11 @@
         "key": "all",
         "label": "Follow all signals",
         "side": "follow",
-        "settled": 9886,
-        "wins": 5459,
-        "losses": 4427,
-        "staked": 988600,
-        "pnl": 1791.68,
+        "settled": 9889,
+        "wins": 5461,
+        "losses": 4428,
+        "staked": 988900,
+        "pnl": 1765.15,
         "roi": 0.2,
         "winRate": 55,
         "readyForAuto": true
@@ -3379,12 +3395,12 @@
         "key": "underdog",
         "label": "Underdog entries (≤40¢)",
         "side": "follow",
-        "settled": 1226,
+        "settled": 1227,
         "wins": 398,
-        "losses": 828,
-        "staked": 122600,
-        "pnl": -1098.63,
-        "roi": -0.9,
+        "losses": 829,
+        "staked": 122700,
+        "pnl": -1198.63,
+        "roi": -1,
         "winRate": 32,
         "readyForAuto": false
       },
@@ -3392,12 +3408,12 @@
         "key": "high_score",
         "label": "High score (≥100)",
         "side": "follow",
-        "settled": 2521,
-        "wins": 1369,
+        "settled": 2522,
+        "wins": 1370,
         "losses": 1152,
-        "staked": 252100,
-        "pnl": -5201.49,
-        "roi": -2.1,
+        "staked": 252200,
+        "pnl": -5149.97,
+        "roi": -2,
         "winRate": 54,
         "readyForAuto": false
       },
@@ -3405,11 +3421,11 @@
         "key": "fade_favorites",
         "label": "Fade favorites (≥60¢)",
         "side": "fade",
-        "settled": 3406,
+        "settled": 3408,
         "wins": 1004,
-        "losses": 2402,
-        "staked": 340600,
-        "pnl": -9841.88,
+        "losses": 2404,
+        "staked": 340800,
+        "pnl": -10041.88,
         "roi": -2.9,
         "winRate": 29,
         "readyForAuto": false
@@ -3468,18 +3484,7 @@
     "openCount": 1,
     "settledCount": 199,
     "winRate": 48,
-    "lastScan": {
-      "at": 1791749368988,
-      "scanned": 2,
-      "sports": [
-        "mlb",
-        "nfl",
-        "nhl",
-        "nba"
-      ],
-      "found": 0,
-      "newCount": 0
-    },
+    "lastScan": null,
     "opportunities": [
       {
         "id": "nfl:a73a76599a4f3422803e57bd8f61b626:away",
@@ -7155,7 +7160,7 @@
       "lag_cost_c": 0.17,
       "drift_5m_c": 0.12,
       "drift_15m_c": -0.18,
-      "drift_60m_c": 0.01
+      "drift_60m_c": 0.02
     },
     "byLag": [
       {
@@ -7178,9 +7183,9 @@
       }
     ],
     "settled": {
-      "n": 423,
+      "n": 426,
       "roi_at_whale": -0.2,
-      "roi_at_detect": 0.2
+      "roi_at_detect": 0.1
     },
     "read": "lag_cost_c = cents the price moved against us before we saw it; drift = movement after. roi_at_whale vs roi_at_detect = the value of being as fast as the whale."
   },
@@ -7352,10 +7357,15 @@
         "at": "2026-10-11T20:54:26.194Z",
         "from": "crew",
         "text": "NFL sweep: 2 pregame games priced.  Polymarket gaps: Ravens -0.4 (39¢ vs 38.6%), Bills -0.4 (39¢ vs 38.6%). Council: 0 approve, 2 split, 0 veto. No Polymarket gap reaches 3 pts; no paper bet beats forcing one."
+      },
+      {
+        "at": "2026-10-11T21:09:09.170Z",
+        "from": "crew",
+        "text": "NFL sweep: 2 games priced, 2 plays debated (read it on the board). The crew would play nothing on paper: both the Ravens-Falcons and Bills-Rams Polymarket prices sit at 39 cents against 38.6 percent fair, a -0.4 point edge far below the 3-point minimum. No DraftKings board was provided, so there is no per-$100 figure to evaluate and no slip to consider."
       }
     ],
     "hunt": {
-      "at": "2026-10-11T20:54:20.656Z",
+      "at": "2026-10-11T21:08:53.909Z",
       "directiveId": "ord_mv41877i",
       "sports": [
         "nfl"
@@ -7405,9 +7415,9 @@
           "midPrice": 38.5,
           "spread": 0.01,
           "edge": -0.4,
-          "volume": 77371,
+          "volume": 78486,
           "whale": null,
-          "verdict": "TRIM",
+          "verdict": "VETO",
           "reason": "Split 2-2 (margin -0.08)",
           "margin": -0.08,
           "votes": [
@@ -7483,11 +7493,14 @@
               ]
             ],
             "m": -0.08,
-            "verdict": "TRIM",
+            "verdict": "VETO",
             "tb": null,
-            "mode": "crew"
+            "mode": "crew",
+            "chair": "claude"
           },
-          "qualifies": false
+          "qualifies": false,
+          "ruleVerdict": "TRIM",
+          "chairReason": "Edge is -0.4 points (39 cents vs 38.6 percent fair), well below the 3-point minimum, with no whale flow and no track record behind the lane."
         },
         {
           "id": "nfl-buf-la-2026-10-13:0",
@@ -7509,7 +7522,7 @@
           "edge": -0.4,
           "volume": 53274,
           "whale": null,
-          "verdict": "TRIM",
+          "verdict": "VETO",
           "reason": "Split 2-2 (margin -0.08)",
           "margin": -0.08,
           "votes": [
@@ -7585,11 +7598,14 @@
               ]
             ],
             "m": -0.08,
-            "verdict": "TRIM",
+            "verdict": "VETO",
             "tb": null,
-            "mode": "crew"
+            "mode": "crew",
+            "chair": "claude"
           },
-          "qualifies": false
+          "qualifies": false,
+          "ruleVerdict": "TRIM",
+          "chairReason": "Edge is -0.4 points (39 cents vs 38.6 percent fair), well below the 3-point minimum, with no whale flow and no track record behind the lane."
         }
       ],
       "dkBoard": [],
@@ -7776,8 +7792,8 @@
                 "Falcons"
               ],
               "m": [
-                8,
-                92
+                9,
+                91
               ],
               "w": 0.02
             },
@@ -7945,8 +7961,8 @@
                 "Falcons"
               ],
               "m": [
-                8,
-                92
+                8.5,
+                91.5
               ],
               "w": null
             },
@@ -7971,10 +7987,10 @@
                 "Falcons"
               ],
               "m": [
-                3.7,
+                3.6,
                 96.4
               ],
-              "w": 0.069
+              "w": 0.068
             },
             {
               "t": "s",
@@ -8192,10 +8208,10 @@
                 "Under"
               ],
               "m": [
-                9.5,
-                90.5
+                10,
+                90
               ],
-              "w": 0.01
+              "w": 0.02
             },
             {
               "t": "t",
@@ -8231,10 +8247,10 @@
                 "Under"
               ],
               "m": [
-                66,
-                34
+                66.5,
+                33.5
               ],
-              "w": 0.02
+              "w": 0.01
             },
             {
               "t": "t",
@@ -8491,10 +8507,10 @@
                 "Under"
               ],
               "m": [
-                13.5,
-                86.5
+                14,
+                86
               ],
-              "w": 0.03
+              "w": 0.04
             },
             {
               "t": "t",
@@ -8890,9 +8906,9 @@
               ],
               "m": [
                 3.1,
-                96.9
+                97
               ],
-              "w": 0.058
+              "w": 0.057
             },
             {
               "t": "s",
@@ -9162,10 +9178,10 @@
                 "Under"
               ],
               "m": [
-                92.6,
-                7.5
+                92.9,
+                7.2
               ],
-              "w": 0.129
+              "w": 0.123
             },
             {
               "t": "t",
@@ -9175,10 +9191,10 @@
                 "Under"
               ],
               "m": [
-                92.6,
-                7.5
+                92.9,
+                7.2
               ],
-              "w": 0.129
+              "w": 0.123
             },
             {
               "t": "t",
@@ -9188,10 +9204,10 @@
                 "Under"
               ],
               "m": [
-                93.3,
-                6.8
+                93.8,
+                6.2
               ],
-              "w": 0.115
+              "w": 0.104
             },
             {
               "t": "t",
@@ -9201,10 +9217,10 @@
                 "Under"
               ],
               "m": [
-                87.5,
-                12.5
+                91.5,
+                8.5
               ],
-              "w": 0.23
+              "w": 0.15
             },
             {
               "t": "t",
@@ -9428,8 +9444,8 @@
       ],
       "counts": {
         "APPROVE": 0,
-        "TRIM": 2,
-        "VETO": 0
+        "TRIM": 0,
+        "VETO": 2
       },
       "queued": [],
       "markets": [
@@ -9438,10 +9454,58 @@
         "total"
       ],
       "debate": {
-        "at": "2026-10-11T16:39:33.913Z",
-        "error": "the Anthropic account is out of credits (add them at console.anthropic.com, Plans & Billing)"
+        "at": "2026-10-11T21:08:53.909Z",
+        "ids": "nfl-bal-atl-2026-10-12:0,nfl-buf-la-2026-10-13:0",
+        "lines": [
+          {
+            "agent": "QUANT",
+            "line": "Ravens are at 39 cents against a fair probability of 38.6 percent, so the edge is -0.4 points. Bills-Rams has the same numbers, so both prices sit at or slightly above fair."
+          },
+          {
+            "agent": "GREED",
+            "line": "I agree with QUANT. There is no money in either price, and my abstain stands because there is no band history to count."
+          },
+          {
+            "agent": "FOMO",
+            "line": "Neither play has whale flow (whaleFlow is null on both), so nothing is pushing these prices. I see no reason to chase either one."
+          },
+          {
+            "agent": "PANIC",
+            "line": "I opened yes on book room, not on edge. With edge at -0.4, I'm switching to no, since buying above fair on a thin read is how the book loses."
+          },
+          {
+            "agent": "DOUBT",
+            "line": "PANIC is right. The band has n=0, there is no settled crew record, and the sportsbook consensus is the only independent check. Nothing here supports a bet."
+          },
+          {
+            "agent": "RISK",
+            "line": "The book is at 3 percent with room to spare, but room doesn't create edge. I withdraw my yes; both would be $5 paper bets below the 3-point minimum."
+          },
+          {
+            "agent": "QUANT",
+            "line": "Both candidates fail minEdgePts of 3 and are not placeable. The DraftKings board is null, so there is no second price to compare against."
+          },
+          {
+            "agent": "CHAIR",
+            "line": "Veto both. Each shows a negative edge, there is no whale flow, and the crew has no track record yet. Nothing to play this slate."
+          }
+        ],
+        "verdicts": [
+          {
+            "id": "nfl-bal-atl-2026-10-12:0",
+            "verdict": "VETO",
+            "reason": "Edge is -0.4 points (39 cents vs 38.6 percent fair), well below the 3-point minimum, with no whale flow and no track record behind the lane."
+          },
+          {
+            "id": "nfl-buf-la-2026-10-13:0",
+            "verdict": "VETO",
+            "reason": "Edge is -0.4 points (39 cents vs 38.6 percent fair), well below the 3-point minimum, with no whale flow and no track record behind the lane."
+          }
+        ],
+        "summary": "The crew would play nothing on paper: both the Ravens-Falcons and Bills-Rams Polymarket prices sit at 39 cents against 38.6 percent fair, a -0.4 point edge far below the 3-point minimum. No DraftKings board was provided, so there is no per-$100 figure to evaluate and no slip to consider.",
+        "usd": 0.001
       },
-      "reportedAt": "2026-10-11T20:54:20.656Z"
+      "reportedAt": "2026-10-11T21:08:53.909Z"
     },
     "queue": [],
     "ledger": {
@@ -9466,12 +9530,12 @@
       "ncaab"
     ],
     "oddsApi": {
-      "at": "2026-10-11T20:54:22.960Z",
+      "at": "2026-10-11T21:13:35.377Z",
       "ok": true,
       "status": 200,
       "key": "odds_lines:americanfootball_nfl:h2h,spreads",
-      "remaining": "300",
-      "used": "200"
+      "remaining": "296",
+      "used": "204"
     },
     "claude": {
       "on": true,
