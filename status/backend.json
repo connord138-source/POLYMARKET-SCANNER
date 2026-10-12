@@ -1,21 +1,21 @@
 {
-  "fetchedAt": "2026-10-12T05:48:29Z",
+  "fetchedAt": "2026-10-12T08:32:05Z",
   "health": {
     "status": "ok",
-    "timestamp": "2026-10-12T05:48:30.401Z",
+    "timestamp": "2026-10-12T08:32:06.291Z",
     "version": "21.1.0 - Modularize: extract src/odds.js + src/gamma.js from index.js",
     "cache": {
-      "signalCount": 14257,
-      "oldestSignal": "2026-10-05T05:47:11.000Z",
-      "newestSignal": "2026-10-12T05:40:26.000Z"
+      "signalCount": 14263,
+      "oldestSignal": "2026-10-05T08:30:25.000Z",
+      "newestSignal": "2026-10-12T08:20:00.000Z"
     }
   },
   "cronStatus": {
     "success": true,
     "lastRun": {
-      "startedAt": "2026-10-12T05:45:03.058Z",
+      "startedAt": "2026-10-12T08:30:19.876Z",
       "scan": {
-        "signals": 166,
+        "signals": 210,
         "success": true
       },
       "settlement": {
@@ -34,7 +34,7 @@
       },
       "overround": {
         "scanned": 71,
-        "flagged": 44
+        "flagged": 45
       },
       "sweep": {
         "skipped": "daily $ cap reached"
@@ -47,16 +47,17 @@
       "optimization": null,
       "error": null,
       "edgeScan": {
-        "skipped": "throttled",
-        "nextInMin": 10
+        "skipped": "throttled (credit saver)",
+        "remaining": 206,
+        "nextInMin": 16
       },
       "crewHunt": {
         "skipped": "throttled",
         "nextInMin": 10
       },
       "mmBooks": {
-        "markets": 19,
-        "rows": 19,
+        "markets": 17,
+        "rows": 17,
         "failed": 0
       },
       "dkPicks": {
@@ -83,26 +84,28 @@
         "phase": "done"
       },
       "autotrader": {
-        "evaluated": 166,
+        "evaluated": 210,
         "tradesOpened": 0,
         "tradesPaperTraded": 0,
         "tradesQueued": 0,
-        "skipped": 166,
+        "skipped": 210,
         "skipReasons": {
           "Entry price too high for sports_binary (71% > 40%)": 1,
-          "Entry price too high for sports_binary (63% > 40%)": 3,
+          "AI confidence too low: 29% (min 35%, time:29%)": 2,
+          "Entry price too high for sports_binary (63% > 40%)": 4,
           "Entry price too high for sports_binary (51% > 40%)": 1,
           "Market already closed/resolved on Gamma": 5,
           "Entry price too high for sports_binary (66% > 40%)": 1,
-          "Entry price too high for sports_binary (68% > 40%)": 1,
+          "Entry price too high for sports_binary (68% > 40%)": 3,
           "Entry price too high for sports_binary (74% > 40%)": 1,
-          "No winning wallet on signal": 106,
+          "No winning wallet on signal": 147,
           "Entry price too high for sports_binary (62% > 40%)": 1,
           "Entry price too high for sports_binary (64% > 40%)": 2,
           "Entry price too high for sports_binary (46% > 40%)": 1,
-          "Signal has no market slug — cannot price or settle": 6,
+          "Entry price too high for sports_binary (73% > 40%)": 1,
+          "Signal has no market slug — cannot price or settle": 5,
           "Event too far out (21d > 7d horizon)": 9,
-          "Event too far out (81d > 7d horizon)": 3,
+          "Event too far out (81d > 7d horizon)": 4,
           "Entry price too high for sports_other (52% > 40%)": 2,
           "Event too far out (9d > 7d horizon)": 3,
           "Entry price too high for other (49% > 40%)": 1,
@@ -110,13 +113,10 @@
           "Entry price too high for other (48% > 40%)": 1,
           "Entry price too high for sports_binary (54% > 40%)": 1,
           "Entry price too high for other (68% > 40%)": 1,
-          "AI confidence too low: 29% (min 35%, time:29%)": 1,
           "Entry price too high for other (74% > 40%)": 1,
           "Entry price too high for sports_binary (77% > 40%)": 1,
           "Entry price too high for other (57% > 40%)": 1,
           "Event too far out (82d > 7d horizon)": 4,
-          "Event too far out (37d > 7d horizon)": 1,
-          "Event too far out (22d > 7d horizon)": 1,
           "Event too far out (36d > 7d horizon)": 1,
           "Event too far out (446d > 7d horizon)": 3,
           "Event too far out (20d > 7d horizon)": 1
@@ -157,21 +157,15 @@
         "totalPnL": -27.719999999999978
       },
       "speed": {
-        "watching": 0,
-        "priced": 0,
+        "watching": 4,
+        "priced": 1,
         "dropped": 0
       },
       "forge": {
-        "ran": true,
-        "counts": {
-          "generated": 187,
-          "eligible": 89,
-          "promoted": 0,
-          "overfit": 2
-        },
-        "verdict": "No candidate cleared walk-forward + slippage + significance. Nothing promoted."
+        "skipped": "ran recently",
+        "lastRun": "2026-10-12T05:45:40.577Z"
       },
-      "completedAt": "2026-10-12T05:45:44.804Z"
+      "completedAt": "2026-10-12T08:31:53.689Z"
     },
     "cronSchedule": "Every 5 minutes",
     "note": "Settlement runs automatically. Sports events settle ~12h after game ends."
@@ -737,10 +731,10 @@
         "wins": 1682,
         "losses": 1241,
         "winRate": 58,
-        "weight": 1.29,
+        "weight": 1.23,
         "lastUpdated": "2026-10-12T05:25:33.952Z",
-        "previousWeight": 1.3699999999999999,
-        "optimizedAt": "2026-10-12T05:25:42.612Z",
+        "previousWeight": 1.29,
+        "optimizedAt": "2026-10-12T06:46:49.948Z",
         "total": 2923
       },
       {
@@ -791,14 +785,14 @@
     "bottomFactors": [
       {
         "name": "lastMinute2h",
-        "wins": 566,
+        "wins": 567,
         "losses": 514,
         "winRate": 52,
-        "weight": 1.15,
-        "lastUpdated": "2026-10-12T05:20:32.550Z",
-        "previousWeight": 1.2,
-        "optimizedAt": "2026-10-12T05:25:42.612Z",
-        "total": 1080
+        "weight": 1.2,
+        "lastUpdated": "2026-10-12T06:46:28.775Z",
+        "previousWeight": 1.28,
+        "optimizedAt": "2026-10-12T06:46:49.948Z",
+        "total": 1081
       },
       {
         "name": "concentrated",
@@ -816,10 +810,10 @@
         "wins": 1540,
         "losses": 1336,
         "winRate": 54,
-        "weight": 1.23,
+        "weight": 1.18,
         "lastUpdated": "2026-10-12T05:25:32.029Z",
-        "previousWeight": 1.31,
-        "optimizedAt": "2026-10-12T05:25:42.612Z",
+        "previousWeight": 1.23,
+        "optimizedAt": "2026-10-12T06:46:49.948Z",
         "total": 2876
       },
       {
@@ -871,10 +865,10 @@
         "wins": 1682,
         "losses": 1241,
         "winRate": 58,
-        "weight": 1.29,
+        "weight": 1.23,
         "lastUpdated": "2026-10-12T05:25:33.952Z",
-        "previousWeight": 1.3699999999999999,
-        "optimizedAt": "2026-10-12T05:25:42.612Z",
+        "previousWeight": 1.29,
+        "optimizedAt": "2026-10-12T06:46:49.948Z",
         "total": 2923
       },
       {
@@ -927,7 +921,7 @@
         {
           "name": "lastMinute2h",
           "winRate": 52,
-          "record": "566W-514L",
+          "record": "567W-514L",
           "isDiscovered": false
         },
         {
@@ -1043,101 +1037,6 @@
     "totalFactors": 13
   },
   "tradeLog": [
-    {
-      "type": "SKIP",
-      "market": "Will Nottingham Forest FC win on 2026-10-11?",
-      "reason": "Event day passed (2h ago)",
-      "walletTier": "STRONG",
-      "marketCategory": "sports_binary",
-      "timestamp": "2026-10-12T02:00:43.833Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "49ers vs. Seahawks",
-      "reason": "Event day passed (2h ago)",
-      "walletTier": "STRONG",
-      "marketCategory": "sports_binary",
-      "timestamp": "2026-10-12T02:00:43.912Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "Spread: Texans (-7.5)",
-      "reason": "Event day passed (2h ago)",
-      "walletTier": "ELITE",
-      "marketCategory": "other",
-      "timestamp": "2026-10-12T02:00:44.033Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "Counter-Strike: Vitality vs MOUZ (BO5) - ESL Pro League Playoffs",
-      "reason": "Event day passed (2h ago)",
-      "walletTier": "STRONG",
-      "marketCategory": "esports",
-      "timestamp": "2026-10-12T02:00:44.192Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "Los Angeles Dodgers vs. Milwaukee Brewers",
-      "reason": "Event day passed (2h ago)",
-      "walletTier": "STRONG",
-      "marketCategory": "sports_binary",
-      "timestamp": "2026-10-12T02:00:44.280Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "Ravens vs. Falcons",
-      "reason": "AI confidence too low: 16% (min 35%, time:16%)",
-      "aiConfidence": 16,
-      "aiComponents": [
-        {
-          "source": "time",
-          "confidence": 16,
-          "weight": 0.5
-        }
-      ],
-      "marketCategory": "sports_binary",
-      "timestamp": "2026-10-12T02:20:40.134Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "Dota 2: Team Yandex vs Team Spirit (BO5) - BLAST Slam Playoffs",
-      "reason": "Event day passed (3h ago)",
-      "walletTier": "STRONG",
-      "marketCategory": "esports",
-      "timestamp": "2026-10-12T02:30:41.840Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "Texans vs. Titans",
-      "reason": "Event day passed (3h ago)",
-      "walletTier": "ELITE",
-      "marketCategory": "sports_binary",
-      "timestamp": "2026-10-12T02:30:41.988Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "Games Total: O/U 3.5",
-      "reason": "Event day passed (3h ago)",
-      "walletTier": "STRONG",
-      "marketCategory": "other",
-      "timestamp": "2026-10-12T02:30:42.075Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "Will Cagliari Calcio win on 2026-10-11?",
-      "reason": "Event day passed (3h ago)",
-      "walletTier": "ELITE",
-      "marketCategory": "sports_binary",
-      "timestamp": "2026-10-12T02:30:42.152Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "Los Angeles Dodgers vs. Milwaukee Brewers: O/U 6.5",
-      "reason": "Event day passed (3h ago)",
-      "walletTier": "STRONG",
-      "marketCategory": "sports_binary",
-      "timestamp": "2026-10-12T02:30:42.236Z"
-    },
     {
       "type": "SKIP",
       "market": "Will Nottingham Forest FC win on 2026-10-11?",
@@ -1302,6 +1201,129 @@
       ],
       "marketCategory": "sports_binary",
       "timestamp": "2026-10-12T05:35:40.283Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Will Jeremiah Smith win the 2026 Heisman Trophy?",
+      "reason": "AI confidence too low: 29% (min 35%, time:29%)",
+      "aiConfidence": 29,
+      "aiComponents": [
+        {
+          "source": "time",
+          "confidence": 29,
+          "weight": 0.5
+        }
+      ],
+      "marketCategory": "sports_other",
+      "timestamp": "2026-10-12T06:00:45.263Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Ravens vs. Falcons",
+      "reason": "Entry price too high for sports_binary (71% > 40%)",
+      "walletTier": "STRONG",
+      "marketCategory": "sports_binary",
+      "timestamp": "2026-10-12T06:05:40.814Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Ravens vs. Falcons",
+      "reason": "Entry price too high for sports_binary (63% > 40%)",
+      "walletTier": "STRONG",
+      "marketCategory": "sports_binary",
+      "timestamp": "2026-10-12T06:11:42.823Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "LoL: BNK FEARX vs JD Gaming (BO5) - Demacia Cup Global Invitational Playoffs",
+      "reason": "AI confidence too low: 29% (min 35%, time:29%)",
+      "aiConfidence": 29,
+      "aiComponents": [
+        {
+          "source": "time",
+          "confidence": 29,
+          "weight": 0.5
+        }
+      ],
+      "marketCategory": "sports_binary",
+      "timestamp": "2026-10-12T06:36:48.181Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Will Jeremiah Smith win the 2026 Heisman Trophy?",
+      "reason": "AI confidence too low: 29% (min 35%, time:29%)",
+      "aiConfidence": 29,
+      "aiComponents": [
+        {
+          "source": "time",
+          "confidence": 29,
+          "weight": 0.5
+        }
+      ],
+      "marketCategory": "sports_other",
+      "timestamp": "2026-10-12T07:02:04.424Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Ravens vs. Falcons",
+      "reason": "Entry price too high for sports_binary (71% > 40%)",
+      "walletTier": "STRONG",
+      "marketCategory": "sports_binary",
+      "timestamp": "2026-10-12T07:06:47.507Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Ravens vs. Falcons",
+      "reason": "Entry price too high for sports_binary (63% > 40%)",
+      "walletTier": "STRONG",
+      "marketCategory": "sports_binary",
+      "timestamp": "2026-10-12T07:11:50.230Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "LoL: BNK FEARX vs JD Gaming (BO5) - Demacia Cup Global Invitational Playoffs",
+      "reason": "AI confidence too low: 29% (min 35%, time:29%)",
+      "aiConfidence": 29,
+      "aiComponents": [
+        {
+          "source": "time",
+          "confidence": 29,
+          "weight": 0.5
+        }
+      ],
+      "marketCategory": "sports_binary",
+      "timestamp": "2026-10-12T07:41:50.628Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Will Jeremiah Smith win the 2026 Heisman Trophy?",
+      "reason": "AI confidence too low: 29% (min 35%, time:29%)",
+      "aiConfidence": 29,
+      "aiComponents": [
+        {
+          "source": "time",
+          "confidence": 29,
+          "weight": 0.5
+        }
+      ],
+      "marketCategory": "sports_other",
+      "timestamp": "2026-10-12T08:06:42.407Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Ravens vs. Falcons",
+      "reason": "Entry price too high for sports_binary (63% > 40%)",
+      "walletTier": "STRONG",
+      "marketCategory": "sports_binary",
+      "timestamp": "2026-10-12T08:11:56.311Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Ravens vs. Falcons",
+      "reason": "Entry price too high for sports_binary (71% > 40%)",
+      "walletTier": "STRONG",
+      "marketCategory": "sports_binary",
+      "timestamp": "2026-10-12T08:17:04.203Z"
     }
   ],
   "tradeHistory": [
@@ -2784,16 +2806,16 @@
     "success": true,
     "overview": {
       "totalFactorsTracked": 13,
-      "totalSignalsProcessed": 17389,
+      "totalSignalsProcessed": 17390,
       "overallWinRate": 55,
-      "pendingSignals": 272
+      "pendingSignals": 293
     },
     "walletEdge": {
       "totalTracked": 500,
       "insiderCount": 0,
       "eliteCount": 0,
-      "strongCount": 1,
-      "fadeCount": 1,
+      "strongCount": 0,
+      "fadeCount": 2,
       "topPerformers": [
         {
           "address": "0x95c6c9a6727ed203e97230dda61ab19a020e1508",
@@ -2831,25 +2853,6 @@
             "totalBigBets": 0,
             "roi": 9,
             "bigBetWins": 4
-          }
-        },
-        {
-          "address": "0xe18ecc345e00ee7c4f2d1f676f3dd2acb112f826",
-          "tier": "STRONG",
-          "winRate": 62,
-          "record": "16W-10L",
-          "totalVolume": 541443.003396074,
-          "edgeMetrics": {
-            "avgOdds": 53,
-            "avgBetTiming": 0,
-            "consistencyScore": 72,
-            "bigBetWinRate": 52,
-            "sportWinRate": 62,
-            "politicalWinRate": 0,
-            "cryptoWinRate": 0,
-            "totalBigBets": 29,
-            "roi": 0,
-            "bigBetWins": 15
           }
         },
         {
@@ -2917,13 +2920,13 @@
         "optimizedAt": "2026-10-12T03:55:52.357Z"
       },
       "lastMinute2h": {
-        "wins": 566,
+        "wins": 567,
         "losses": 514,
         "winRate": 52,
-        "weight": 1.15,
-        "lastUpdated": "2026-10-12T05:20:32.550Z",
-        "previousWeight": 1.2,
-        "optimizedAt": "2026-10-12T05:25:42.612Z"
+        "weight": 1.2,
+        "lastUpdated": "2026-10-12T06:46:28.775Z",
+        "previousWeight": 1.28,
+        "optimizedAt": "2026-10-12T06:46:49.948Z"
       },
       "whaleSize25k": {
         "wins": 635,
@@ -2965,10 +2968,10 @@
         "wins": 1682,
         "losses": 1241,
         "winRate": 58,
-        "weight": 1.29,
+        "weight": 1.23,
         "lastUpdated": "2026-10-12T05:25:33.952Z",
-        "previousWeight": 1.3699999999999999,
-        "optimizedAt": "2026-10-12T05:25:42.612Z"
+        "previousWeight": 1.29,
+        "optimizedAt": "2026-10-12T06:46:49.948Z"
       },
       "eliteWallet": {
         "wins": 638,
@@ -2983,10 +2986,10 @@
         "wins": 1540,
         "losses": 1336,
         "winRate": 54,
-        "weight": 1.23,
+        "weight": 1.18,
         "lastUpdated": "2026-10-12T05:25:32.029Z",
-        "previousWeight": 1.31,
-        "optimizedAt": "2026-10-12T05:25:42.612Z"
+        "previousWeight": 1.23,
+        "optimizedAt": "2026-10-12T06:46:49.948Z"
       },
       "cryptoMarket": {
         "wins": 35,
@@ -3060,11 +3063,11 @@
   "learningInsights": {
     "success": true,
     "systemPerformance": {
-      "totalSignalsProcessed": 17389,
-      "wins": 9599,
+      "totalSignalsProcessed": 17390,
+      "wins": 9600,
       "losses": 7790,
       "winRate": 55,
-      "pendingSignals": 272
+      "pendingSignals": 293
     },
     "insights": {
       "bestFactors": [
@@ -3142,7 +3145,7 @@
         "winRate": 58,
         "wins": 1682,
         "losses": 1241,
-        "weight": 1.29,
+        "weight": 1.23,
         "performance": "AVERAGE"
       },
       {
@@ -3182,7 +3185,7 @@
         "winRate": 54,
         "wins": 1540,
         "losses": 1336,
-        "weight": 1.23,
+        "weight": 1.18,
         "performance": "AVERAGE"
       },
       {
@@ -3196,9 +3199,9 @@
       {
         "factor": "lastMinute2h",
         "winRate": 52,
-        "wins": 566,
+        "wins": 567,
         "losses": 514,
-        "weight": 1.15,
+        "weight": 1.2,
         "performance": "AVERAGE"
       }
     ]
@@ -3245,11 +3248,11 @@
         "key": "all",
         "label": "Follow all signals",
         "side": "follow",
-        "settled": 9964,
-        "wins": 5505,
+        "settled": 9965,
+        "wins": 5506,
         "losses": 4459,
-        "staked": 996400,
-        "pnl": 2242.1,
+        "staked": 996500,
+        "pnl": 2275.43,
         "roi": 0.2,
         "winRate": 55,
         "readyForAuto": true
@@ -3284,11 +3287,11 @@
         "key": "fade_favorites",
         "label": "Fade favorites (≥60¢)",
         "side": "fade",
-        "settled": 3436,
+        "settled": 3437,
         "wins": 1012,
-        "losses": 2424,
-        "staked": 343600,
-        "pnl": -10212.35,
+        "losses": 2425,
+        "staked": 343700,
+        "pnl": -10312.35,
         "roi": -3,
         "winRate": 29,
         "readyForAuto": false
@@ -3348,10 +3351,11 @@
     "settledCount": 200,
     "winRate": 48,
     "lastScan": {
-      "at": 1791783634913,
+      "at": 1791791204619,
       "scanned": 2,
       "sports": [
         "nfl",
+        "nba",
         "nhl",
         "mlb"
       ],
@@ -5392,7 +5396,7 @@
         "market_impact": null,
         "last_error": null,
         "market_prob_now": 0.085,
-        "price_checked_at": "2026-10-12T05:48:36.806Z"
+        "price_checked_at": "2026-10-12T08:32:12.480Z"
       },
       {
         "inv_key": "investigation:lowest-temperature-in-warsaw-on-october-12-2026-2c::Yes",
@@ -5422,7 +5426,7 @@
         "market_impact": null,
         "last_error": null,
         "market_prob_now": 0.47,
-        "price_checked_at": "2026-10-12T05:48:36.806Z"
+        "price_checked_at": "2026-10-12T08:32:12.480Z"
       },
       {
         "inv_key": "investigation:lowest-temperature-in-chongqing-on-october-12-2026-16c::Yes",
@@ -5480,7 +5484,7 @@
         "market_impact": null,
         "last_error": null,
         "market_prob_now": 0.43,
-        "price_checked_at": "2026-10-12T05:48:36.806Z"
+        "price_checked_at": "2026-10-12T08:32:12.480Z"
       },
       {
         "inv_key": "investigation:next-zptai-glm-5pt4-released-by-october-31-2026-763::Yes",
@@ -5538,7 +5542,7 @@
         "market_impact": "[{\"asset\":\"Crude oil\",\"assetType\":\"commodity\",\"direction\":\"DOWN\",\"conviction\":\"MEDIUM\",\"rationale\":\"Continued ceasefire reduces risk premium tied to Strait of Hormuz disruption fears, easing upward pressure on oil prices.\"},{\"asset\":\"Defense sector\",\"assetType\":\"sector\",\"direction\":\"DOWN\",\"conviction\":\"LOW\",\"rationale\":\"Sustained de-escalation reduces near-term demand expectations for munitions and defense contracts tied to Middle East conflict risk.\"},{\"asset\":\"BTC\",\"assetType\":\"crypto\",\"direction\":\"UP\",\"conviction\":\"LOW\",\"rationale\":\"Reduced geopolitical risk-off sentiment generally supports risk assets including crypto as safe-haven demand diminishes.\"},{\"asset\":\"Gold\",\"assetType\":\"commodity\",\"direction\":\"DOWN\",\"conviction\":\"LOW\",\"rationale\":\"Easing war risk lowers safe-haven demand for gold, a typical beneficiary of Middle East conflict escalation fears.\"}]",
         "last_error": null,
         "market_prob_now": 0.785,
-        "price_checked_at": "2026-10-12T05:48:36.806Z"
+        "price_checked_at": "2026-10-12T08:32:12.480Z"
       },
       {
         "inv_key": "investigation:will-the-democratic-party-win-the-mn-08-house-seat::Yes",
@@ -6984,12 +6988,12 @@
   "speed": {
     "success": true,
     "overall": {
-      "n": 578,
+      "n": 591,
       "avg_lag_sec": 322,
-      "lag_cost_c": 0.16,
-      "drift_5m_c": 0.12,
-      "drift_15m_c": -0.21,
-      "drift_60m_c": -0.04
+      "lag_cost_c": 0.2,
+      "drift_5m_c": 0.07,
+      "drift_15m_c": -0.31,
+      "drift_60m_c": -0.38
     },
     "byLag": [
       {
@@ -7000,20 +7004,20 @@
       },
       {
         "lag": "2-5m",
-        "n": 229,
-        "lag_cost_c": -0.14,
-        "drift_15m_c": 1.12
+        "n": 234,
+        "lag_cost_c": -0.02,
+        "drift_15m_c": 0.9
       },
       {
         "lag": "5-15m",
-        "n": 317,
+        "n": 325,
         "lag_cost_c": 0.42,
-        "drift_15m_c": -0.51
+        "drift_15m_c": -0.56
       }
     ],
     "settled": {
-      "n": 510,
-      "roi_at_whale": 1.3,
+      "n": 511,
+      "roi_at_whale": 1.4,
       "roi_at_detect": 1.5
     },
     "read": "lag_cost_c = cents the price moved against us before we saw it; drift = movement after. roi_at_whale vs roi_at_detect = the value of being as fast as the whale."
@@ -7032,21 +7036,6 @@
       "expiresAt": "2026-10-12T10:23:09.438Z"
     },
     "chat": [
-      {
-        "at": "2026-10-10T19:39:37.854Z",
-        "from": "crew",
-        "text": "CFB sweep: nothing priced yet (CFB: 32 Polymarket games, 0 sportsbook games, 0 matched). Games that already kicked off are skipped. Trying again in 15 min."
-      },
-      {
-        "at": "2026-10-10T21:39:21.062Z",
-        "from": "crew",
-        "text": "CFB sweep: 16 pregame games priced.  Polymarket gaps: Hawai'i +1.4 (8¢ vs 9.4%), Kansas +0.9 (15¢ vs 15.9%), USC +0.8 (50¢ vs 50.8%). Council: 0 approve, 8 split, 0 veto. No Polymarket gap reaches 3 pts; no paper bet beats forcing one."
-      },
-      {
-        "at": "2026-10-10T22:48:43.452Z",
-        "from": "crew",
-        "text": "CFB sweep: 15 pregame games priced.  Polymarket gaps: Hawai'i +1.4 (8¢ vs 9.4%), Fresno State +1.3 (26¢ vs 27.3%), Kansas +0.9 (15¢ vs 15.9%). Council: 0 approve, 8 split, 0 veto. No Polymarket gap reaches 3 pts; no paper bet beats forcing one."
-      },
       {
         "at": "2026-10-10T23:49:14.095Z",
         "from": "crew",
@@ -7232,10 +7221,25 @@
         "at": "2026-10-12T05:40:46.053Z",
         "from": "crew",
         "text": "NFL sweep: 1 games priced, 1 plays debated (read it on the board). The crew would play nothing on paper tonight: the only Polymarket candidate, Bills vs. Rams, is priced at 39 cents against a 38.6 percent fair price, a negative edge that fails the 3-point minimum. On DraftKings, Under 54.5 at -105 is worth only +0.6 per $100 and Rams ML -175 is -3.4 per $100, so neither clears the +1.50 per $100 bar and no slip is recommended."
+      },
+      {
+        "at": "2026-10-12T06:41:38.095Z",
+        "from": "crew",
+        "text": "NFL sweep: 1 pregame games priced. DraftKings: nothing clears the value bar (+$1.50 per $100); best is Under 54.5 (-105) at +$0.60. Polymarket gaps: Bills -0.4 (39¢ vs 38.6%). Council: 0 approve, 0 split, 1 veto. No Polymarket gap reaches 3 pts; no paper bet beats forcing one."
+      },
+      {
+        "at": "2026-10-12T07:11:37.257Z",
+        "from": "crew",
+        "text": "NFL sweep: 1 games priced, 1 plays debated (read it on the board). The crew would play nothing on paper tonight, since the only Polymarket candidate (Bills at 39 cents versus a 38.6% fair price) is at -0.4 points against a 3-point minimum. On the DraftKings board, the Bills-Rams Under 54.5 (-105) is worth only +$0.60 per $100, below the +$1.50 noise bar, and the Rams ML at -175 is -$3.40 per $100, so no DraftKings slip is worth taking."
+      },
+      {
+        "at": "2026-10-12T08:11:43.608Z",
+        "from": "crew",
+        "text": "NFL sweep: 1 pregame games priced. DraftKings: nothing clears the value bar (+$1.50 per $100); best is Under 54.5 (-105) at +$0.60. Polymarket gaps: Bills -0.4 (39¢ vs 38.6%). Council: 0 approve, 0 split, 1 veto. No Polymarket gap reaches 3 pts; no paper bet beats forcing one."
       }
     ],
     "hunt": {
-      "at": "2026-10-12T05:40:34.967Z",
+      "at": "2026-10-12T08:26:40.196Z",
       "directiveId": "ord_mv41877i",
       "sports": [
         "nfl"
@@ -7258,12 +7262,12 @@
         }
       },
       "oddsApi": {
-        "at": "2026-10-12T05:40:34.706Z",
+        "at": "2026-10-12T08:11:41.775Z",
         "ok": true,
         "status": 200,
-        "key": "odds_lines:icehockey_nhl:h2h,spreads",
-        "remaining": "224",
-        "used": "276"
+        "key": "odds_lines:americanfootball_nfl:h2h,spreads",
+        "remaining": "206",
+        "used": "294"
       },
       "priced": 1,
       "board": [
@@ -7305,7 +7309,7 @@
           "midPrice": 38.5,
           "spread": 0.01,
           "edge": -0.4,
-          "volume": 57268,
+          "volume": 59880,
           "whale": null,
           "verdict": "VETO",
           "reason": "Split 2-2 (margin -0.08)",
@@ -7390,7 +7394,7 @@
           },
           "qualifies": false,
           "ruleVerdict": "TRIM",
-          "chairReason": "Edge is -0.4 points against a 3-point minimum (39 cents vs fair 38.6 percent), so it is not placeable and has no value."
+          "chairReason": "Edge is -0.4 points against a 3-point minimum, the market is efficient at 39 cents versus 38.6% fair, and the crew has no settled track record."
         }
       ],
       "dkBoard": [
@@ -7488,6 +7492,32 @@
               "m": [
                 57.5,
                 42.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -10.5,
+              "o": [
+                "Rams",
+                "Bills"
+              ],
+              "m": [
+                25.5,
+                74.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "s",
+              "l": -14.5,
+              "o": [
+                "Rams",
+                "Bills"
+              ],
+              "m": [
+                16.5,
+                83.5
               ],
               "w": 0.01
             },
@@ -7610,19 +7640,6 @@
             },
             {
               "t": "s",
-              "l": -10.5,
-              "o": [
-                "Rams",
-                "Bills"
-              ],
-              "m": [
-                26,
-                74
-              ],
-              "w": 0.02
-            },
-            {
-              "t": "s",
               "l": -21.5,
               "o": [
                 "Rams",
@@ -7688,19 +7705,6 @@
             },
             {
               "t": "s",
-              "l": -14.5,
-              "o": [
-                "Rams",
-                "Bills"
-              ],
-              "m": [
-                18.5,
-                81.5
-              ],
-              "w": 0.03
-            },
-            {
-              "t": "s",
               "l": -9.5,
               "o": [
                 "Rams",
@@ -7720,10 +7724,10 @@
                 "Rams"
               ],
               "m": [
-                3.4,
-                96.6
+                3.7,
+                96.4
               ],
-              "w": 0.05
+              "w": 0.043
             },
             {
               "t": "s",
@@ -7733,10 +7737,10 @@
                 "Rams"
               ],
               "m": [
-                3.7,
-                96.4
+                3,
+                97
               ],
-              "w": 0.045
+              "w": 0.02
             },
             {
               "t": "s",
@@ -7749,7 +7753,7 @@
                 3.8,
                 96.3
               ],
-              "w": 0.033
+              "w": 0.035
             },
             {
               "t": "s",
@@ -7772,10 +7776,10 @@
                 "Rams"
               ],
               "m": [
-                6.4,
-                93.7
+                6.8,
+                93.3
               ],
-              "w": 0.031
+              "w": 0.023
             },
             {
               "t": "s",
@@ -7915,10 +7919,10 @@
                 "Under"
               ],
               "m": [
-                62.5,
-                37.5
+                62,
+                38
               ],
-              "w": 0.03
+              "w": 0.02
             },
             {
               "t": "t",
@@ -7928,23 +7932,10 @@
                 "Under"
               ],
               "m": [
-                95.5,
-                4.6
+                95,
+                5
               ],
-              "w": 0.029
-            },
-            {
-              "t": "t",
-              "l": 46.5,
-              "o": [
-                "Over",
-                "Under"
-              ],
-              "m": [
-                72.5,
-                27.5
-              ],
-              "w": 0.01
+              "w": 0.038
             },
             {
               "t": "t",
@@ -7961,14 +7952,27 @@
             },
             {
               "t": "t",
+              "l": 46.5,
+              "o": [
+                "Over",
+                "Under"
+              ],
+              "m": [
+                72.5,
+                27.5
+              ],
+              "w": 0.01
+            },
+            {
+              "t": "t",
               "l": 42.5,
               "o": [
                 "Over",
                 "Under"
               ],
               "m": [
-                81.5,
-                18.5
+                80.5,
+                19.5
               ],
               "w": 0.01
             },
@@ -8058,10 +8062,10 @@
                 "Under"
               ],
               "m": [
-                93.5,
-                6.6
+                94.1,
+                5.9
               ],
-              "w": 0.111
+              "w": 0.099
             },
             {
               "t": "t",
@@ -8097,10 +8101,10 @@
                 "Under"
               ],
               "m": [
-                94,
-                6
+                93,
+                7
               ],
-              "w": 0.1
+              "w": 0.12
             },
             {
               "t": "t",
@@ -8110,8 +8114,8 @@
                 "Under"
               ],
               "m": [
-                8.5,
-                91.5
+                9.5,
+                90.5
               ],
               "w": 0.03
             },
@@ -8136,10 +8140,10 @@
                 "Under"
               ],
               "m": [
-                13,
-                87
+                13.5,
+                86.5
               ],
-              "w": 0.06
+              "w": 0.05
             },
             {
               "t": "t",
@@ -8260,61 +8264,53 @@
         "total"
       ],
       "debate": {
-        "at": "2026-10-12T05:40:34.967Z",
+        "at": "2026-10-12T07:11:24.831Z",
         "ids": "nfl-buf-la-2026-10-13:0",
         "lines": [
           {
             "agent": "GREED",
-            "line": "Bills at 39 cents against a fair 38.6 percent leaves a gap of -0.4 points after costs. There is no real money in this price."
+            "line": "The Bills sit at 39 cents against a 38.6% fair price from the 8-book consensus, so the gap is -0.4 points before costs. There is no money in the price."
           },
           {
             "agent": "FOMO",
-            "line": "I agree on the price read. No whale flow is recorded for this market, so there is no smart money pushing it."
+            "line": "I agree with GREED. The whale flow field is null, so there is no smart-money move to lean on for Bills."
           },
           {
             "agent": "PANIC",
-            "line": "My yes was a shrug, not a bet. Nothing is on fire, but nothing here justifies a position either."
+            "line": "Nothing here looks like a chase, but we have no price-movement history and no depth data, so thin-market risk is unknown. I'm not pushing for a bet."
           },
           {
             "agent": "DOUBT",
-            "line": "Band history is n=0 and there is no verified wallet behind any of this. The 8-book sportsbook consensus is the only anchor we have, and it shows no gap."
+            "line": "The band has n=0 and no verified track record. Even if we wanted to test it, a negative edge gives us nothing to test."
           },
           {
             "agent": "QUANT",
-            "line": "Fair 38.6 against a 39 price gives an expected value of about -0.4 points, well under the 3-point minimum. Since the fair source is sportsbook consensus, I have no independent number to check it against."
+            "line": "On the DraftKings board, the Bills-Rams Under 54.5 at -105 has fair 51.5% against 51.2% implied, which is +0.6 per $100. The Rams ML at -175 is fair 61.5% against 63.6% implied, which is -3.4 per $100."
           },
           {
             "agent": "RISK",
-            "line": "The book is at 3 percent exposure, so there is room for a bet, but room does not create edge. I would not spend one of the 6 remaining paper slots on a negative line."
+            "line": "We have 6 paper bets left and the book is at 3%. Spending exposure on a non-edge makes no sense, and I see no correlation issue because there is only one candidate."
           },
           {
             "agent": "GREED",
-            "line": "Turning to the DraftKings board: Under 54.5 at -105 has a fair 51.5 percent against an implied 51.2 percent, which is only +0.6 per $100. That is below the +1.50 noise floor."
-          },
-          {
-            "agent": "DOUBT",
-            "line": "Rams ML -175 comes out at -3.4 per $100 on the same math, so there is nothing to slip there either."
-          },
-          {
-            "agent": "PANIC",
-            "line": "Agreed. Kickoff is 8:15 PM ET and nothing on the board clears the bar, so the honest call is to pass."
+            "line": "I concede the Under. +$0.60 per $100 is inside the noise band, well below the +$1.50 bar, so it is not a play."
           },
           {
             "agent": "CHAIR",
-            "line": "No candidate clears the 3-point minimum and no DraftKings line clears the +1.50 per $100 floor, so the crew stands down tonight."
+            "line": "Ruling: nothing is placed. The Bills candidate fails the 3-point minimum at -0.4, and no DraftKings line clears +$1.50 per $100. We pass on the whole game."
           }
         ],
         "verdicts": [
           {
             "id": "nfl-buf-la-2026-10-13:0",
             "verdict": "VETO",
-            "reason": "Edge is -0.4 points against a 3-point minimum (39 cents vs fair 38.6 percent), so it is not placeable and has no value."
+            "reason": "Edge is -0.4 points against a 3-point minimum, the market is efficient at 39 cents versus 38.6% fair, and the crew has no settled track record."
           }
         ],
-        "summary": "The crew would play nothing on paper tonight: the only Polymarket candidate, Bills vs. Rams, is priced at 39 cents against a 38.6 percent fair price, a negative edge that fails the 3-point minimum. On DraftKings, Under 54.5 at -105 is worth only +0.6 per $100 and Rams ML -175 is -3.4 per $100, so neither clears the +1.50 per $100 bar and no slip is recommended.",
+        "summary": "The crew would play nothing on paper tonight, since the only Polymarket candidate (Bills at 39 cents versus a 38.6% fair price) is at -0.4 points against a 3-point minimum. On the DraftKings board, the Bills-Rams Under 54.5 (-105) is worth only +$0.60 per $100, below the +$1.50 noise bar, and the Rams ML at -175 is -$3.40 per $100, so no DraftKings slip is worth taking.",
         "usd": 0.001
       },
-      "reportedAt": "2026-10-12T05:40:34.967Z"
+      "reportedAt": "2026-10-12T08:11:41.040Z"
     },
     "queue": [],
     "ledger": {
@@ -8339,17 +8335,17 @@
       "ncaab"
     ],
     "oddsApi": {
-      "at": "2026-10-12T05:40:34.706Z",
+      "at": "2026-10-12T08:11:41.775Z",
       "ok": true,
       "status": 200,
-      "key": "odds_lines:icehockey_nhl:h2h,spreads",
-      "remaining": "224",
-      "used": "276"
+      "key": "odds_lines:americanfootball_nfl:h2h,spreads",
+      "remaining": "206",
+      "used": "294"
     },
     "claude": {
       "on": true,
       "why": null,
-      "spentToday": 0,
+      "spentToday": 0.01,
       "dailyCap": 1
     },
     "dkRecord": {
@@ -8366,7 +8362,7 @@
       "open": []
     },
     "dkBoardReport": {
-      "at": "2026-10-12T05:40:34.967Z",
+      "at": "2026-10-12T08:26:40.196Z",
       "rows": 2
     }
   },
@@ -8402,7 +8398,40 @@
     "rows": 0,
     "legs": 0,
     "bySport": {},
-    "last": null,
+    "last": {
+      "at": "2026-10-12T08:32:19.459Z",
+      "pairs": 4,
+      "live": 0,
+      "rows": 0,
+      "diag": {
+        "nfl": {
+          "kalshi": 2,
+          "poly": 4934,
+          "matched": 0
+        },
+        "cfb": {
+          "kalshi": 4,
+          "poly": 23342,
+          "matched": 0
+        },
+        "nba": {
+          "error": "kalshi 429 /markets?series_ticker=KXNBAGAME&status=open&limit=1000"
+        },
+        "nhl": {
+          "kalshi": 38,
+          "poly": 2677,
+          "matched": 3
+        },
+        "mlb": {
+          "kalshi": 6,
+          "poly": 3082,
+          "matched": 1
+        },
+        "wnba": {
+          "error": "kalshi 429 /markets?series_ticker=KXWNBAGAME&status=open&limit=1000"
+        }
+      }
+    },
     "read": "polyMoves = minutes where Polymarket's mid moved >= 3c; staleKalshi = of those, Kalshi's same-minute quote was still crossable after its 7.000000000000001% x p(1-p) taker fee (avgStaleEdgeC = cents of edge per share); kalshiSameMin/NextMin = Kalshi moved the same way that minute / the next; kalshiLeads = Kalshi moved first and Polymarket followed. A Kalshi lane is worth building only if staleRate x avgStaleEdgeC is meaningfully positive over many games."
   }
 }
