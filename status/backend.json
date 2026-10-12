@@ -1,21 +1,21 @@
 {
-  "fetchedAt": "2026-10-12T15:12:09Z",
+  "fetchedAt": "2026-10-12T18:32:23Z",
   "health": {
     "status": "ok",
-    "timestamp": "2026-10-12T15:12:11.526Z",
+    "timestamp": "2026-10-12T18:32:24.549Z",
     "version": "21.1.0 - Modularize: extract src/odds.js + src/gamma.js from index.js",
     "cache": {
-      "signalCount": 13909,
-      "oldestSignal": "2026-10-05T15:10:43.000Z",
-      "newestSignal": "2026-10-12T15:05:53.000Z"
+      "signalCount": 13999,
+      "oldestSignal": "2026-10-05T18:31:19.000Z",
+      "newestSignal": "2026-10-12T18:25:48.000Z"
     }
   },
   "cronStatus": {
     "success": true,
     "lastRun": {
-      "startedAt": "2026-10-12T15:05:20.140Z",
+      "startedAt": "2026-10-12T18:25:06.747Z",
       "scan": {
-        "signals": 332,
+        "signals": 390,
         "success": true
       },
       "settlement": {
@@ -33,8 +33,8 @@
         "usdCap": 1
       },
       "overround": {
-        "scanned": 70,
-        "flagged": 43
+        "scanned": 71,
+        "flagged": 44
       },
       "sweep": {
         "skipped": "daily $ cap reached"
@@ -47,19 +47,46 @@
       "optimization": null,
       "error": null,
       "edgeScan": {
-        "skipped": "throttled",
-        "nextInMin": 5
+        "skipped": "throttled (credit saver)",
+        "remaining": 152,
+        "nextInMin": 36
       },
       "crewHunt": {
-        "skipped": "no orders"
+        "priced": 0,
+        "debated": 0,
+        "queued": 0,
+        "dkPlusEv": 0,
+        "dkServerBoard": 0,
+        "counts": {
+          "APPROVE": 0,
+          "TRIM": 0,
+          "VETO": 0
+        },
+        "perSport": {
+          "mlb": {
+            "markets": 0,
+            "oddsGames": 2,
+            "dkGames": 2,
+            "matched": 0,
+            "dkMatched": 0,
+            "unmatched": 0,
+            "unmatchedGames": [],
+            "dkFeed": [
+              "20261012/-: 2 events, 2 pregame w/ DK",
+              "20261013/-: 1 events, 0 pregame w/ DK"
+            ],
+            "lines": 12
+          }
+        },
+        "debate": "carried over"
       },
       "mmBooks": {
-        "markets": 19,
-        "rows": 19,
+        "markets": 20,
+        "rows": 20,
         "failed": 0
       },
       "dkPicks": {
-        "pending": 0,
+        "pending": 1,
         "settled": 0
       },
       "edgeSettle": {
@@ -73,7 +100,7 @@
       "signalBackfill": {
         "checked": 25,
         "updated": 0,
-        "expired": 1
+        "expired": 0
       },
       "walletLedger": {
         "logged": 0,
@@ -82,60 +109,63 @@
         "phase": "done"
       },
       "autotrader": {
-        "evaluated": 332,
+        "evaluated": 390,
         "tradesOpened": 0,
         "tradesPaperTraded": 0,
         "tradesQueued": 0,
-        "skipped": 332,
+        "skipped": 390,
         "skipReasons": {
-          "Entry price too high for sports_binary (71% > 40%)": 1,
-          "AI confidence too low: 29% (min 35%, time:29%)": 3,
-          "No winning wallet on signal": 234,
-          "AI confidence too low: 28% (min 35%, time:28%)": 3,
+          "Entry price too high for sports_binary (71% > 40%)": 2,
+          "AI confidence too low: 29% (min 35%, time:29%)": 1,
+          "No winning wallet on signal": 288,
+          "Market already closed/resolved on Gamma": 11,
           "Entry price too high for sports_binary (63% > 40%)": 4,
           "Entry price too high for other (49% > 40%)": 2,
           "Entry price too high for sports_binary (67% > 40%)": 1,
           "Entry price too high for sports_binary (51% > 40%)": 1,
           "Entry price too high for sports_binary (50% > 40%)": 2,
           "Entry price too high for other (53% > 40%)": 1,
-          "Market already closed/resolved on Gamma": 5,
-          "Market effectively decided (live 100%)": 1,
           "Entry price too high for sports_binary (66% > 40%)": 2,
           "Entry price too high for sports_binary (68% > 40%)": 3,
           "Entry price too high for sports_binary (78% > 40%)": 1,
+          "Entry price too high for other (42% > 40%)": 1,
           "Entry price too high for sports_binary (74% > 40%)": 2,
-          "Duplicate market (already traded)": 11,
+          "Entry price too high for sports_binary (62% > 40%)": 2,
           "Entry price too high for sports_binary (58% > 40%)": 1,
-          "Entry price too high for sports_binary (62% > 40%)": 1,
+          "Entry price too high for sports_binary (61% > 40%)": 3,
           "Entry price too high for sports_binary (64% > 40%)": 2,
           "Entry price too high for sports_binary (45% > 40%)": 2,
           "Entry price too high for sports_binary (46% > 40%)": 1,
           "Entry price too high for sports_binary (73% > 40%)": 2,
           "Entry price too high for sports_binary (80% > 40%)": 3,
-          "Signal has no market slug — cannot price or settle": 4,
+          "Event too far out (80d > 7d horizon)": 2,
+          "Signal has no market slug — cannot price or settle": 5,
           "Entry price too high for sports_binary (60% > 40%)": 1,
+          "Entry price too high for sports_other (50% > 40%)": 2,
           "Entry price too high for sports_other (52% > 40%)": 2,
           "Entry price too high for sports_other (47% > 40%)": 1,
           "Entry price too high for other (64% > 40%)": 1,
+          "Entry price too high for sports_other (59% > 40%)": 1,
           "Event too far out (9d > 7d horizon)": 4,
           "Event too far out (813d > 7d horizon)": 1,
           "Event too far out (81d > 7d horizon)": 3,
           "Entry price too high for other (48% > 40%)": 1,
           "Entry price too high for sports_binary (54% > 40%)": 1,
-          "Entry price too high for sports_binary (61% > 40%)": 2,
+          "AI confidence too low: 26% (min 35%, time:26%)": 1,
           "Entry price too high for other (68% > 40%)": 1,
           "Entry price too low for sports_binary (19% < 20%)": 1,
+          "AI confidence too low: 28% (min 35%, time:28%)": 1,
+          "Market effectively decided (live 100%)": 1,
           "Entry price too high for sports_binary (77% > 40%)": 1,
           "Entry price too high for other (57% > 40%)": 1,
           "Event too far out (21d > 7d horizon)": 5,
-          "Event too far out (82d > 7d horizon)": 3,
+          "Event too far out (82d > 7d horizon)": 2,
           "Event too far out (261d > 7d horizon)": 2,
+          "Event too far out (8d > 7d horizon)": 5,
           "Event too far out (69d > 7d horizon)": 1,
           "Event too far out (19d > 7d horizon)": 1,
-          "Event too far out (36d > 7d horizon)": 1,
           "Event too far out (446d > 7d horizon)": 3,
-          "Event too far out (20d > 7d horizon)": 1,
-          "Event too far out (8d > 7d horizon)": 1
+          "Event too far out (20d > 7d horizon)": 1
         },
         "exitChecks": 2,
         "positionsExited": 0,
@@ -173,15 +203,15 @@
         "totalPnL": -25.51999999999998
       },
       "speed": {
-        "watching": 2,
-        "priced": 1,
-        "dropped": 0
+        "watching": 5,
+        "priced": 3,
+        "dropped": 1
       },
       "forge": {
         "skipped": "ran recently",
         "lastRun": "2026-10-12T05:45:40.577Z"
       },
-      "completedAt": "2026-10-12T15:07:18.218Z"
+      "completedAt": "2026-10-12T18:29:31.632Z"
     },
     "cronSchedule": "Every 5 minutes",
     "note": "Settlement runs automatically. Sports events settle ~12h after game ends."
@@ -722,47 +752,47 @@
       },
       {
         "name": "eliteWallet",
-        "wins": 640,
-        "losses": 444,
+        "wins": 642,
+        "losses": 445,
         "winRate": 59,
-        "weight": 1.3,
-        "lastUpdated": "2026-10-12T14:42:06.424Z",
-        "previousWeight": 1.385,
-        "optimizedAt": "2026-10-12T14:42:48.411Z",
-        "total": 1084
+        "weight": 1.24,
+        "lastUpdated": "2026-10-12T17:36:49.606Z",
+        "previousWeight": 1.3,
+        "optimizedAt": "2026-10-12T18:09:47.777Z",
+        "total": 1087
       },
       {
         "name": "freshWallet",
-        "wins": 142,
-        "losses": 102,
+        "wins": 143,
+        "losses": 103,
         "winRate": 58,
         "weight": 1.23,
-        "lastUpdated": "2026-10-12T11:51:57.331Z",
+        "lastUpdated": "2026-10-12T17:36:49.606Z",
         "previousWeight": 1.29,
-        "optimizedAt": "2026-10-12T12:02:29.184Z",
-        "total": 244
+        "optimizedAt": "2026-10-12T18:09:47.777Z",
+        "total": 246
       },
       {
         "name": "strongWallet",
-        "wins": 1685,
-        "losses": 1242,
+        "wins": 1688,
+        "losses": 1243,
         "winRate": 58,
         "weight": 1.29,
-        "lastUpdated": "2026-10-12T14:42:01.833Z",
+        "lastUpdated": "2026-10-12T18:08:45.667Z",
         "previousWeight": 1.3699999999999999,
-        "optimizedAt": "2026-10-12T14:42:48.411Z",
-        "total": 2927
+        "optimizedAt": "2026-10-12T18:09:47.777Z",
+        "total": 2931
       },
       {
         "name": "whaleSize50k",
         "wins": 273,
-        "losses": 215,
+        "losses": 216,
         "winRate": 56,
         "weight": 1.2,
-        "lastUpdated": "2026-10-12T04:10:33.811Z",
+        "lastUpdated": "2026-10-12T17:12:13.349Z",
         "previousWeight": 1.26,
-        "optimizedAt": "2026-10-12T05:20:40.210Z",
-        "total": 488
+        "optimizedAt": "2026-10-12T17:37:23.592Z",
+        "total": 489
       },
       {
         "name": "lastMinute6h",
@@ -777,24 +807,24 @@
       },
       {
         "name": "whaleSize15k",
-        "wins": 1175,
-        "losses": 946,
+        "wins": 1177,
+        "losses": 947,
         "winRate": 55,
         "weight": 1.19,
-        "lastUpdated": "2026-10-12T11:51:57.331Z",
+        "lastUpdated": "2026-10-12T17:12:05.575Z",
         "previousWeight": 1.25,
-        "optimizedAt": "2026-10-12T12:02:29.184Z",
-        "total": 2121
+        "optimizedAt": "2026-10-12T17:37:23.592Z",
+        "total": 2124
       },
       {
         "name": "whaleSize25k",
         "wins": 635,
         "losses": 533,
         "winRate": 54,
-        "weight": 1.23,
+        "weight": 1.18,
         "lastUpdated": "2026-10-12T14:42:06.424Z",
-        "previousWeight": 1.31,
-        "optimizedAt": "2026-10-12T14:42:48.411Z",
+        "previousWeight": 1.23,
+        "optimizedAt": "2026-10-12T15:32:41.533Z",
         "total": 1168
       }
     ],
@@ -812,47 +842,47 @@
       },
       {
         "name": "concentrated",
-        "wins": 1708,
-        "losses": 1485,
+        "wins": 1709,
+        "losses": 1487,
         "winRate": 53,
-        "weight": 1.22,
-        "lastUpdated": "2026-10-12T14:42:01.833Z",
-        "previousWeight": 1.295,
-        "optimizedAt": "2026-10-12T14:42:48.411Z",
-        "total": 3193
+        "weight": 1.16,
+        "lastUpdated": "2026-10-12T17:12:05.575Z",
+        "previousWeight": 1.22,
+        "optimizedAt": "2026-10-12T17:37:23.592Z",
+        "total": 3196
       },
       {
         "name": "sportsMarket",
-        "wins": 1541,
-        "losses": 1337,
+        "wins": 1542,
+        "losses": 1338,
         "winRate": 54,
         "weight": 1.18,
-        "lastUpdated": "2026-10-12T12:47:06.586Z",
+        "lastUpdated": "2026-10-12T17:12:05.575Z",
         "previousWeight": 1.23,
-        "optimizedAt": "2026-10-12T13:52:47.394Z",
-        "total": 2878
+        "optimizedAt": "2026-10-12T17:37:23.592Z",
+        "total": 2880
       },
       {
         "name": "whaleSize25k",
         "wins": 635,
         "losses": 533,
         "winRate": 54,
-        "weight": 1.23,
+        "weight": 1.18,
         "lastUpdated": "2026-10-12T14:42:06.424Z",
-        "previousWeight": 1.31,
-        "optimizedAt": "2026-10-12T14:42:48.411Z",
+        "previousWeight": 1.23,
+        "optimizedAt": "2026-10-12T15:32:41.533Z",
         "total": 1168
       },
       {
         "name": "whaleSize15k",
-        "wins": 1175,
-        "losses": 946,
+        "wins": 1177,
+        "losses": 947,
         "winRate": 55,
         "weight": 1.19,
-        "lastUpdated": "2026-10-12T11:51:57.331Z",
+        "lastUpdated": "2026-10-12T17:12:05.575Z",
         "previousWeight": 1.25,
-        "optimizedAt": "2026-10-12T12:02:29.184Z",
-        "total": 2121
+        "optimizedAt": "2026-10-12T17:37:23.592Z",
+        "total": 2124
       },
       {
         "name": "lastMinute6h",
@@ -868,46 +898,46 @@
       {
         "name": "whaleSize50k",
         "wins": 273,
-        "losses": 215,
+        "losses": 216,
         "winRate": 56,
         "weight": 1.2,
-        "lastUpdated": "2026-10-12T04:10:33.811Z",
+        "lastUpdated": "2026-10-12T17:12:13.349Z",
         "previousWeight": 1.26,
-        "optimizedAt": "2026-10-12T05:20:40.210Z",
-        "total": 488
+        "optimizedAt": "2026-10-12T17:37:23.592Z",
+        "total": 489
       },
       {
         "name": "strongWallet",
-        "wins": 1685,
-        "losses": 1242,
+        "wins": 1688,
+        "losses": 1243,
         "winRate": 58,
         "weight": 1.29,
-        "lastUpdated": "2026-10-12T14:42:01.833Z",
+        "lastUpdated": "2026-10-12T18:08:45.667Z",
         "previousWeight": 1.3699999999999999,
-        "optimizedAt": "2026-10-12T14:42:48.411Z",
-        "total": 2927
+        "optimizedAt": "2026-10-12T18:09:47.777Z",
+        "total": 2931
       },
       {
         "name": "freshWallet",
-        "wins": 142,
-        "losses": 102,
+        "wins": 143,
+        "losses": 103,
         "winRate": 58,
         "weight": 1.23,
-        "lastUpdated": "2026-10-12T11:51:57.331Z",
+        "lastUpdated": "2026-10-12T17:36:49.606Z",
         "previousWeight": 1.29,
-        "optimizedAt": "2026-10-12T12:02:29.184Z",
-        "total": 244
+        "optimizedAt": "2026-10-12T18:09:47.777Z",
+        "total": 246
       },
       {
         "name": "eliteWallet",
-        "wins": 640,
-        "losses": 444,
+        "wins": 642,
+        "losses": 445,
         "winRate": 59,
-        "weight": 1.3,
-        "lastUpdated": "2026-10-12T14:42:06.424Z",
-        "previousWeight": 1.385,
-        "optimizedAt": "2026-10-12T14:42:48.411Z",
-        "total": 1084
+        "weight": 1.24,
+        "lastUpdated": "2026-10-12T17:36:49.606Z",
+        "previousWeight": 1.3,
+        "optimizedAt": "2026-10-12T18:09:47.777Z",
+        "total": 1087
       }
     ],
     "recommendation": {
@@ -943,13 +973,13 @@
         {
           "name": "concentrated",
           "winRate": 53,
-          "record": "1708W-1485L",
+          "record": "1709W-1487L",
           "isDiscovered": false
         },
         {
           "name": "sportsMarket",
           "winRate": 54,
-          "record": "1541W-1337L",
+          "record": "1542W-1338L",
           "isDiscovered": false
         }
       ],
@@ -1055,285 +1085,6 @@
   "tradeLog": [
     {
       "type": "SKIP",
-      "market": "Will the U.S. invade Iran before 2027?",
-      "reason": "Event too far out (81d > 7d horizon)",
-      "marketCategory": "politics",
-      "timestamp": "2026-10-12T11:07:06.522Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "Will Jeremiah Smith win the 2026 Heisman Trophy?",
-      "reason": "AI confidence too low: 29% (min 35%, time:29%)",
-      "aiConfidence": 29,
-      "aiComponents": [
-        {
-          "source": "time",
-          "confidence": 29,
-          "weight": 0.5
-        }
-      ],
-      "marketCategory": "sports_other",
-      "timestamp": "2026-10-12T11:12:09.255Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "Ravens vs. Falcons",
-      "reason": "Entry price too high for sports_binary (63% > 40%)",
-      "walletTier": "STRONG",
-      "marketCategory": "sports_binary",
-      "timestamp": "2026-10-12T11:21:58.441Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "Ravens vs. Falcons",
-      "reason": "Entry price too high for sports_binary (71% > 40%)",
-      "walletTier": "STRONG",
-      "marketCategory": "sports_binary",
-      "timestamp": "2026-10-12T11:37:02.743Z"
-    },
-    {
-      "type": "PAPER_TRADE",
-      "market": "LoL: BNK FEARX vs JD Gaming - Game 2 Winner",
-      "size": 5,
-      "entryPrice": 37.5,
-      "walletTier": "HIGH_CONVICTION",
-      "walletWR": 0,
-      "betSummary": null,
-      "whaleAction": "BUY",
-      "exploration": true,
-      "marketCategory": "sports_binary",
-      "timestamp": "2026-10-12T11:37:05.197Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "LoL: BNK FEARX vs JD Gaming (BO5) - Demacia Cup Global Invitational Playoffs",
-      "reason": "AI confidence too low: 29% (min 35%, time:29%)",
-      "aiConfidence": 29,
-      "aiComponents": [
-        {
-          "source": "time",
-          "confidence": 29,
-          "weight": 0.5
-        }
-      ],
-      "marketCategory": "sports_binary",
-      "timestamp": "2026-10-12T11:47:00.305Z"
-    },
-    {
-      "type": "EXIT",
-      "market": "LoL: BNK FEARX vs JD Gaming - Game 2 Winner",
-      "shouldExit": true,
-      "reason": "Trailing stop hit (peak +57.3%, dropped to +44.0%, stop was +47.3%)",
-      "exitType": "trailing_stop",
-      "pnl": 2.2,
-      "paperTrade": true,
-      "timestamp": "2026-10-12T11:57:28.248Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "Will Jeremiah Smith win the 2026 Heisman Trophy?",
-      "reason": "AI confidence too low: 29% (min 35%, time:29%)",
-      "aiConfidence": 29,
-      "aiComponents": [
-        {
-          "source": "time",
-          "confidence": 29,
-          "weight": 0.5
-        }
-      ],
-      "marketCategory": "sports_other",
-      "timestamp": "2026-10-12T12:12:11.000Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "Ravens vs. Falcons",
-      "reason": "Entry price too high for sports_binary (63% > 40%)",
-      "walletTier": "STRONG",
-      "marketCategory": "sports_binary",
-      "timestamp": "2026-10-12T12:22:31.902Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "Ravens vs. Falcons",
-      "reason": "Entry price too high for sports_binary (71% > 40%)",
-      "walletTier": "STRONG",
-      "marketCategory": "sports_binary",
-      "timestamp": "2026-10-12T12:37:08.798Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "LoL: BNK FEARX vs JD Gaming (BO5) - Demacia Cup Global Invitational Playoffs",
-      "reason": "AI confidence too low: 29% (min 35%, time:29%)",
-      "aiConfidence": 29,
-      "aiComponents": [
-        {
-          "source": "time",
-          "confidence": 29,
-          "weight": 0.5
-        }
-      ],
-      "marketCategory": "sports_binary",
-      "timestamp": "2026-10-12T12:47:58.022Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "LoL: BNK FEARX vs JD Gaming (BO5) - Demacia Cup Global Invitational Playoffs",
-      "reason": "AI confidence too low: 28% (min 35%, time:28%)",
-      "aiConfidence": 28,
-      "aiComponents": [
-        {
-          "source": "time",
-          "confidence": 28,
-          "weight": 0.5
-        }
-      ],
-      "marketCategory": "sports_binary",
-      "timestamp": "2026-10-12T13:07:04.061Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "Will Jeremiah Smith win the 2026 Heisman Trophy?",
-      "reason": "AI confidence too low: 29% (min 35%, time:29%)",
-      "aiConfidence": 29,
-      "aiComponents": [
-        {
-          "source": "time",
-          "confidence": 29,
-          "weight": 0.5
-        }
-      ],
-      "marketCategory": "sports_other",
-      "timestamp": "2026-10-12T13:17:27.127Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "Ravens vs. Falcons",
-      "reason": "Entry price too high for sports_binary (63% > 40%)",
-      "walletTier": "STRONG",
-      "marketCategory": "sports_binary",
-      "timestamp": "2026-10-12T13:22:32.034Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "Bills vs. Rams",
-      "reason": "AI confidence too low: 28% (min 35%, time:28%)",
-      "aiConfidence": 28,
-      "aiComponents": [
-        {
-          "source": "time",
-          "confidence": 28,
-          "weight": 0.5
-        }
-      ],
-      "marketCategory": "sports_binary",
-      "timestamp": "2026-10-12T13:27:29.174Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "Ravens vs. Falcons",
-      "reason": "Entry price too high for sports_binary (71% > 40%)",
-      "walletTier": "STRONG",
-      "marketCategory": "sports_binary",
-      "timestamp": "2026-10-12T13:37:29.862Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "LoL: BNK FEARX vs JD Gaming (BO5) - Demacia Cup Global Invitational Playoffs",
-      "reason": "AI confidence too low: 29% (min 35%, time:29%)",
-      "aiConfidence": 29,
-      "aiComponents": [
-        {
-          "source": "time",
-          "confidence": 29,
-          "weight": 0.5
-        }
-      ],
-      "marketCategory": "sports_binary",
-      "timestamp": "2026-10-12T13:52:42.241Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "LoL: BNK FEARX vs JD Gaming (BO5) - Demacia Cup Global Invitational Playoffs",
-      "reason": "AI confidence too low: 28% (min 35%, time:28%)",
-      "aiConfidence": 28,
-      "aiComponents": [
-        {
-          "source": "time",
-          "confidence": 28,
-          "weight": 0.5
-        }
-      ],
-      "marketCategory": "sports_binary",
-      "timestamp": "2026-10-12T14:07:29.056Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "Catania: Gabriele Piraino vs Felix Gill",
-      "reason": "Live price ran +7¢ past the signal (stale whale fill)",
-      "marketCategory": "weather",
-      "timestamp": "2026-10-12T14:07:30.085Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "Catania: Gabriele Piraino vs Felix Gill",
-      "reason": "Live price ran +8¢ past the signal (stale whale fill)",
-      "marketCategory": "weather",
-      "timestamp": "2026-10-12T14:12:31.574Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "Will Jeremiah Smith win the 2026 Heisman Trophy?",
-      "reason": "AI confidence too low: 29% (min 35%, time:29%)",
-      "aiConfidence": 29,
-      "aiComponents": [
-        {
-          "source": "time",
-          "confidence": 29,
-          "weight": 0.5
-        }
-      ],
-      "marketCategory": "sports_other",
-      "timestamp": "2026-10-12T14:17:49.498Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "Catania: Gabriele Piraino vs Felix Gill",
-      "reason": "Live price ran +6¢ past the signal (stale whale fill)",
-      "marketCategory": "weather",
-      "timestamp": "2026-10-12T14:17:50.568Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "Ravens vs. Falcons",
-      "reason": "Entry price too high for sports_binary (63% > 40%)",
-      "walletTier": "STRONG",
-      "marketCategory": "sports_binary",
-      "timestamp": "2026-10-12T14:22:49.561Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "Bills vs. Rams",
-      "reason": "AI confidence too low: 28% (min 35%, time:28%)",
-      "aiConfidence": 28,
-      "aiComponents": [
-        {
-          "source": "time",
-          "confidence": 28,
-          "weight": 0.5
-        }
-      ],
-      "marketCategory": "sports_binary",
-      "timestamp": "2026-10-12T14:27:54.578Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "Catania: Gabriele Piraino vs Felix Gill",
-      "reason": "Favorite out of range at live price (93¢)",
-      "marketCategory": "weather",
-      "timestamp": "2026-10-12T14:32:35.421Z"
-    },
-    {
-      "type": "SKIP",
       "market": "Ravens vs. Falcons",
       "reason": "Entry price too high for sports_binary (71% > 40%)",
       "walletTier": "STRONG",
@@ -1375,6 +1126,275 @@
       "reason": "Market effectively decided (live 100%)",
       "marketCategory": "weather",
       "timestamp": "2026-10-12T15:07:12.960Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "LoL: BNK FEARX vs JD Gaming (BO5) - Demacia Cup Global Invitational Playoffs",
+      "reason": "AI confidence too low: 28% (min 35%, time:28%)",
+      "aiConfidence": 28,
+      "aiComponents": [
+        {
+          "source": "time",
+          "confidence": 28,
+          "weight": 0.5
+        }
+      ],
+      "marketCategory": "sports_binary",
+      "timestamp": "2026-10-12T15:12:24.021Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Will Jeremiah Smith win the 2026 Heisman Trophy?",
+      "reason": "AI confidence too low: 29% (min 35%, time:29%)",
+      "aiConfidence": 29,
+      "aiComponents": [
+        {
+          "source": "time",
+          "confidence": 29,
+          "weight": 0.5
+        }
+      ],
+      "marketCategory": "sports_other",
+      "timestamp": "2026-10-12T15:22:36.377Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Ravens vs. Falcons",
+      "reason": "Entry price too high for sports_binary (63% > 40%)",
+      "walletTier": "STRONG",
+      "marketCategory": "sports_binary",
+      "timestamp": "2026-10-12T15:32:35.335Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Bills vs. Rams",
+      "reason": "AI confidence too low: 28% (min 35%, time:28%)",
+      "aiConfidence": 28,
+      "aiComponents": [
+        {
+          "source": "time",
+          "confidence": 28,
+          "weight": 0.5
+        }
+      ],
+      "marketCategory": "sports_binary",
+      "timestamp": "2026-10-12T15:32:37.097Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "LoL: BNK FEARX vs JD Gaming - Game 2 Winner",
+      "reason": "Market already closed/resolved on Gamma",
+      "marketCategory": "sports_binary",
+      "timestamp": "2026-10-12T15:37:30.628Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Catania: Gabriele Piraino vs Felix Gill",
+      "reason": "Market already closed/resolved on Gamma",
+      "marketCategory": "weather",
+      "timestamp": "2026-10-12T15:42:26.869Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Ravens vs. Falcons",
+      "reason": "Entry price too high for sports_binary (71% > 40%)",
+      "walletTier": "STRONG",
+      "marketCategory": "sports_binary",
+      "timestamp": "2026-10-12T15:47:22.021Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "LoL: BNK FEARX vs JD Gaming (BO5) - Demacia Cup Global Invitational Playoffs",
+      "reason": "AI confidence too low: 29% (min 35%, time:29%)",
+      "aiConfidence": 29,
+      "aiComponents": [
+        {
+          "source": "time",
+          "confidence": 29,
+          "weight": 0.5
+        }
+      ],
+      "marketCategory": "sports_binary",
+      "timestamp": "2026-10-12T16:02:44.389Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "LoL: BNK FEARX vs JD Gaming (BO5) - Demacia Cup Global Invitational Playoffs",
+      "reason": "AI confidence too low: 28% (min 35%, time:28%)",
+      "aiConfidence": 28,
+      "aiComponents": [
+        {
+          "source": "time",
+          "confidence": 28,
+          "weight": 0.5
+        }
+      ],
+      "marketCategory": "sports_binary",
+      "timestamp": "2026-10-12T16:12:51.318Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Will Jeremiah Smith win the 2026 Heisman Trophy?",
+      "reason": "AI confidence too low: 29% (min 35%, time:29%)",
+      "aiConfidence": 29,
+      "aiComponents": [
+        {
+          "source": "time",
+          "confidence": 29,
+          "weight": 0.5
+        }
+      ],
+      "marketCategory": "sports_other",
+      "timestamp": "2026-10-12T16:27:26.611Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Bills vs. Rams",
+      "reason": "AI confidence too low: 28% (min 35%, time:28%)",
+      "aiConfidence": 28,
+      "aiComponents": [
+        {
+          "source": "time",
+          "confidence": 28,
+          "weight": 0.5
+        }
+      ],
+      "marketCategory": "sports_binary",
+      "timestamp": "2026-10-12T16:37:33.411Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Will Venezia FC win on 2026-10-12?",
+      "reason": "Favorite out of range at live price (93¢)",
+      "marketCategory": "sports_binary",
+      "timestamp": "2026-10-12T16:37:33.970Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Ravens vs. Falcons",
+      "reason": "Entry price too high for sports_binary (63% > 40%)",
+      "walletTier": "STRONG",
+      "marketCategory": "sports_binary",
+      "timestamp": "2026-10-12T16:42:21.600Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Ravens vs. Falcons",
+      "reason": "Entry price too high for sports_binary (71% > 40%)",
+      "walletTier": "STRONG",
+      "marketCategory": "sports_binary",
+      "timestamp": "2026-10-12T16:47:29.171Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Will Venezia FC win on 2026-10-12?",
+      "reason": "Market effectively decided (live 98%)",
+      "marketCategory": "sports_binary",
+      "timestamp": "2026-10-12T16:47:32.002Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "LoL: BNK FEARX vs JD Gaming (BO5) - Demacia Cup Global Invitational Playoffs",
+      "reason": "AI confidence too low: 29% (min 35%, time:29%)",
+      "aiConfidence": 29,
+      "aiComponents": [
+        {
+          "source": "time",
+          "confidence": 29,
+          "weight": 0.5
+        }
+      ],
+      "marketCategory": "sports_binary",
+      "timestamp": "2026-10-12T17:03:01.375Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Will Venezia FC win on 2026-10-12?",
+      "reason": "Market effectively decided (live 99%)",
+      "marketCategory": "sports_binary",
+      "timestamp": "2026-10-12T17:03:02.156Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "LoL: BNK FEARX vs JD Gaming (BO5) - Demacia Cup Global Invitational Playoffs",
+      "reason": "Market already closed/resolved on Gamma",
+      "marketCategory": "sports_binary",
+      "timestamp": "2026-10-12T17:13:32.222Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Will Venezia FC win on 2026-10-12?",
+      "reason": "Market effectively decided (live 100%)",
+      "marketCategory": "sports_binary",
+      "timestamp": "2026-10-12T17:13:33.788Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Will the U.S. invade Iran before 2027?",
+      "reason": "Event too far out (80d > 7d horizon)",
+      "marketCategory": "politics",
+      "timestamp": "2026-10-12T17:17:25.627Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Will Jeremiah Smith win the 2026 Heisman Trophy?",
+      "reason": "AI confidence too low: 29% (min 35%, time:29%)",
+      "aiConfidence": 29,
+      "aiComponents": [
+        {
+          "source": "time",
+          "confidence": 29,
+          "weight": 0.5
+        }
+      ],
+      "marketCategory": "sports_other",
+      "timestamp": "2026-10-12T17:32:23.400Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Bills vs. Rams",
+      "reason": "AI confidence too low: 28% (min 35%, time:28%)",
+      "aiConfidence": 28,
+      "aiComponents": [
+        {
+          "source": "time",
+          "confidence": 28,
+          "weight": 0.5
+        }
+      ],
+      "marketCategory": "sports_binary",
+      "timestamp": "2026-10-12T17:42:16.814Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Ravens vs. Falcons",
+      "reason": "Entry price too high for sports_binary (63% > 40%)",
+      "walletTier": "STRONG",
+      "marketCategory": "sports_binary",
+      "timestamp": "2026-10-12T17:52:16.562Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Ravens vs. Falcons",
+      "reason": "Entry price too high for sports_binary (71% > 40%)",
+      "walletTier": "STRONG",
+      "marketCategory": "sports_binary",
+      "timestamp": "2026-10-12T17:57:22.751Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Spread: Bills (-3.5)",
+      "reason": "AI confidence too low: 26% (min 35%, time:26%)",
+      "aiConfidence": 26,
+      "aiComponents": [
+        {
+          "source": "time",
+          "confidence": 26,
+          "weight": 0.5
+        }
+      ],
+      "marketCategory": "other",
+      "timestamp": "2026-10-12T18:29:21.071Z"
     }
   ],
   "tradeHistory": [
@@ -2925,9 +2945,9 @@
     "success": true,
     "overview": {
       "totalFactorsTracked": 13,
-      "totalSignalsProcessed": 17406,
+      "totalSignalsProcessed": 17424,
       "overallWinRate": 55,
-      "pendingSignals": 334
+      "pendingSignals": 325
     },
     "walletEdge": {
       "totalTracked": 500,
@@ -2984,12 +3004,12 @@
     "factors": {
       "whaleSize50k": {
         "wins": 273,
-        "losses": 215,
+        "losses": 216,
         "winRate": 56,
         "weight": 1.2,
-        "lastUpdated": "2026-10-12T04:10:33.811Z",
+        "lastUpdated": "2026-10-12T17:12:13.349Z",
         "previousWeight": 1.26,
-        "optimizedAt": "2026-10-12T05:20:40.210Z"
+        "optimizedAt": "2026-10-12T17:37:23.592Z"
       },
       "lastMinute6h": {
         "wins": 1173,
@@ -3013,64 +3033,64 @@
         "wins": 635,
         "losses": 533,
         "winRate": 54,
-        "weight": 1.23,
+        "weight": 1.18,
         "lastUpdated": "2026-10-12T14:42:06.424Z",
-        "previousWeight": 1.31,
-        "optimizedAt": "2026-10-12T14:42:48.411Z"
+        "previousWeight": 1.23,
+        "optimizedAt": "2026-10-12T15:32:41.533Z"
       },
       "concentrated": {
-        "wins": 1708,
-        "losses": 1485,
+        "wins": 1709,
+        "losses": 1487,
         "winRate": 53,
-        "weight": 1.22,
-        "lastUpdated": "2026-10-12T14:42:01.833Z",
-        "previousWeight": 1.295,
-        "optimizedAt": "2026-10-12T14:42:48.411Z"
+        "weight": 1.16,
+        "lastUpdated": "2026-10-12T17:12:05.575Z",
+        "previousWeight": 1.22,
+        "optimizedAt": "2026-10-12T17:37:23.592Z"
       },
       "whaleSize15k": {
-        "wins": 1175,
-        "losses": 946,
+        "wins": 1177,
+        "losses": 947,
         "winRate": 55,
         "weight": 1.19,
-        "lastUpdated": "2026-10-12T11:51:57.331Z",
+        "lastUpdated": "2026-10-12T17:12:05.575Z",
         "previousWeight": 1.25,
-        "optimizedAt": "2026-10-12T12:02:29.184Z"
+        "optimizedAt": "2026-10-12T17:37:23.592Z"
       },
       "freshWallet": {
-        "wins": 142,
-        "losses": 102,
+        "wins": 143,
+        "losses": 103,
         "winRate": 58,
         "weight": 1.23,
-        "lastUpdated": "2026-10-12T11:51:57.331Z",
+        "lastUpdated": "2026-10-12T17:36:49.606Z",
         "previousWeight": 1.29,
-        "optimizedAt": "2026-10-12T12:02:29.184Z"
+        "optimizedAt": "2026-10-12T18:09:47.777Z"
       },
       "strongWallet": {
-        "wins": 1685,
-        "losses": 1242,
+        "wins": 1688,
+        "losses": 1243,
         "winRate": 58,
         "weight": 1.29,
-        "lastUpdated": "2026-10-12T14:42:01.833Z",
+        "lastUpdated": "2026-10-12T18:08:45.667Z",
         "previousWeight": 1.3699999999999999,
-        "optimizedAt": "2026-10-12T14:42:48.411Z"
+        "optimizedAt": "2026-10-12T18:09:47.777Z"
       },
       "eliteWallet": {
-        "wins": 640,
-        "losses": 444,
+        "wins": 642,
+        "losses": 445,
         "winRate": 59,
-        "weight": 1.3,
-        "lastUpdated": "2026-10-12T14:42:06.424Z",
-        "previousWeight": 1.385,
-        "optimizedAt": "2026-10-12T14:42:48.411Z"
+        "weight": 1.24,
+        "lastUpdated": "2026-10-12T17:36:49.606Z",
+        "previousWeight": 1.3,
+        "optimizedAt": "2026-10-12T18:09:47.777Z"
       },
       "sportsMarket": {
-        "wins": 1541,
-        "losses": 1337,
+        "wins": 1542,
+        "losses": 1338,
         "winRate": 54,
         "weight": 1.18,
-        "lastUpdated": "2026-10-12T12:47:06.586Z",
+        "lastUpdated": "2026-10-12T17:12:05.575Z",
         "previousWeight": 1.23,
-        "optimizedAt": "2026-10-12T13:52:47.394Z"
+        "optimizedAt": "2026-10-12T17:37:23.592Z"
       },
       "cryptoMarket": {
         "wins": 35,
@@ -3144,11 +3164,11 @@
   "learningInsights": {
     "success": true,
     "systemPerformance": {
-      "totalSignalsProcessed": 17406,
-      "wins": 9610,
-      "losses": 7796,
+      "totalSignalsProcessed": 17424,
+      "wins": 9620,
+      "losses": 7804,
       "winRate": 55,
-      "pendingSignals": 334
+      "pendingSignals": 325
     },
     "insights": {
       "bestFactors": [
@@ -3208,24 +3228,24 @@
       {
         "factor": "eliteWallet",
         "winRate": 59,
-        "wins": 640,
-        "losses": 444,
-        "weight": 1.3,
+        "wins": 642,
+        "losses": 445,
+        "weight": 1.24,
         "performance": "AVERAGE"
       },
       {
         "factor": "freshWallet",
         "winRate": 58,
-        "wins": 142,
-        "losses": 102,
+        "wins": 143,
+        "losses": 103,
         "weight": 1.23,
         "performance": "AVERAGE"
       },
       {
         "factor": "strongWallet",
         "winRate": 58,
-        "wins": 1685,
-        "losses": 1242,
+        "wins": 1688,
+        "losses": 1243,
         "weight": 1.29,
         "performance": "AVERAGE"
       },
@@ -3233,7 +3253,7 @@
         "factor": "whaleSize50k",
         "winRate": 56,
         "wins": 273,
-        "losses": 215,
+        "losses": 216,
         "weight": 1.2,
         "performance": "AVERAGE"
       },
@@ -3248,8 +3268,8 @@
       {
         "factor": "whaleSize15k",
         "winRate": 55,
-        "wins": 1175,
-        "losses": 946,
+        "wins": 1177,
+        "losses": 947,
         "weight": 1.19,
         "performance": "AVERAGE"
       },
@@ -3258,23 +3278,23 @@
         "winRate": 54,
         "wins": 635,
         "losses": 533,
-        "weight": 1.23,
+        "weight": 1.18,
         "performance": "AVERAGE"
       },
       {
         "factor": "sportsMarket",
         "winRate": 54,
-        "wins": 1541,
-        "losses": 1337,
+        "wins": 1542,
+        "losses": 1338,
         "weight": 1.18,
         "performance": "AVERAGE"
       },
       {
         "factor": "concentrated",
         "winRate": 53,
-        "wins": 1708,
-        "losses": 1485,
-        "weight": 1.22,
+        "wins": 1709,
+        "losses": 1487,
+        "weight": 1.16,
         "performance": "AVERAGE"
       },
       {
@@ -3329,11 +3349,11 @@
         "key": "all",
         "label": "Follow all signals",
         "side": "follow",
-        "settled": 9978,
-        "wins": 5512,
-        "losses": 4466,
-        "staked": 997800,
-        "pnl": 1952.13,
+        "settled": 9991,
+        "wins": 5520,
+        "losses": 4471,
+        "staked": 999100,
+        "pnl": 1920,
         "roi": 0.2,
         "winRate": 55,
         "readyForAuto": true
@@ -3342,12 +3362,12 @@
         "key": "underdog",
         "label": "Underdog entries (≤40¢)",
         "side": "follow",
-        "settled": 1238,
+        "settled": 1239,
         "wins": 402,
-        "losses": 836,
-        "staked": 123800,
-        "pnl": -1151.58,
-        "roi": -0.9,
+        "losses": 837,
+        "staked": 123900,
+        "pnl": -1251.58,
+        "roi": -1,
         "winRate": 32,
         "readyForAuto": false
       },
@@ -3355,11 +3375,11 @@
         "key": "high_score",
         "label": "High score (≥100)",
         "side": "follow",
-        "settled": 2545,
+        "settled": 2546,
         "wins": 1383,
-        "losses": 1162,
-        "staked": 254500,
-        "pnl": -5101.13,
+        "losses": 1163,
+        "staked": 254600,
+        "pnl": -5201.13,
         "roi": -2,
         "winRate": 54,
         "readyForAuto": false
@@ -3368,11 +3388,11 @@
         "key": "fade_favorites",
         "label": "Fade favorites (≥60¢)",
         "side": "fade",
-        "settled": 3446,
-        "wins": 1016,
-        "losses": 2430,
-        "staked": 344600,
-        "pnl": -9772.65,
+        "settled": 3455,
+        "wins": 1019,
+        "losses": 2436,
+        "staked": 345500,
+        "pnl": -9626.76,
         "roi": -2.8,
         "winRate": 29,
         "readyForAuto": false
@@ -3432,13 +3452,14 @@
     "settledCount": 200,
     "winRate": 48,
     "lastScan": {
-      "at": 1791817037780,
+      "at": 1791828220399,
       "scanned": 2,
       "sports": [
+        "mlb",
+        "nhl",
         "nfl",
         "nba",
-        "mlb",
-        "nhl"
+        "cfb"
       ],
       "found": 0,
       "newCount": 0
@@ -5450,6 +5471,34 @@
     "enabled": true,
     "results": [
       {
+        "inv_key": "investigation:will-the-national-rally-group-hold-10-french-senate-seats-after-the-2026-election::Yes",
+        "market_slug": "will-the-national-rally-group-hold-10-french-senate-seats-after-the-2026-election",
+        "direction_raw": "Yes",
+        "market_title": "Will the National Rally group hold 10 French Senate seats after the 2026 election?",
+        "source": "sweep",
+        "status": "done",
+        "agent_prob": 0.28,
+        "confidence": "MEDIUM",
+        "reasoning": "RN currently holds only 3 Senate seats and has never had a Senate group (minimum 10 needed). Party leadership itself frames the goal as \"doubling or tripling\" its seats to \"approach\" (frôler) ten — aspirational language suggesting even RN's own optimistic internal target sits near, not comfortably above, the threshold. Municipal 2026 results reportedly boosted RN's local implantation (grand électeur base), with LR reportedly bracing to lose 3-5 seats to RN's push, which is a real tailwind, but France's indirect senatorial electoral system (dominated by mostly rural/small-commune grand électeurs) has historically been unfavorable to RN relative to its national vote share, making a clean breach of 10 seats and formal group registration by Oct 12, 2026 uncertain rather than likely.",
+        "key_findings": "[\"RN holds just 3 Senate seats currently (as of pre-2026 election), insufficient to form a group (Wikipedia FR)\",\"RN campaign director Ludovic Pajot: party wants to 'double or triple' its senator count, i.e., 'frôler' (approach) ten seats (Public Sénat)\",\"Post-March 2026 municipal elections, LR fears losing 3-5 Senate seats to RN's momentum (Public Sénat, dated late March 2026)\",\"As of Sept 13, 2026 (2 weeks before the Sept 27 vote), no confirmed final seat count or group declaration exists yet\",\"RN has never had a Senate group in its history; forming one would be a major symbolic and organizational milestone tied to Le Pen's 2027 presidential strategy\"]",
+        "model": "claude-sonnet-5",
+        "web_searches": 3,
+        "market_prob": 0.285,
+        "entry_price_pct": 28,
+        "edge_pts": -0.5,
+        "event_date": "2026-10-12T23:59:00Z",
+        "investigated_at": "2026-09-13T00:20:24.986Z",
+        "outcome": "LOSS",
+        "y": 0,
+        "agent_brier": 0.0784,
+        "market_brier": 0.0812,
+        "settled_by": "gamma",
+        "settled_at": "2026-10-12T16:27:17.366Z",
+        "updated_at": "2026-10-12T16:27:17.366Z",
+        "market_impact": null,
+        "last_error": null
+      },
+      {
         "inv_key": "investigation:will-yandy-diaz-lead-the-2026-mlb-postseason-in-rbi::Yes",
         "market_slug": "will-yandy-diaz-lead-the-2026-mlb-postseason-in-rbi",
         "direction_raw": "Yes",
@@ -5477,7 +5526,7 @@
         "market_impact": null,
         "last_error": null,
         "market_prob_now": 0.085,
-        "price_checked_at": "2026-10-12T15:12:21.611Z"
+        "price_checked_at": "2026-10-12T18:32:32.789Z"
       },
       {
         "inv_key": "investigation:lowest-temperature-in-warsaw-on-october-12-2026-2c::Yes",
@@ -5506,8 +5555,8 @@
         "updated_at": "2026-10-12T00:16:39.147Z",
         "market_impact": null,
         "last_error": null,
-        "market_prob_now": 0.09,
-        "price_checked_at": "2026-10-12T15:12:21.611Z"
+        "market_prob_now": 0.055,
+        "price_checked_at": "2026-10-12T18:32:32.789Z"
       },
       {
         "inv_key": "investigation:lowest-temperature-in-chongqing-on-october-12-2026-16c::Yes",
@@ -5564,8 +5613,8 @@
         "updated_at": "2026-10-12T00:07:02.898Z",
         "market_impact": null,
         "last_error": null,
-        "market_prob_now": 0.3,
-        "price_checked_at": "2026-10-12T15:12:21.611Z"
+        "market_prob_now": 0.28,
+        "price_checked_at": "2026-10-12T18:32:32.789Z"
       },
       {
         "inv_key": "investigation:next-zptai-glm-5pt4-released-by-october-31-2026-763::Yes",
@@ -5623,7 +5672,7 @@
         "market_impact": "[{\"asset\":\"Crude oil\",\"assetType\":\"commodity\",\"direction\":\"DOWN\",\"conviction\":\"MEDIUM\",\"rationale\":\"Continued ceasefire reduces risk premium tied to Strait of Hormuz disruption fears, easing upward pressure on oil prices.\"},{\"asset\":\"Defense sector\",\"assetType\":\"sector\",\"direction\":\"DOWN\",\"conviction\":\"LOW\",\"rationale\":\"Sustained de-escalation reduces near-term demand expectations for munitions and defense contracts tied to Middle East conflict risk.\"},{\"asset\":\"BTC\",\"assetType\":\"crypto\",\"direction\":\"UP\",\"conviction\":\"LOW\",\"rationale\":\"Reduced geopolitical risk-off sentiment generally supports risk assets including crypto as safe-haven demand diminishes.\"},{\"asset\":\"Gold\",\"assetType\":\"commodity\",\"direction\":\"DOWN\",\"conviction\":\"LOW\",\"rationale\":\"Easing war risk lowers safe-haven demand for gold, a typical beneficiary of Middle East conflict escalation fears.\"}]",
         "last_error": null,
         "market_prob_now": 0.785,
-        "price_checked_at": "2026-10-12T15:12:21.611Z"
+        "price_checked_at": "2026-10-12T18:32:32.789Z"
       },
       {
         "inv_key": "investigation:will-the-democratic-party-win-the-mn-08-house-seat::Yes",
@@ -5988,39 +6037,60 @@
         "updated_at": "2026-10-09T02:07:51.366Z",
         "market_impact": null,
         "last_error": "Anthropic API 400: {\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.\"},\"request_id\":\"req_011Cfqr6sSWPLGogehXD2yF8\"}"
-      },
-      {
-        "inv_key": "investigation:lowest-temperature-in-toronto-on-october-9-2026-3c::Yes",
-        "market_slug": "lowest-temperature-in-toronto-on-october-9-2026-3c",
-        "direction_raw": "Yes",
-        "market_title": "Will the lowest temperature in Toronto be 3°C on October 9?",
-        "source": "whale",
-        "status": "error_transient",
-        "agent_prob": null,
-        "confidence": null,
-        "reasoning": null,
-        "key_findings": null,
-        "model": null,
-        "web_searches": null,
-        "market_prob": 0.335,
-        "entry_price_pct": null,
-        "edge_pts": null,
-        "event_date": null,
-        "investigated_at": null,
-        "outcome": null,
-        "y": null,
-        "agent_brier": null,
-        "market_brier": null,
-        "settled_by": null,
-        "settled_at": null,
-        "updated_at": "2026-10-09T01:06:39.198Z",
-        "market_impact": null,
-        "last_error": "Anthropic API 400: {\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.\"},\"request_id\":\"req_011CfqmSBa7vvGQAdTi6wtjU\"}"
       }
     ]
   },
   "brier": {
-    "error": "fetch failed"
+    "success": true,
+    "report": {
+      "note": "Brier score (lower is better). agentBeatsMarket / edgeDirection are honest but small-sample: this is a survivorship-biased set of markets that happened to resolve, self-reported confidence is uncalibrated (shown for description, not weighting), and N is small. Treat as directional until N is large.",
+      "counts": {
+        "total": 340,
+        "done": 84,
+        "pending": 0,
+        "error": 256,
+        "scored": 79
+      },
+      "overall": {
+        "n": 79,
+        "meanAgentBrier": 0.143,
+        "meanMarketBrier": 0.1139,
+        "meanPairedDiff": -0.0291,
+        "agentBeatsMarketRate": 49,
+        "edgeDirectionHitRate": 49,
+        "edgeDirectionN": 79
+      },
+      "byConfidence": {
+        "MEDIUM": {
+          "n": 62,
+          "meanAgentBrier": 0.1536,
+          "meanMarketBrier": 0.12
+        },
+        "HIGH": {
+          "n": 3,
+          "meanAgentBrier": 0.0025,
+          "meanMarketBrier": 0.0829
+        },
+        "LOW": {
+          "n": 14,
+          "meanAgentBrier": 0.1259,
+          "meanMarketBrier": 0.0933
+        }
+      },
+      "bySource": {
+        "whale": {
+          "n": 5,
+          "meanAgentBrier": 0.1289,
+          "meanMarketBrier": 0.0678
+        },
+        "sweep": {
+          "n": 74,
+          "meanAgentBrier": 0.1439,
+          "meanMarketBrier": 0.117
+        }
+      }
+    },
+    "records": null
   },
   "council": {
     "success": true,
@@ -7037,6 +7107,13 @@
         "excess": 25.7
       },
       {
+        "wallet": "0x7d86e002841d97c33aa8657109912d61dca7a6f9",
+        "n": 11,
+        "wr": 81.8,
+        "px": 56.7,
+        "excess": 25.1
+      },
+      {
         "wallet": "0x54ac698b73ded7cba348bec6a8a9af0299ee47e6",
         "n": 18,
         "wr": 83.3,
@@ -7063,25 +7140,18 @@
         "wr": 75,
         "px": 50.8,
         "excess": 24.2
-      },
-      {
-        "wallet": "0x5331121e9f2f206d8c06ae6235761b1a3f8d3672",
-        "n": 11,
-        "wr": 72.7,
-        "px": 49.2,
-        "excess": 23.5
       }
     ]
   },
   "speed": {
     "success": true,
     "overall": {
-      "n": 624,
-      "avg_lag_sec": 315,
-      "lag_cost_c": 0.14,
-      "drift_5m_c": 0.13,
-      "drift_15m_c": -0.23,
-      "drift_60m_c": -0.22
+      "n": 647,
+      "avg_lag_sec": 316,
+      "lag_cost_c": 0.15,
+      "drift_5m_c": 0.12,
+      "drift_15m_c": -0.15,
+      "drift_60m_c": -0.12
     },
     "byLag": [
       {
@@ -7092,73 +7162,45 @@
       },
       {
         "lag": "2-5m",
-        "n": 253,
-        "lag_cost_c": -0.09,
-        "drift_15m_c": 0.83
+        "n": 262,
+        "lag_cost_c": -0.02,
+        "drift_15m_c": 0.88
       },
       {
         "lag": "5-15m",
-        "n": 330,
-        "lag_cost_c": 0.38,
-        "drift_15m_c": -0.4
+        "n": 344,
+        "lag_cost_c": 0.34,
+        "drift_15m_c": -0.31
       }
     ],
     "settled": {
-      "n": 522,
-      "roi_at_whale": 0.9,
-      "roi_at_detect": 1
+      "n": 537,
+      "roi_at_whale": 0.7,
+      "roi_at_detect": 0.9
     },
     "read": "lag_cost_c = cents the price moved against us before we saw it; drift = movement after. roi_at_whale vs roi_at_detect = the value of being as fast as the whale."
   },
   "crew": {
     "success": true,
-    "directive": null,
+    "directive": {
+      "id": "ord_mv5jzzbz",
+      "text": "set in chat",
+      "sports": [
+        "mlb"
+      ],
+      "markets": [
+        "moneyline",
+        "spread",
+        "total"
+      ],
+      "minEdge": 3,
+      "maxBets": 6,
+      "createdAt": "2026-10-12T17:56:24.863Z",
+      "updatedAt": "2026-10-12T17:56:24.863Z",
+      "expiresAt": "2026-10-13T10:00:00.000Z",
+      "openEnded": false
+    },
     "chat": [
-      {
-        "at": "2026-10-11T03:04:33.641Z",
-        "from": "crew",
-        "text": "CFB sweep: nothing priced yet (CFB: 0 Polymarket games, 0 DraftKings games, 21 consensus games, 0 matched). Games that already kicked off are skipped. Trying again in 15 min."
-      },
-      {
-        "at": "2026-10-11T04:18:15.966Z",
-        "from": "crew",
-        "text": "CFB sweep: nothing priced yet (CFB: 0 Polymarket games, 0 DraftKings games, 19 consensus games, 0 matched). Games that already kicked off are skipped. Trying again in 15 min."
-      },
-      {
-        "at": "2026-10-11T05:18:22.352Z",
-        "from": "crew",
-        "text": "CFB sweep: nothing priced yet (CFB: 0 Polymarket games, 0 DraftKings games, 23 consensus games, 0 matched). Games that already kicked off are skipped. Trying again in 15 min."
-      },
-      {
-        "at": "2026-10-11T06:18:42.185Z",
-        "from": "crew",
-        "text": "CFB sweep: nothing priced yet (CFB: 0 Polymarket games, 0 DraftKings games, 33 consensus games, 0 matched). Games that already kicked off are skipped. Trying again in 15 min."
-      },
-      {
-        "at": "2026-10-11T07:34:03.216Z",
-        "from": "crew",
-        "text": "CFB sweep: nothing priced yet (CFB: 0 Polymarket games, 0 DraftKings games, 39 consensus games, 0 matched). Games that already kicked off are skipped. Trying again in 15 min."
-      },
-      {
-        "at": "2026-10-11T08:49:11.724Z",
-        "from": "crew",
-        "text": "CFB sweep: nothing priced yet (CFB: 0 Polymarket games, 0 DraftKings games, 39 consensus games, 0 matched). Games that already kicked off are skipped. Trying again in 15 min."
-      },
-      {
-        "at": "2026-10-11T09:49:25.650Z",
-        "from": "crew",
-        "text": "CFB sweep: nothing priced yet (CFB: 0 Polymarket games, 0 DraftKings games, 39 consensus games, 0 matched). Games that already kicked off are skipped. Trying again in 15 min."
-      },
-      {
-        "at": "2026-10-11T10:49:26.374Z",
-        "from": "crew",
-        "text": "CFB sweep: nothing priced yet (CFB: 0 Polymarket games, 0 DraftKings games, 39 consensus games, 0 matched). Games that already kicked off are skipped. Trying again in 15 min."
-      },
-      {
-        "at": "2026-10-11T11:49:48.374Z",
-        "from": "crew",
-        "text": "CFB sweep: nothing priced yet (CFB: 0 Polymarket games, 0 DraftKings games, 39 consensus games, 0 matched). Games that already kicked off are skipped. Trying again in 15 min."
-      },
       {
         "at": "2026-10-11T12:49:49.569Z",
         "from": "crew",
@@ -7314,1045 +7356,98 @@
         "at": "2026-10-12T10:12:04.723Z",
         "from": "crew",
         "text": "NFL sweep: 1 games priced, 1 plays debated (read it on the board). The crew would play nothing on paper today. No DraftKings line clears the +$1.50 per $100 bar: the Under 54.5 at -105 for the Bills vs. Rams game is only +0.6, and the Bills +150 moneyline (-3.6) and Bills +3.5 (-3.7) both lose money."
+      },
+      {
+        "at": "2026-10-12T17:54:58.823Z",
+        "from": "you",
+        "text": "Any good plays right now?"
+      },
+      {
+        "at": "2026-10-12T17:55:04.361Z",
+        "from": "crew",
+        "text": "One line clears the bar on your board: Under 54.5 at -102 for Bills vs. Rams (kickoff Mon 8:15 PM ET), about +$2 per $100 against a fair price of 51.5%. That's a thin edge, and the fair price is only good to about 1%. The earlier sweep had this under at -105 (+0.6), so the price has moved. Rams ML and Rams -3.5 both lose money, and the Polymarket Bills price is fair, so no paper bet is queued. You have no active orders, so I'm not hunting.",
+        "by": "chief"
+      },
+      {
+        "at": "2026-10-12T17:55:38.924Z",
+        "from": "you",
+        "text": "anything else outside of nfl that you see value in?"
+      },
+      {
+        "at": "2026-10-12T17:55:43.585Z",
+        "from": "crew",
+        "text": "I haven't looked at anything outside the NFL. Your last sweep was NFL only with one game priced, and the DraftKings board you sent has only Bills vs. Rams. I won't guess at other sports. If you want a hunt, tell me which sports (cfb, nba, wnba, mlb, nhl, ncaab, or more NFL) and I'll set it up. Tell me how long, too: until end of day or until you say stop.",
+        "by": "chief"
+      },
+      {
+        "at": "2026-10-12T17:55:56.480Z",
+        "from": "you",
+        "text": "check mlb"
+      },
+      {
+        "at": "2026-10-12T17:56:00.758Z",
+        "from": "crew",
+        "text": "I have no MLB data yet. Nothing has priced MLB, and I have no active orders, so I'm not hunting. Want me to start an MLB hunt? Tell me whether it's just today (end of day) or until you say stop, and whether to keep all three markets (moneyline, spread, total) and the default 3-point min edge. I'll only flag DraftKings lines at +$1.50 per $100 or better.",
+        "by": "chief"
+      },
+      {
+        "at": "2026-10-12T17:56:24.868Z",
+        "from": "you",
+        "text": "Yes start an MLB hunt through the day. Best value possible"
+      },
+      {
+        "at": "2026-10-12T17:56:29.159Z",
+        "from": "crew",
+        "text": "Started an MLB hunt through end of day, all three markets (moneyline, spread, total), default 3-point min edge, up to 6 paper bets. The crew prices games on its next sweep, about every 15 minutes, so I have no MLB numbers yet. I'll only flag DraftKings lines at +$1.50 per $100 or better. Most lines run slightly negative, so there may be nothing to bet today.",
+        "by": "chief"
+      },
+      {
+        "at": "2026-10-12T17:57:07.207Z",
+        "from": "crew",
+        "text": "MLB sweep: nothing priced yet (MLB: 0 Polymarket games, 2 DraftKings games, 2 consensus games, 0 matched). Games that already kicked off are skipped. Trying again in 15 min."
       }
     ],
     "hunt": {
-      "at": "2026-10-12T10:11:51.051Z",
-      "directiveId": "ord_mv41877i",
+      "at": "2026-10-12T18:28:37.381Z",
+      "directiveId": "ord_mv5jzzbz",
       "sports": [
-        "nfl"
+        "mlb"
       ],
       "minEdge": 3,
       "perSport": {
-        "nfl": {
-          "markets": 1,
-          "oddsGames": 15,
-          "dkGames": 1,
-          "matched": 1,
-          "dkMatched": 1,
+        "mlb": {
+          "markets": 0,
+          "oddsGames": 2,
+          "dkGames": 2,
+          "matched": 0,
+          "dkMatched": 0,
           "unmatched": 0,
           "unmatchedGames": [],
           "dkFeed": [
-            "20261012/-: 1 events, 1 pregame w/ DK",
-            "20261013/-: 0 events, 0 pregame w/ DK"
+            "20261012/-: 2 events, 2 pregame w/ DK",
+            "20261013/-: 1 events, 0 pregame w/ DK"
           ],
-          "lines": 60
+          "lines": 12
         }
       },
       "oddsApi": {
-        "at": "2026-10-12T10:11:51.864Z",
+        "at": "2026-10-12T18:28:39.856Z",
         "ok": true,
         "status": 200,
-        "key": "odds_lines:americanfootball_nfl:h2h,spreads",
-        "remaining": "186",
-        "used": "314"
+        "key": "odds_lines:baseball_mlb:h2h,spreads",
+        "remaining": "150",
+        "used": "350"
       },
-      "priced": 1,
-      "board": [
-        {
-          "id": "nfl-buf-la-2026-10-13:0",
-          "sport": "nfl",
-          "marketSlug": "nfl-buf-la-2026-10-13",
-          "game": "Bills vs. Rams",
-          "team": "Bills",
-          "teamFull": "Buffalo Bills",
-          "outcomeIndex": 0,
-          "startTime": "2026-10-13T00:15:00.000Z",
-          "vegasProb": 38.6,
-          "refSource": "books",
-          "books": 8,
-          "dkOdds": 150,
-          "dk": {
-            "odds": 150,
-            "implied": 40,
-            "fair": 38.4,
-            "link": "https://sportsbook.draftkings.com/event/34118101?outcomes=0ML84695534_3",
-            "ev": -3.5,
-            "fairUsed": 38.6,
-            "spread": {
-              "line": 3.5,
-              "odds": -115,
-              "link": "https://sportsbook.draftkings.com/event/34118101?outcomes=0HC84695534P350_3"
-            },
-            "total": {
-              "line": 54.5,
-              "over": -115,
-              "under": -105,
-              "overLink": "https://sportsbook.draftkings.com/event/34118101?outcomes=0OU84695534O5450_1",
-              "underLink": "https://sportsbook.draftkings.com/event/34118101?outcomes=0OU84695534U5450_3"
-            },
-            "opponent": "Los Angeles Rams"
-          },
-          "buyPrice": 39,
-          "midPrice": 38.5,
-          "spread": 0.01,
-          "edge": -0.4,
-          "volume": 64900,
-          "whale": null,
-          "verdict": "VETO",
-          "reason": "Split 2-2 (margin -0.08)",
-          "margin": -0.08,
-          "votes": [
-            {
-              "agent": "GREED",
-              "vote": "ABSTAIN",
-              "conviction": 0,
-              "line": "No band history. Nothing to count yet."
-            },
-            {
-              "agent": "FOMO",
-              "vote": "NO",
-              "conviction": 0.4,
-              "line": "No whale money on this one. Boring."
-            },
-            {
-              "agent": "PANIC",
-              "vote": "YES",
-              "conviction": 0.2,
-              "line": "Nothing on fire. Fine. FINE."
-            },
-            {
-              "agent": "DOUBT",
-              "vote": "NO",
-              "conviction": 0.5,
-              "line": "no verified wallet, band n=0. Could be luck."
-            },
-            {
-              "agent": "QUANT",
-              "vote": "ABSTAIN",
-              "conviction": 0,
-              "line": "No independent price. Abstain."
-            },
-            {
-              "agent": "RISK",
-              "vote": "YES",
-              "conviction": 0.57,
-              "line": "Book at 3%. Room for it."
-            }
-          ],
-          "tiebreak": null,
-          "council": {
-            "v": [
-              [
-                "GREED",
-                "ABSTAIN",
-                0
-              ],
-              [
-                "FOMO",
-                "NO",
-                0.4
-              ],
-              [
-                "PANIC",
-                "YES",
-                0.2
-              ],
-              [
-                "DOUBT",
-                "NO",
-                0.5
-              ],
-              [
-                "QUANT",
-                "ABSTAIN",
-                0
-              ],
-              [
-                "RISK",
-                "YES",
-                0.57
-              ]
-            ],
-            "m": -0.08,
-            "verdict": "VETO",
-            "tb": null,
-            "mode": "crew",
-            "chair": "claude"
-          },
-          "qualifies": false,
-          "ruleVerdict": "TRIM",
-          "chairReason": "The edge is -0.4 pts against a 3-pt minimum, the fair probability of 38.6% is roughly equal to the 39c price, and there is no whale flow or track record to justify a bet."
-        }
-      ],
-      "dkBoard": [
-        {
-          "game": "Bills vs. Rams",
-          "startTime": "2026-10-13T00:15:00.000Z",
-          "espnId": "401872994",
-          "sport": "nfl",
-          "home": "Los Angeles Rams",
-          "away": "Buffalo Bills",
-          "id": "nfl-buf-la-2026-10-13:tot:under",
-          "market": "total",
-          "side": "under",
-          "line": 54.5,
-          "team": "Under",
-          "label": "Under 54.5 (-105)",
-          "link": "https://sportsbook.draftkings.com/event/34118101?outcomes=0OU84695534U5450_3",
-          "odds": -105,
-          "implied": 51.2,
-          "fair": 51.5,
-          "ev": 0.6
-        },
-        {
-          "game": "Bills vs. Rams",
-          "startTime": "2026-10-13T00:15:00.000Z",
-          "espnId": "401872994",
-          "sport": "nfl",
-          "home": "Los Angeles Rams",
-          "away": "Buffalo Bills",
-          "id": "nfl-buf-la-2026-10-13:ml:0",
-          "market": "moneyline",
-          "side": "away",
-          "line": null,
-          "team": "Bills",
-          "label": "Bills ML +150",
-          "link": "https://sportsbook.draftkings.com/event/34118101?outcomes=0ML84695534_3",
-          "odds": 150,
-          "implied": 40,
-          "fair": 38.6,
-          "ev": -3.6
-        },
-        {
-          "game": "Bills vs. Rams",
-          "startTime": "2026-10-13T00:15:00.000Z",
-          "espnId": "401872994",
-          "sport": "nfl",
-          "home": "Los Angeles Rams",
-          "away": "Buffalo Bills",
-          "id": "nfl-buf-la-2026-10-13:sp:away",
-          "market": "spread",
-          "side": "away",
-          "line": 3.5,
-          "team": "Buffalo Bills",
-          "label": "Bills +3.5 (-115)",
-          "link": "https://sportsbook.draftkings.com/event/34118101?outcomes=0HC84695534P350_3",
-          "odds": -115,
-          "implied": 53.5,
-          "fair": 51.5,
-          "ev": -3.7
-        }
-      ],
-      "polyGames": [
-        {
-          "slug": "nfl-buf-la-2026-10-13",
-          "game": "Bills vs. Rams",
-          "outcomes": [
-            "Bills",
-            "Rams"
-          ],
-          "startTime": "2026-10-13T00:15:00.000Z",
-          "mid": [
-            38.5,
-            61.5
-          ],
-          "spread": 0.01,
-          "books": [
-            38.6,
-            61.4
-          ],
-          "lines": [
-            {
-              "t": "s",
-              "l": -3.5,
-              "o": [
-                "Rams",
-                "Bills"
-              ],
-              "m": [
-                48.5,
-                51.5
-              ],
-              "w": 0.01
-            },
-            {
-              "t": "s",
-              "l": -3.5,
-              "o": [
-                "Bills",
-                "Rams"
-              ],
-              "m": [
-                27.5,
-                72.5
-              ],
-              "w": 0.01
-            },
-            {
-              "t": "s",
-              "l": -2.5,
-              "o": [
-                "Rams",
-                "Bills"
-              ],
-              "m": [
-                57.5,
-                42.5
-              ],
-              "w": 0.01
-            },
-            {
-              "t": "s",
-              "l": -14.5,
-              "o": [
-                "Rams",
-                "Bills"
-              ],
-              "m": [
-                18,
-                82
-              ],
-              "w": 0.02
-            },
-            {
-              "t": "s",
-              "l": -1.5,
-              "o": [
-                "Bills",
-                "Rams"
-              ],
-              "m": [
-                36.5,
-                63.5
-              ],
-              "w": 0.01
-            },
-            {
-              "t": "s",
-              "l": -6.5,
-              "o": [
-                "Bills",
-                "Rams"
-              ],
-              "m": [
-                21,
-                79
-              ],
-              "w": 0.02
-            },
-            {
-              "t": "s",
-              "l": -10.5,
-              "o": [
-                "Rams",
-                "Bills"
-              ],
-              "m": [
-                25.5,
-                74.5
-              ],
-              "w": 0.01
-            },
-            {
-              "t": "s",
-              "l": -5.5,
-              "o": [
-                "Rams",
-                "Bills"
-              ],
-              "m": [
-                42.5,
-                57.5
-              ],
-              "w": 0.01
-            },
-            {
-              "t": "s",
-              "l": -6.5,
-              "o": [
-                "Rams",
-                "Bills"
-              ],
-              "m": [
-                39.5,
-                60.5
-              ],
-              "w": 0.01
-            },
-            {
-              "t": "s",
-              "l": -17.5,
-              "o": [
-                "Rams",
-                "Bills"
-              ],
-              "m": [
-                13,
-                87
-              ],
-              "w": 0.02
-            },
-            {
-              "t": "s",
-              "l": -7.5,
-              "o": [
-                "Rams",
-                "Bills"
-              ],
-              "m": [
-                32.5,
-                67.5
-              ],
-              "w": 0.01
-            },
-            {
-              "t": "s",
-              "l": -9.5,
-              "o": [
-                "Rams",
-                "Bills"
-              ],
-              "m": [
-                28.5,
-                71.5
-              ],
-              "w": 0.01
-            },
-            {
-              "t": "s",
-              "l": -8.5,
-              "o": [
-                "Rams",
-                "Bills"
-              ],
-              "m": [
-                30.5,
-                69.5
-              ],
-              "w": 0.03
-            },
-            {
-              "t": "s",
-              "l": -13.5,
-              "o": [
-                "Rams",
-                "Bills"
-              ],
-              "m": [
-                21,
-                79
-              ],
-              "w": 0.02
-            },
-            {
-              "t": "s",
-              "l": -5.5,
-              "o": [
-                "Bills",
-                "Rams"
-              ],
-              "m": [
-                23,
-                77
-              ],
-              "w": 0.02
-            },
-            {
-              "t": "s",
-              "l": -2.5,
-              "o": [
-                "Bills",
-                "Rams"
-              ],
-              "m": [
-                35,
-                65
-              ],
-              "w": 0.02
-            },
-            {
-              "t": "s",
-              "l": -4.5,
-              "o": [
-                "Rams",
-                "Bills"
-              ],
-              "m": [
-                44.5,
-                55.5
-              ],
-              "w": 0.01
-            },
-            {
-              "t": "s",
-              "l": -21.5,
-              "o": [
-                "Rams",
-                "Bills"
-              ],
-              "m": [
-                9,
-                91
-              ],
-              "w": 0.02
-            },
-            {
-              "t": "s",
-              "l": -20.5,
-              "o": [
-                "Rams",
-                "Bills"
-              ],
-              "m": [
-                10,
-                90
-              ],
-              "w": 0.02
-            },
-            {
-              "t": "s",
-              "l": -19.5,
-              "o": [
-                "Rams",
-                "Bills"
-              ],
-              "m": [
-                11,
-                89
-              ],
-              "w": 0.02
-            },
-            {
-              "t": "s",
-              "l": -16.5,
-              "o": [
-                "Rams",
-                "Bills"
-              ],
-              "m": [
-                16,
-                84
-              ],
-              "w": 0.02
-            },
-            {
-              "t": "s",
-              "l": -21.5,
-              "o": [
-                "Bills",
-                "Rams"
-              ],
-              "m": [
-                3.7,
-                96.3
-              ],
-              "w": 0.044
-            },
-            {
-              "t": "s",
-              "l": -20.5,
-              "o": [
-                "Bills",
-                "Rams"
-              ],
-              "m": [
-                2.9,
-                97.1
-              ],
-              "w": 0.021
-            },
-            {
-              "t": "s",
-              "l": -19.5,
-              "o": [
-                "Bills",
-                "Rams"
-              ],
-              "m": [
-                3.8,
-                96.3
-              ],
-              "w": 0.035
-            },
-            {
-              "t": "s",
-              "l": -17.5,
-              "o": [
-                "Bills",
-                "Rams"
-              ],
-              "m": [
-                5.4,
-                94.7
-              ],
-              "w": 0.033
-            },
-            {
-              "t": "s",
-              "l": -16.5,
-              "o": [
-                "Bills",
-                "Rams"
-              ],
-              "m": [
-                6.7,
-                93.4
-              ],
-              "w": 0.021
-            },
-            {
-              "t": "s",
-              "l": -14.5,
-              "o": [
-                "Bills",
-                "Rams"
-              ],
-              "m": [
-                8,
-                92
-              ],
-              "w": 0.02
-            },
-            {
-              "t": "s",
-              "l": -13.5,
-              "o": [
-                "Bills",
-                "Rams"
-              ],
-              "m": [
-                10,
-                90
-              ],
-              "w": 0.02
-            },
-            {
-              "t": "s",
-              "l": -10.5,
-              "o": [
-                "Bills",
-                "Rams"
-              ],
-              "m": [
-                12.5,
-                87.5
-              ],
-              "w": 0.01
-            },
-            {
-              "t": "s",
-              "l": -9.5,
-              "o": [
-                "Bills",
-                "Rams"
-              ],
-              "m": [
-                14.5,
-                85.5
-              ],
-              "w": 0.01
-            },
-            {
-              "t": "s",
-              "l": -8.5,
-              "o": [
-                "Bills",
-                "Rams"
-              ],
-              "m": [
-                14.5,
-                85.5
-              ],
-              "w": 0.03
-            },
-            {
-              "t": "s",
-              "l": -7.5,
-              "o": [
-                "Bills",
-                "Rams"
-              ],
-              "m": [
-                17,
-                83
-              ],
-              "w": 0.02
-            },
-            {
-              "t": "s",
-              "l": -4.5,
-              "o": [
-                "Bills",
-                "Rams"
-              ],
-              "m": [
-                25,
-                75
-              ],
-              "w": 0.02
-            },
-            {
-              "t": "s",
-              "l": -1.5,
-              "o": [
-                "Rams",
-                "Bills"
-              ],
-              "m": [
-                59.5,
-                40.5
-              ],
-              "w": 0.01
-            },
-            {
-              "t": "t",
-              "l": 54.5,
-              "o": [
-                "Over",
-                "Under"
-              ],
-              "m": [
-                48.5,
-                51.5
-              ],
-              "w": 0.01
-            },
-            {
-              "t": "t",
-              "l": 50.5,
-              "o": [
-                "Over",
-                "Under"
-              ],
-              "m": [
-                62,
-                38
-              ],
-              "w": 0.02
-            },
-            {
-              "t": "t",
-              "l": 32.5,
-              "o": [
-                "Over",
-                "Under"
-              ],
-              "m": [
-                95,
-                5
-              ],
-              "w": 0.038
-            },
-            {
-              "t": "t",
-              "l": 58.5,
-              "o": [
-                "Over",
-                "Under"
-              ],
-              "m": [
-                37,
-                63
-              ],
-              "w": 0.02
-            },
-            {
-              "t": "t",
-              "l": 46.5,
-              "o": [
-                "Over",
-                "Under"
-              ],
-              "m": [
-                73.5,
-                26.5
-              ],
-              "w": 0.03
-            },
-            {
-              "t": "t",
-              "l": 42.5,
-              "o": [
-                "Over",
-                "Under"
-              ],
-              "m": [
-                80.5,
-                19.5
-              ],
-              "w": 0.01
-            },
-            {
-              "t": "t",
-              "l": 44.5,
-              "o": [
-                "Over",
-                "Under"
-              ],
-              "m": [
-                78,
-                22
-              ],
-              "w": 0.02
-            },
-            {
-              "t": "t",
-              "l": 56.5,
-              "o": [
-                "Over",
-                "Under"
-              ],
-              "m": [
-                42.5,
-                57.5
-              ],
-              "w": 0.01
-            },
-            {
-              "t": "t",
-              "l": 34.5,
-              "o": [
-                "Over",
-                "Under"
-              ],
-              "m": [
-                94,
-                6
-              ],
-              "w": 0.06
-            },
-            {
-              "t": "t",
-              "l": 60.5,
-              "o": [
-                "Over",
-                "Under"
-              ],
-              "m": [
-                32,
-                68
-              ],
-              "w": 0.02
-            },
-            {
-              "t": "t",
-              "l": 64.5,
-              "o": [
-                "Over",
-                "Under"
-              ],
-              "m": [
-                23.5,
-                76.5
-              ],
-              "w": 0.03
-            },
-            {
-              "t": "t",
-              "l": 66.5,
-              "o": [
-                "Over",
-                "Under"
-              ],
-              "m": [
-                19,
-                81
-              ],
-              "w": 0.02
-            },
-            {
-              "t": "t",
-              "l": 38.5,
-              "o": [
-                "Over",
-                "Under"
-              ],
-              "m": [
-                87.5,
-                12.5
-              ],
-              "w": 0.03
-            },
-            {
-              "t": "t",
-              "l": 52.5,
-              "o": [
-                "Over",
-                "Under"
-              ],
-              "m": [
-                56.5,
-                43.5
-              ],
-              "w": 0.01
-            },
-            {
-              "t": "t",
-              "l": 30.5,
-              "o": [
-                "Over",
-                "Under"
-              ],
-              "m": [
-                94.5,
-                5.5
-              ],
-              "w": 0.09
-            },
-            {
-              "t": "t",
-              "l": 28.5,
-              "o": [
-                "Over",
-                "Under"
-              ],
-              "m": [
-                94,
-                6.1
-              ],
-              "w": 0.101
-            },
-            {
-              "t": "t",
-              "l": 26.5,
-              "o": [
-                "Over",
-                "Under"
-              ],
-              "m": [
-                97.5,
-                2.5
-              ],
-              "w": 0.03
-            },
-            {
-              "t": "t",
-              "l": 24.5,
-              "o": [
-                "Over",
-                "Under"
-              ],
-              "m": [
-                93.5,
-                6.5
-              ],
-              "w": 0.11
-            },
-            {
-              "t": "t",
-              "l": 74.5,
-              "o": [
-                "Over",
-                "Under"
-              ],
-              "m": [
-                9.5,
-                90.5
-              ],
-              "w": 0.03
-            },
-            {
-              "t": "t",
-              "l": 72.5,
-              "o": [
-                "Over",
-                "Under"
-              ],
-              "m": [
-                10.5,
-                89.5
-              ],
-              "w": 0.03
-            },
-            {
-              "t": "t",
-              "l": 70.5,
-              "o": [
-                "Over",
-                "Under"
-              ],
-              "m": [
-                13.5,
-                86.5
-              ],
-              "w": 0.05
-            },
-            {
-              "t": "t",
-              "l": 68.5,
-              "o": [
-                "Over",
-                "Under"
-              ],
-              "m": [
-                17.5,
-                82.5
-              ],
-              "w": 0.03
-            },
-            {
-              "t": "t",
-              "l": 62.5,
-              "o": [
-                "Over",
-                "Under"
-              ],
-              "m": [
-                29.5,
-                70.5
-              ],
-              "w": 0.03
-            },
-            {
-              "t": "t",
-              "l": 48.5,
-              "o": [
-                "Over",
-                "Under"
-              ],
-              "m": [
-                66.5,
-                33.5
-              ],
-              "w": 0.03
-            },
-            {
-              "t": "t",
-              "l": 40.5,
-              "o": [
-                "Over",
-                "Under"
-              ],
-              "m": [
-                85.5,
-                14.5
-              ],
-              "w": 0.01
-            },
-            {
-              "t": "t",
-              "l": 36.5,
-              "o": [
-                "Over",
-                "Under"
-              ],
-              "m": [
-                91.5,
-                8.5
-              ],
-              "w": 0.03
-            }
-          ],
-          "sport": "nfl"
-        }
-      ],
+      "priced": 0,
+      "board": [],
+      "dkBoard": [],
+      "polyGames": [],
       "dkFairMaxSpread": 0.04,
-      "alsoRan": [
-        {
-          "game": "Bills vs. Rams",
-          "team": "Rams",
-          "vegasProb": 61.4,
-          "buyPrice": 62,
-          "edge": -0.6,
-          "startTime": "2026-10-13T00:15:00.000Z",
-          "dkOdds": -180
-        }
-      ],
+      "alsoRan": [],
       "counts": {
         "APPROVE": 0,
         "TRIM": 0,
-        "VETO": 1
+        "VETO": 0
       },
       "queued": [],
       "markets": [
@@ -8360,54 +7455,8 @@
         "spread",
         "total"
       ],
-      "debate": {
-        "at": "2026-10-12T10:11:51.051Z",
-        "ids": "nfl-buf-la-2026-10-13:0",
-        "lines": [
-          {
-            "agent": "GREED",
-            "line": "Polymarket Bills at 39c against a fair 38.6% is an edge of -0.4 pts, well under our 3-pt minimum. There is no real money in that price after costs."
-          },
-          {
-            "agent": "FOMO",
-            "line": "There is no whale flow on this one, since whaleFlow is null. The only positive number on the DraftKings board is Under 54.5 at +0.6 per $100, and that is thin."
-          },
-          {
-            "agent": "DOUBT",
-            "line": "GREED is right, and +0.6 per $100 on the Under sits inside Polymarket's roughly +/-1% price-step noise. We also have no track record for this lane, so the band is n=0."
-          },
-          {
-            "agent": "PANIC",
-            "line": "Bills +150 comes out at -3.6 per $100 and Bills +3.5 at -3.7, so the DraftKings lines lose money for us. I'm moving from yes to no, since my earlier yes only meant nothing was on fire."
-          },
-          {
-            "agent": "QUANT",
-            "line": "DK implies 40% on Bills +150 against our fair 38.6%, so that side is overpriced. On the Under, fair 51.5% against DK implied 51.2% is a 0.3-pt gap. Neither is a play."
-          },
-          {
-            "agent": "RISK",
-            "line": "The book sits at 3% with 2 open positions and 6 paper bets left today. Passing costs nothing, and adding noise to the book only adds risk."
-          },
-          {
-            "agent": "GREED",
-            "line": "Agreed. I'm moving from abstain to no, since nothing on the board clears +1.50 per $100."
-          },
-          {
-            "agent": "CHAIR",
-            "line": "Veto the Polymarket Bills candidate and skip the DraftKings slips. The Under at +0.6 is noise and both Bills lines are negative, so the crew plays nothing today."
-          }
-        ],
-        "verdicts": [
-          {
-            "id": "nfl-buf-la-2026-10-13:0",
-            "verdict": "VETO",
-            "reason": "The edge is -0.4 pts against a 3-pt minimum, the fair probability of 38.6% is roughly equal to the 39c price, and there is no whale flow or track record to justify a bet."
-          }
-        ],
-        "summary": "The crew would play nothing on paper today. No DraftKings line clears the +$1.50 per $100 bar: the Under 54.5 at -105 for the Bills vs. Rams game is only +0.6, and the Bills +150 moneyline (-3.6) and Bills +3.5 (-3.7) both lose money.",
-        "usd": 0.001
-      },
-      "reportedAt": "2026-10-12T10:11:51.051Z"
+      "debate": null,
+      "reportedAt": "2026-10-12T17:57:05.095Z"
     },
     "queue": [],
     "ledger": {
@@ -8432,12 +7481,12 @@
       "ncaab"
     ],
     "oddsApi": {
-      "at": "2026-10-12T14:57:16.705Z",
+      "at": "2026-10-12T18:28:39.856Z",
       "ok": true,
       "status": 200,
-      "key": "odds_lines:basketball_nba:h2h,spreads",
-      "remaining": "166",
-      "used": "334"
+      "key": "odds_lines:baseball_mlb:h2h,spreads",
+      "remaining": "150",
+      "used": "350"
     },
     "claude": {
       "on": true,
@@ -8453,13 +7502,20 @@
       "pushes": 0,
       "pnl": 0,
       "roi": null,
-      "pending": 0,
+      "pending": 1,
       "byMarket": {},
       "recent": [],
-      "open": []
+      "open": [
+        {
+          "label": "Under 54.5 (-102)",
+          "game": "Bills vs. Rams",
+          "ev": 2,
+          "startTime": "2026-10-13T00:15:00.000Z"
+        }
+      ]
     },
     "dkBoardReport": {
-      "at": "2026-10-12T10:11:51.051Z",
+      "at": "2026-10-12T17:53:04.341Z",
       "rows": 3
     }
   },
@@ -8509,45 +7565,81 @@
     "success": true,
     "hours": 48,
     "moveC": 3,
-    "rows": 0,
-    "legs": 0,
-    "bySport": {},
+    "rows": 156,
+    "legs": 2,
+    "bySport": {
+      "nhl": {
+        "legs": 2,
+        "samples": 156,
+        "bothQuoted": 0,
+        "polyMoves": 0,
+        "staleKalshi": 0,
+        "kalshiSameMin": 0,
+        "kalshiNextMin": 0,
+        "kalshiLeads": 0,
+        "usQuoted": 0,
+        "staleUs": 0,
+        "kUsCross": 0,
+        "avgGapC": null,
+        "avgKalshiSpreadC": null,
+        "avgPolySpreadC": null,
+        "staleRate": null,
+        "avgStaleEdgeC": null,
+        "avgUsGapC": null,
+        "avgUsSpreadC": null,
+        "staleUsRate": null,
+        "avgStaleUsEdgeC": null,
+        "kUsCrossRate": null,
+        "avgKUsCrossEdgeC": null
+      }
+    },
     "last": {
-      "at": "2026-10-12T15:12:19.458Z",
+      "at": "2026-10-12T18:33:05.643Z",
       "pairs": 29,
-      "live": 0,
-      "rows": 0,
+      "live": 1,
+      "rows": 2,
       "diag": {
         "nfl": {
           "kalshi": 2,
-          "poly": 4934,
+          "poly": 14169,
           "matched": 0
         },
         "cfb": {
           "kalshi": 4,
-          "poly": 21761,
-          "matched": 2
+          "poly": 19885,
+          "matched": 2,
+          "us": 2
         },
         "nba": {
           "kalshi": 20,
-          "poly": 628,
-          "matched": 8
+          "poly": 629,
+          "matched": 8,
+          "us": 8
         },
         "nhl": {
           "kalshi": 38,
-          "poly": 2677,
-          "matched": 17
+          "poly": 2724,
+          "matched": 17,
+          "us": 16
         },
         "mlb": {
           "kalshi": 6,
-          "poly": 3119,
-          "matched": 2
+          "poly": 2505,
+          "matched": 2,
+          "us": 2
         },
         "wnba": {
           "kalshi": 0
         }
-      }
+      },
+      "kalshiError": "kalshi 429 /markets?tickers=KXNHLGAME-26OCT12FLABUF-FLA,KXNHLGAME-26OCT",
+      "usQuoted": 1
     },
-    "read": "polyMoves = minutes where Polymarket's mid moved >= 3c; staleKalshi = of those, Kalshi's same-minute quote was still crossable after its 7.000000000000001% x p(1-p) taker fee (avgStaleEdgeC = cents of edge per share); kalshiSameMin/NextMin = Kalshi moved the same way that minute / the next; kalshiLeads = Kalshi moved first and Polymarket followed. A Kalshi lane is worth building only if staleRate x avgStaleEdgeC is meaningfully positive over many games."
+    "boot": {
+      "at": "2026-10-12T18:33:05.643Z",
+      "stage": "done",
+      "rows": 2
+    },
+    "read": "polyMoves = minutes where Polymarket's mid moved >= 3c; staleKalshi = of those, Kalshi's same-minute quote was still crossable after its 7.000000000000001% x p(1-p) taker fee (avgStaleEdgeC = cents of edge per share); kalshiSameMin/NextMin = Kalshi moved the same way that minute / the next; kalshiLeads = Kalshi moved first and Polymarket followed. A Kalshi lane is worth building only if staleRate x avgStaleEdgeC is meaningfully positive over many games. us* = the same for Polymarket US (taker 6.950000000000001% x p(1-p)); kUsCross = minutes where buying on one US-legal venue and selling on the other cleared both taker fees (the only fully legal arbitrage pair for a US operator)."
   }
 }
