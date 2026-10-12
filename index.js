@@ -25,6 +25,8 @@ import { buildAgentHub } from "./src/agent-hub.js";
 import { handleCrewOrder, runCrewHunt, getCrewState, saveBrowserDkBoard } from "./src/crew.js";
 import { settleDkPicks } from "./src/dk-picks.js";
 import { collectBooks, MM_SCHEMA } from "./src/mm-collector.js";
+import { sampleXvenue, xvenueReport, XV_SCHEMA } from "./src/xvenue.js";
+import { getExecReport } from "./src/execution.js";
 import { addToWaitlist, loadWaitlist, waitlistSummary, isIpThrottled, markIpSubmitted } from "./src/waitlist.js";
 import {
   getCouncilStats, getCouncilFeed, leaderboard as councilLeaderboard
@@ -1072,7 +1074,8 @@ async function d1UpsertInvestigation(env, inv) {
 var SCHEMA_MIGRATIONS = [
   "ALTER TABLE investigations ADD COLUMN market_impact TEXT",  // migrations/0004_market_impact.sql
   "ALTER TABLE investigations ADD COLUMN last_error TEXT",     // investigation failure visibility (half of day-1 runs were error_transient with no stored reason)
-  ...MM_SCHEMA,                                               // migrations/0007_mm_books.sql (market-making depth snapshots)
+  ...MM_SCHEMA,
+  ...XV_SCHEMA,                                               // migrations/0008_xvenue_quotes.sql (Kalshi vs Polymarket live quotes)                                               // migrations/0007_mm_books.sql (market-making depth snapshots)
 ];
 var schemaEnsured = false;
 async function ensureSchema(env) {
@@ -4841,6 +4844,16 @@ export default {
       }
 
       // Get open positions
+      // Execution shadow ledger: paper vs taker vs maker on the same trades.
+      if (path === "/autotrader/execution" && request.method === "GET") {
+        return atJson(await getExecReport(env, await getTradeHistory(env, 1000), await getOpenPositions(env)));
+      }
+      // Cross-venue sampler read-back (Kalshi vs Polymarket, live games).
+      if (path === "/xvenue/report" && request.method === "GET") {
+        const hours = Math.min(14 * 24, Math.max(1, parseInt(url.searchParams.get("hours") || "48", 10) || 48));
+        const moveC = Math.min(10, Math.max(1, parseFloat(url.searchParams.get("moveC") || "3") || 3));
+        return atJson(await xvenueReport(env, { hours, moveC }));
+      }
       if (path === "/autotrader/positions") {
         const positions = await getOpenPositions(env);
         return atJson(positions);
@@ -6683,6 +6696,13 @@ export default {
   // Cron trigger handler - runs every 5 minutes
   async scheduled(event, env, ctx) {
     console.log("Cron triggered at:", new Date().toISOString());
+    // Minute trigger: only the cross-venue sampler (Kalshi vs Polymarket top-of-book
+    // for live games -> D1 xvenue_quotes). Everything else stays on the 5-minute cron.
+    if (event && event.cron === "* * * * *") {
+      try { await ensureSchema(env); const r = await sampleXvenue(env); console.log("xvenue:", JSON.stringify(r).slice(0, 300)); }
+      catch (e) { console.error("xvenue error:", e.message); }
+      return;
+    }
     await ensureSchema(env);
     // One-shot: the Sep 14-15 stale-fill phantom trades (Fed market, 5x
     // entry 21c / instant TP at live 78c) were the ONLY settled

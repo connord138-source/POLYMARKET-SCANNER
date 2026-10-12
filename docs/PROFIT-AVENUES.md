@@ -194,3 +194,70 @@ record, the whale-wallet ledger, the Agent Crew, and the scanner UI.
 4. Email institutional@polymarket.us once, to learn whether a small ISV is
    accepted and what the funding-entity requirement means in practice.
 5. Skip #6 unless we choose to build a non-US product. Skip #10–12.
+
+---
+
+# Part 2 — the model itself earning (Oct 12 2026, live scans)
+
+The operator's clarification: "profit" meant the software model making money
+on Kalshi and Polymarket by any mechanism, not selling the software. So the
+structural, non-forecasting ways a bot can earn were each measured against
+live books on Oct 12 2026 (scripts kept in the session scratchpad; numbers
+below are what they printed).
+
+| Mechanism | What was measured | Result |
+|-----------|-------------------|--------|
+| Neg-risk "Dutch book" (buy NO on every outcome when Σ YES bids > $1; buy every YES when Σ asks < $1) | 800 highest-volume events, 377 neg-risk events with ≥3 live markets, 141 fully quoted | Best Σbid 1.011 (NHL 2027 champion, 2 sets). 9 events above 1.000, one above 1.01, none above 1.03. Every leg pays a taker fee (politics 10% × p(1−p)), so the gross 0.1–1.1c per set is below cost. **Dead.** |
+| Strike monotonicity on sports totals (Over L_low must be ≥ Over L_high) | 948 sports events, 2,459 total markets, 15,168 strike pairs | 0 violations, 0 within half a cent. **Dead.** |
+| Kalshi vs Polymarket moneylines | 103 games matched (92 NCAAF, 7 MLB, 4 WNBA) | 0 real crossings. Median mid difference ≈ 1c; 5 of 203 sides differed by > 2c. **Dead pregame.** |
+| Kalshi vs Polymarket totals, same strike and cross-strike | 27 NCAAF games, 10,773 strike pairs, 227 same-line pairs | Median mid difference 0.5c; 4 pairs with a 1–2c raw gap, none positive after Kalshi's 7% × p(1−p) taker fee plus Polymarket's 3% × p(1−p). **Dead pregame.** |
+| Settlement-lag harvesting (buy the decided side of a finished game before resolution) | 1,463 open sports markets kicked off 3.5–72h earlier, books read directly | 2 sides bid ≥ 0.90, both with no ask at all. Finished games are resolved or asked at > 0.995 before a 5-minute bot sees them. **Dead.** |
+| "Sure things" within 96h | 268 markets with an askable side at ≤ 0.995 and $28M of depth | The 4–5% "yields" are 95% probabilities, not mispricings (exact-score NOs, weather bands, BTC levels). Not an edge. |
+| Speed (how much being as fast as the whale is worth) | `/speed/report`, 571 signals | Average detection lag 324s costs 0.21c; ROI at the whale's own price −0.3%, at ours −0.1%. The whales we copy do not have an edge to be fast on. |
+
+Where the ledger actually stands: 250 settled paper trades, 48% wins,
+−$27.72, **and the paper ledger pays neither spread nor fees** (fills at
+Gamma's price, exits at the CLOB midpoint). Raw whale signals in D1
+(`signals_log`): 11,343 WIN / 8,781 LOSS = 56.4% at an average entry of
+56.6c, i.e. breakeven. Real money on these trades would do worse than paper
+by roughly the spread (NFL books average 1.8c) plus the taker fee.
+
+## What is left, and what was built for it
+
+1. **Be the maker (execution).** Polymarket's sports fee schedule is
+   `rate 0.03 × p(1−p)`, taker-only, with a 15% maker rebate; Polymarket US
+   pays makers a `0.0125 × p(1−p)` rebate; Kalshi charges 0 maker fee on most
+   series. On the last 30 paper trades ($151 staked, −$9.29), a 2c better entry
+   is worth +$6.58 — the same order as the loss. Built: `src/execution.js`, a
+   shadow ledger on every paper entry: it stores the live bid/ask and fee
+   schedule, prices a **taker** fill (ask + fee) and a **maker** fill (resting
+   bid, counted filled only if the tape printed a sell at or below it within
+   `execShadowTtlMin`, default 60 min, plus the rebate), and settles both
+   against the real exit. `GET /autotrader/execution` (in the backend
+   snapshot as `execution`). Decision rule: after ~50 settled shadows, if
+   `makerMinusTakerOnFilled` is clearly positive and `fillRate` is above
+   ~50%, switch the live-path order type to resting limit orders; if
+   `taker` is far below `paper`, the paper ledger is overstating the bot and
+   the go-live milestone must be re-read on the taker ledger.
+2. **Kalshi in-game lag (the only legal real-money venue question).** Kalshi
+   is US-legal to trade through its own API (Developer Agreement v1.1 allows
+   a member's own trading). Pregame, Kalshi tracks Polymarket to within 1c.
+   Whether it lags in-game, when prices move 5–20c a minute, is unmeasured.
+   Built: `src/xvenue.js`, a one-minute cron (`"* * * * *"`, sampler only)
+   that matches Kalshi game markets to Polymarket moneylines
+   (NFL/CFB/NBA/NHL/MLB/WNBA, city↔nickname aliases) and records both
+   venues' top of book for every live game side into D1 `xvenue_quotes`
+   (pruned after 14 days). `GET /xvenue/report?hours=48&moveC=3` reports,
+   per sport: how often a ≥3c Polymarket move left Kalshi's same-minute
+   quote crossable after Kalshi's taker fee (`staleRate`,
+   `avgStaleEdgeC`), who moves first, and both venues' spreads. Decision
+   rule: a Kalshi lane (take stale quotes, or quote around Polymarket's mid
+   with 0 maker fee) is worth building only if `staleRate × avgStaleEdgeC`
+   is meaningfully positive across a week of games.
+3. **Not worth building** (measured above): neg-risk arbitrage, strike
+   monotonicity, cross-venue pregame arbitrage, settlement-lag sniping,
+   liquidity-reward market making (Track A), faster whale copying.
+
+Scripts: `scratchpad/edge/{negrisk,lines,xvenue,xlines,lag,surething}.mjs`
+in the Oct 12 session; rerun them when markets are live (Saturday CFB,
+Sunday NFL) before trusting a pregame-only conclusion.

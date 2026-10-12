@@ -59,6 +59,18 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   Anthropic account (`INVESTIGATION_DAILY_USD`, $1 since Oct 2026). ESPN only
   serves DraftKings odds to US clients, so the page computes the DraftKings
   board in the browser and POSTs it to `/agents/crew/dk-board`.
+- `src/execution.js` — execution shadow ledger: every paper entry records the
+  live CLOB book + Gamma `feeSchedule` and tracks a taker fill (ask + fee) and
+  a resting-bid maker fill (filled only if the tape prints at/below the bid
+  within `execShadowTtlMin`; earns the rebate), settled on the real exit.
+  KV `exec_ledger`; `GET /autotrader/execution`. The paper ledger itself pays
+  no spread or fees — read go-live numbers against the taker ledger.
+- `src/xvenue.js` — Kalshi vs Polymarket live-game sampler on the minute cron
+  (`"* * * * *"` runs only this): matched game sides -> D1 `xvenue_quotes`;
+  `GET /xvenue/report` = does Kalshi lag Polymarket in-game enough to clear
+  its 7%·p(1−p) taker fee (`staleRate`, `avgStaleEdgeC`). Pregame scans
+  (Oct 2026) found no cross-venue or neg-risk arbitrage — see
+  `docs/PROFIT-AVENUES.md` Part 2 before proposing structural-arb features.
 - `src/odds.js` — The Odds API client (KV-cached; `ODDS_API_KEY` secret).
 - `src/gamma.js` — Gamma API settlement (`findGammaMarket` handles
   closed markets + multi-market moneyline preference).
