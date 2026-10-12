@@ -21,6 +21,7 @@ import {
 } from './council.js';
 import { bucketSignal, matchesFilter } from './forge.js';
 import { CREW_KEYS, appendCrewChat, fetchMoneylineQuote } from './crew.js';
+import { attachShadow, refreshShadows, settleShadow, sideTokenId } from './execution.js';
 
 const GAMMA_API = 'https://gamma-api.polymarket.com';
 const CLOB_API = 'https://clob.polymarket.com';
@@ -98,6 +99,8 @@ async function lookupMarketTokens(slug) {
     return {
       yesTokenId: tokenIds[0],
       noTokenId: tokenIds[1],
+      tokenIds,
+      feeSchedule: market.feeSchedule || null,   // {rate, exponent, takerOnly, rebateRate} (execution shadow)
       conditionId: market.conditionId || null,
       closed: market.closed || false,
       resolved: market.closed || false,
@@ -521,6 +524,11 @@ const DEFAULT_CONFIG = {
   derivativeMinOdds: 25,          // Min for derivative markets
   minExpectedValue: 0.10,         // Minimum EV to enter (0.10 = +10%)
   maxEntryCentsSlippage: 5,       // Max absolute cents difference from whale entry
+  // Execution shadow (src/execution.js): per paper entry, record the live
+  // book and track what a taker fill (ask + fee) and a resting bid (filled
+  // only if the tape prints at/below it within the TTL, + rebate) would do.
+  execShadow: true,
+  execShadowTtlMin: 60,
   minAiScore: 40,                 // Minimum AI score to consider
   maxEventHorizonHours: 168,      // Skip markets resolving further out than this (0 = disabled)
   staleVoidGraceHours: 48,        // Extra hours past maxHoldHours to wait for resolution before voiding a no-price position
@@ -849,6 +857,7 @@ function computeFavoritesExperiment(history, openPositions) {
 async function addToHistory(env, trade) {
   if (trade.openedAt) trade.entryHourUTC = new Date(trade.openedAt).getUTCHours();
   if (trade.closedAt) trade.exitHourUTC = new Date(trade.closedAt).getUTCHours();
+  if (trade.exec) { try { await settleShadow(env, trade); } catch (e) {} }   // execution shadow ledger
   const history = await getTradeHistory(env, 1000);
   history.push(trade);
   // Keep last 1000 trades
@@ -1637,6 +1646,8 @@ export async function processSignals(env, signals) {
   
   const dailyStats = await getDailyStats(env);
   const openPositions = await getOpenPositions(env);
+  // Execution shadow: has the tape filled any resting shadow bid since last cycle?
+  if (config.execShadow !== false) { try { await refreshShadows(env, openPositions); } catch (e) {} }
   const perf = await getBotPerformance(env);
 
   // Exploration graduation: computed once per run from the bot's own settled
@@ -2446,6 +2457,10 @@ export async function processSignals(env, signals) {
       // PAPER MODE — record immediately as before
       stillOpen.push(position);
       results.tradesPaperTraded++;
+      if (config.execShadow !== false) {
+        try { await attachShadow(env, position, entryGamma, sideTokenId(entryGamma, signal.directionRaw || signal.direction), config.execShadowTtlMin ?? 60); }
+        catch (e) { position.exec = null; }
+      }
       await logDecision(env, {
         type: 'PAPER_TRADE',
         market: signal.marketTitle || signal.title,
