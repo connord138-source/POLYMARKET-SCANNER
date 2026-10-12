@@ -131,16 +131,26 @@ export function isLive(pair, nowMs) {
   return pair.startMs - XV_LIVE_BEFORE_MS <= nowMs && nowMs <= pair.startMs + XV_LIVE_AFTER_MS;
 }
 
-async function kalshiJson(path) {
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+// Kalshi rate-limits bursts (six series calls back to back drew 429s on the
+// first live run): one retry after a pause.
+async function kalshiJson(path, retry = 1) {
   const res = await fetch(`${KALSHI_API}${path}`, { headers: { accept: 'application/json' } });
+  if (res.status === 429 && retry > 0) { await sleep(1500); return kalshiJson(path, retry - 1); }
   if (!res.ok) throw new Error(`kalshi ${res.status} ${path.slice(0, 60)}`);
   return res.json();
 }
 
-async function gammaMarketsByTag(tag) {
+// Gamma's default order puts the oldest active events first, and a sport tag
+// carries thousands of season-long props, so this week's games never made the
+// first pages (first live run: NFL 4,934 markets, 0 matched). Ending-soonest
+// first with end_date_min puts the upcoming games at the front.
+async function gammaMarketsByTag(tag, nowMs = Date.now()) {
   const out = [];
+  const endMin = new Date(nowMs - 6 * 3600e3).toISOString();
   for (let off = 0; off < 400; off += 100) {
-    const res = await fetch(`${GAMMA_API}/events?tag_slug=${encodeURIComponent(tag)}&active=true&closed=false&limit=100&offset=${off}`);
+    const res = await fetch(`${GAMMA_API}/events?tag_slug=${encodeURIComponent(tag)}&active=true&closed=false&limit=100&offset=${off}&order=endDate&ascending=true&end_date_min=${encodeURIComponent(endMin)}`);
     if (!res.ok) break;
     const events = await res.json();
     for (const e of events) for (const m of e.markets || []) {
@@ -201,7 +211,7 @@ export async function buildPairs(env, nowMs = Date.now()) {
       const kal = (k.markets || []).filter(m => { const t = Date.parse(m.expected_expiration_time || m.close_time || ''); return !Number.isFinite(t) || (t > nowMs - 6 * 3600e3 && t < nowMs + 48 * 3600e3); });
       if (!kal.length) { diag[sport] = { kalshi: 0 }; continue; }
       let poly = [];
-      for (const tag of cfg.tags) poly = poly.concat(await gammaMarketsByTag(tag));
+      for (const tag of cfg.tags) poly = poly.concat(await gammaMarketsByTag(tag, nowMs));
       const got = matchPairs(sport, kal, poly, nowMs).filter(p => p.startMs > nowMs - 6 * 3600e3 && p.startMs < nowMs + 36 * 3600e3);
       diag[sport] = { kalshi: kal.length, poly: poly.length, matched: got.length };
       if (cfg.us && got.length) {
@@ -210,6 +220,7 @@ export async function buildPairs(env, nowMs = Date.now()) {
       }
       pairs.push(...got);
     } catch (e) { diag[sport] = { error: e.message.slice(0, 80) }; }
+    await sleep(400);   // pace the Kalshi series calls
   }
   const blob = { builtAt: nowMs, pairs, diag };
   try { await env.SIGNALS_CACHE.put(XV_KEYS.PAIRS, JSON.stringify(blob), { expirationTtl: 3600 }); } catch (e) {}
