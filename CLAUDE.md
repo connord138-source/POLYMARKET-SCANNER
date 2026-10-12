@@ -65,10 +65,13 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   within `execShadowTtlMin`; earns the rebate), settled on the real exit.
   KV `exec_ledger`; `GET /autotrader/execution`. The paper ledger itself pays
   no spread or fees — read go-live numbers against the taker ledger.
-- `src/xvenue.js` — Kalshi vs Polymarket live-game sampler on the minute cron
-  (`"* * * * *"` runs only this): matched game sides -> D1 `xvenue_quotes`;
-  `GET /xvenue/report` = does Kalshi lag Polymarket in-game enough to clear
-  its 7%·p(1−p) taker fee (`staleRate`, `avgStaleEdgeC`). Pregame scans
+- `src/xvenue.js` — Kalshi + Polymarket US vs global Polymarket live-game
+  sampler on the minute cron (`"* * * * *"` runs only this): matched game
+  sides -> D1 `xvenue_quotes` (k_*, p_*, us_* columns); `GET /xvenue/report`
+  = do the US-legal venues lag global Polymarket in-game enough to clear their
+  taker fees (`staleRate`/`staleUsRate`, `avg*EdgeC`) and does Kalshi ever
+  cross Polymarket US after both fees (`kUsCross`). `boot` shows the last
+  stage the minute cron reached (`xv_boot`). Pregame scans
   (Oct 2026) found no cross-venue or neg-risk arbitrage — see
   `docs/PROFIT-AVENUES.md` Part 2 before proposing structural-arb features.
 - `src/odds.js` — The Odds API client (KV-cached; `ODDS_API_KEY` secret).

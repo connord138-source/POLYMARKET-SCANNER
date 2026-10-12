@@ -254,10 +254,24 @@ by roughly the spread (NFL books average 1.8c) plus the taker fee.
    rule: a Kalshi lane (take stale quotes, or quote around Polymarket's mid
    with 0 maker fee) is worth building only if `staleRate × avgStaleEdgeC`
    is meaningfully positive across a week of games.
-3. **Not worth building** (measured above): neg-risk arbitrage, strike
+3. **Polymarket US (the other US-legal venue) is in the same sampler.**
+   Its public market-data API (`gateway.polymarket.us`, no key) exposes every
+   game's moneyline with best bid/ask. Pregame on Oct 12 (107 matched sides,
+   NBA/NHL/CFB/MLB): median |mid gap| to global Polymarket 0.7c, but 13 sides
+   sat more than 2c off and 3 more than 4c (thin NBA/NHL books, 1–4c
+   spreads), while NFL was quoted at a 0.25c spread by a professional LP.
+   Polymarket US takers pay 6.95% × p(1−p) (≈1.7c at 40c) and makers earn a
+   1.25% × p(1−p) rebate, so a US-side edge has to be about 2c before fees
+   to matter. The report's `us*` fields measure the same stale-quote
+   question for Polymarket US, and `kUsCross` counts minutes where buying on
+   one US-legal venue and selling on the other cleared both taker fees — the
+   only fully legal arbitrage pair for a US operator. Rule: the same as
+   Kalshi's; and if `kUsCross` is non-zero in-game, that pair is the first
+   real-money lane to build (both venues are tradable from the US today).
+4. **Not worth building** (measured above): neg-risk arbitrage, strike
    monotonicity, cross-venue pregame arbitrage, settlement-lag sniping,
    liquidity-reward market making (Track A), faster whale copying.
 
-Scripts: `scratchpad/edge/{negrisk,lines,xvenue,xlines,lag,surething}.mjs`
+Scripts: `scratchpad/edge/{negrisk,lines,xvenue,xlines,lag,surething,xus}.mjs`
 in the Oct 12 session; rerun them when markets are live (Saturday CFB,
 Sunday NFL) before trusting a pregame-only conclusion.
