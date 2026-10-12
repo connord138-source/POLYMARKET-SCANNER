@@ -76,3 +76,8 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
 - Admin endpoints require `ADMIN_TOKEN` (fail-closed).
 - Development branch for Claude sessions: see the session's designated
   branch; PR → squash-merge to `main`.
+- Monetization research (Oct 2026): `docs/PROFIT-AVENUES.md` ranks every
+  non-betting profit route on Kalshi/Polymarket (affiliate programs, Kalshi
+  Builder Codes via DFlow, builder grants, Polymarket US ISV vendor fees,
+  data resale) with sources and the US-legality of each. Read it before
+  proposing a new revenue feature.
