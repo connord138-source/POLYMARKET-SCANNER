@@ -11,13 +11,16 @@
 const KALSHI_API = 'https://api.elections.kalshi.com/trade-api/v2';
 const GAMMA_API = 'https://gamma-api.polymarket.com';
 const CLOB_API = 'https://clob.polymarket.com';
+const US_API = 'https://gateway.polymarket.us';   // Polymarket US public market data (no key)
 
-export const XV_KEYS = { PAIRS: 'xv_pairs', LAST: 'xv_last' };
+export const XV_KEYS = { PAIRS: 'xv_pairs', LAST: 'xv_last', BOOT: 'xv_boot' };
 export const XV_PAIRS_TTL_MS = 15 * 60e3;
 export const XV_LIVE_BEFORE_MS = 30 * 60e3;        // start sampling 30 min before kickoff
 export const XV_LIVE_AFTER_MS = 4.5 * 3600e3;      // ... and stop 4.5h after it
 export const XV_PRUNE_DAYS = 14;
 export const KALSHI_TAKER_RATE = 0.07;             // per-contract taker fee = rate x p(1-p) (Kalshi fee schedule)
+export const US_TAKER_RATE = 0.0695;               // Polymarket US taker fee = 0.0695 x p(1-p); makers get a 0.0125 x p(1-p) rebate
+export const US_MAX_BBO_CALLS = 40;                // per minute, one per live game
 
 export const XV_SCHEMA = [
   `CREATE TABLE IF NOT EXISTS xvenue_quotes (
@@ -26,15 +29,18 @@ export const XV_SCHEMA = [
     p_token TEXT, p_bid REAL, p_ask REAL, p_last REAL, p_fee_rate REAL)`,
   `CREATE INDEX IF NOT EXISTS idx_xv_ts ON xvenue_quotes(ts)`,
   `CREATE INDEX IF NOT EXISTS idx_xv_game ON xvenue_quotes(game, team, ts)`,
+  `ALTER TABLE xvenue_quotes ADD COLUMN us_bid REAL`,
+  `ALTER TABLE xvenue_quotes ADD COLUMN us_ask REAL`,
+  `ALTER TABLE xvenue_quotes ADD COLUMN us_last REAL`,
 ];
 
 export const XV_SPORTS = {
-  nfl: { series: 'KXNFLGAME', tags: ['nfl'] },
-  cfb: { series: 'KXNCAAFGAME', tags: ['cfb'] },
-  nba: { series: 'KXNBAGAME', tags: ['nba'] },
-  nhl: { series: 'KXNHLGAME', tags: ['nhl'] },
-  mlb: { series: 'KXMLBGAME', tags: ['mlb'] },
-  wnba: { series: 'KXWNBAGAME', tags: ['wnba'] },
+  nfl: { series: 'KXNFLGAME', tags: ['nfl'], us: 'nfl' },
+  cfb: { series: 'KXNCAAFGAME', tags: ['cfb'], us: 'cfb' },
+  nba: { series: 'KXNBAGAME', tags: ['nba'], us: 'nba' },
+  nhl: { series: 'KXNHLGAME', tags: ['nhl'], us: 'nhl' },
+  mlb: { series: 'KXMLBGAME', tags: ['mlb'], us: 'mlb' },
+  wnba: { series: 'KXWNBAGAME', tags: ['wnba'], us: null },
 };
 
 // Kalshi names pro teams by city ("Calgary wins"); Polymarket by nickname
@@ -137,15 +143,56 @@ async function gammaMarketsByTag(tag) {
     const res = await fetch(`${GAMMA_API}/events?tag_slug=${encodeURIComponent(tag)}&active=true&closed=false&limit=100&offset=${off}`);
     if (!res.ok) break;
     const events = await res.json();
-    for (const e of events) for (const m of e.markets || []) out.push({ ...m, _event: e.title });
+    for (const e of events) for (const m of e.markets || []) {
+      // keep only what matching needs: a page of sports events is megabytes of descriptions
+      out.push({ question: m.question, slug: m.slug, outcomes: m.outcomes, clobTokenIds: m.clobTokenIds, gameStartTime: m.gameStartTime, startDate: m.startDate || e.startDate, endDate: m.endDate, sportsMarketType: m.sportsMarketType, feeSchedule: m.feeSchedule, active: m.active, closed: m.closed, _event: e.title });
+    }
     if (events.length < 100) break;
   }
   return out;
 }
 
-// Rebuild the matched-pairs list (Kalshi game series x Polymarket tags), one
-// Kalshi call per sport. Cached in KV for XV_PAIRS_TTL_MS; games are kept
-// while they are within 36h ahead or 6h behind.
+// Polymarket US (gateway.polymarket.us/v2/leagues/{slug}/events): the league's
+// upcoming games with their moneyline market. Pure matcher below; this fetch
+// returns slim rows {slug, startMs, teams:[long, short]} where `long` is the
+// side the US instrument quotes (bestBid/bestAsk belong to it).
+async function usLeagueGames(league) {
+  const res = await fetch(`${US_API}/v2/leagues/${encodeURIComponent(league)}/events?limit=100`);
+  if (!res.ok) throw new Error(`polymarket.us ${res.status}`);
+  const data = await res.json();
+  const out = [];
+  for (const e of data.events || []) {
+    if (!e || e.closed || e.ended) continue;
+    const ml = (e.markets || []).find(m => m && (m.sportsMarketTypeV2 === 'SPORTS_MARKET_TYPE_MONEYLINE' || /winner|moneyline/i.test(m.sportsMarketType || '')) && Array.isArray(m.marketSides) && m.marketSides.length === 2);
+    if (!ml) continue;
+    const sides = [...ml.marketSides].sort((a, b) => (b.long ? 1 : 0) - (a.long ? 1 : 0));   // long first
+    out.push({ slug: ml.slug, startMs: Date.parse(e.startDate || e.startTime || ''), teams: sides.map(s => (s.team && s.team.name) || s.description || '') });
+  }
+  return out;
+}
+
+// Pure: attach each pair's Polymarket US market (slug + which leg is the US
+// instrument's long side). Both teams must match and kickoffs be within 6h.
+export function attachUs(sport, pairs, usGames) {
+  let n = 0;
+  for (const p of pairs || []) {
+    if (!p || !Array.isArray(p.legs) || p.legs.length !== 2) continue;
+    for (const g of usGames || []) {
+      if (!Number.isFinite(g.startMs) || Math.abs(g.startMs - p.startMs) > 6 * 3600e3) continue;
+      let longIdx = -1;
+      if (teamMatch(sport, g.teams[0], p.legs[0].team) && teamMatch(sport, g.teams[1], p.legs[1].team)) longIdx = 0;
+      else if (teamMatch(sport, g.teams[0], p.legs[1].team) && teamMatch(sport, g.teams[1], p.legs[0].team)) longIdx = 1;
+      if (longIdx < 0) continue;
+      p.usSlug = g.slug; p.usLongIdx = longIdx; n++; break;
+    }
+  }
+  return n;
+}
+
+// Rebuild the matched-pairs list (Kalshi game series x Polymarket tags, plus
+// the Polymarket US moneyline where one exists), one Kalshi call and one
+// Polymarket US call per sport. Cached in KV for XV_PAIRS_TTL_MS; games are
+// kept while they are within 36h ahead or 6h behind.
 export async function buildPairs(env, nowMs = Date.now()) {
   const pairs = []; const diag = {};
   for (const [sport, cfg] of Object.entries(XV_SPORTS)) {
@@ -156,8 +203,12 @@ export async function buildPairs(env, nowMs = Date.now()) {
       let poly = [];
       for (const tag of cfg.tags) poly = poly.concat(await gammaMarketsByTag(tag));
       const got = matchPairs(sport, kal, poly, nowMs).filter(p => p.startMs > nowMs - 6 * 3600e3 && p.startMs < nowMs + 36 * 3600e3);
-      pairs.push(...got);
       diag[sport] = { kalshi: kal.length, poly: poly.length, matched: got.length };
+      if (cfg.us && got.length) {
+        try { diag[sport].us = attachUs(sport, got, await usLeagueGames(cfg.us)); }
+        catch (e) { diag[sport].usError = e.message.slice(0, 60); }
+      }
+      pairs.push(...got);
     } catch (e) { diag[sport] = { error: e.message.slice(0, 80) }; }
   }
   const blob = { builtAt: nowMs, pairs, diag };
@@ -173,13 +224,16 @@ const bestOf = (book) => {
 // One sample: Kalshi top-of-book (one call, ticker list) + Polymarket books
 // (one POST) for every live leg -> D1 rows. Returns a small status object.
 export async function sampleXvenue(env, nowMs = Date.now()) {
+  const mark = async (stage, extra) => { try { await env.SIGNALS_CACHE.put(XV_KEYS.BOOT, JSON.stringify({ at: new Date(nowMs).toISOString(), stage, ...(extra || {}) }), { expirationTtl: 86400 }); } catch (e) {} };
+  await mark('start');
   let blob = null;
   try { blob = await env.SIGNALS_CACHE.get(XV_KEYS.PAIRS, { type: 'json' }); } catch (e) {}
-  if (!blob || !Array.isArray(blob.pairs) || nowMs - (blob.builtAt || 0) > XV_PAIRS_TTL_MS) blob = await buildPairs(env, nowMs);
+  if (!blob || !Array.isArray(blob.pairs) || nowMs - (blob.builtAt || 0) > XV_PAIRS_TTL_MS) { await mark('build'); blob = await buildPairs(env, nowMs); }
   const live = blob.pairs.filter(p => isLive(p, nowMs));
+  await mark('quotes', { pairs: blob.pairs.length, live: live.length });
   const status = { at: new Date(nowMs).toISOString(), pairs: blob.pairs.length, live: live.length, rows: 0, diag: blob.diag };
-  if (!live.length) { try { await env.SIGNALS_CACHE.put(XV_KEYS.LAST, JSON.stringify(status), { expirationTtl: 86400 }); } catch (e) {} return status; }
-  const legs = live.flatMap(p => p.legs.map(l => ({ ...l, sport: p.sport, game: p.game, startMs: p.startMs, feeRate: p.feeRate })));
+  if (!live.length) { try { await env.SIGNALS_CACHE.put(XV_KEYS.LAST, JSON.stringify(status), { expirationTtl: 86400 }); } catch (e) {} await mark('done', { rows: 0, live: 0 }); return status; }
+  const legs = live.flatMap(p => p.legs.map((l, i) => ({ ...l, sport: p.sport, game: p.game, startMs: p.startMs, feeRate: p.feeRate, usSlug: p.usSlug || null, usLong: p.usLongIdx === i })));
   const kq = new Map();
   for (let i = 0; i < legs.length; i += 40) {
     try { const r = await kalshiJson(`/markets?tickers=${legs.slice(i, i + 40).map(l => l.kTicker).join(',')}&limit=100`); for (const m of r.markets || []) kq.set(m.ticker, m); }
@@ -192,16 +246,31 @@ export async function sampleXvenue(env, nowMs = Date.now()) {
       if (res.ok) for (const b of await res.json()) pq.set(b.asset_id, b);
     } catch (e) { status.polyError = e.message.slice(0, 80); }
   }
+  // Polymarket US: one BBO call per live game (the instrument quotes the long side).
+  const uq = new Map();
+  const usSlugs = [...new Set(live.map(p => p.usSlug).filter(Boolean))].slice(0, US_MAX_BBO_CALLS);
+  for (const slug of usSlugs) {
+    try {
+      const res = await fetch(`${US_API}/v1/markets/${encodeURIComponent(slug)}/bbo`);
+      if (!res.ok) continue;
+      const md = (await res.json()).marketData || {};
+      const v = (x) => (x && x.value != null ? Number(x.value) : null);
+      uq.set(slug, { bid: v(md.bestBid), ask: v(md.bestAsk), last: v(md.lastTradePx) });
+    } catch (e) { status.usError = e.message.slice(0, 80); }
+  }
   const ts = Math.floor(nowMs / 1000);
   const stmts = [];
   for (const l of legs) {
-    const k = kq.get(l.kTicker), b = pq.get(l.pToken);
-    if (!k && !b) continue;
+    const k = kq.get(l.kTicker), b = pq.get(l.pToken), u = l.usSlug ? uq.get(l.usSlug) : null;
+    if (!k && !b && !u) continue;
     const p = bestOf(b);
     const num = (v) => (v == null || v === '' ? null : Number(v));
-    stmts.push(env.DB.prepare(`INSERT INTO xvenue_quotes (ts, sport, game, team, phase, k_ticker, k_bid, k_ask, k_last, p_token, p_bid, p_ask, p_last, p_fee_rate) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-      .bind(ts, l.sport, l.game, l.team, l.startMs > nowMs ? 'pre' : 'live', l.kTicker, k ? num(k.yes_bid_dollars) : null, k ? num(k.yes_ask_dollars) : null, k ? num(k.last_price_dollars) : null, l.pToken, p.bid, p.ask, p.last, l.feeRate));
+    // the US instrument quotes one side; the other leg's bid/ask are the complements
+    const us = !u ? { bid: null, ask: null, last: null } : l.usLong ? u : { bid: u.ask == null ? null : Math.round((1 - u.ask) * 10000) / 10000, ask: u.bid == null ? null : Math.round((1 - u.bid) * 10000) / 10000, last: u.last == null ? null : Math.round((1 - u.last) * 10000) / 10000 };
+    stmts.push(env.DB.prepare(`INSERT INTO xvenue_quotes (ts, sport, game, team, phase, k_ticker, k_bid, k_ask, k_last, p_token, p_bid, p_ask, p_last, p_fee_rate, us_bid, us_ask, us_last) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .bind(ts, l.sport, l.game, l.team, l.startMs > nowMs ? 'pre' : 'live', l.kTicker, k ? num(k.yes_bid_dollars) : null, k ? num(k.yes_ask_dollars) : null, k ? num(k.last_price_dollars) : null, l.pToken, p.bid, p.ask, p.last, l.feeRate, us.bid, us.ask, us.last));
   }
+  status.usQuoted = uq.size;
   if (stmts.length) {
     for (let i = 0; i < stmts.length; i += 50) await env.DB.batch(stmts.slice(i, i + 50));
     status.rows = stmts.length;
@@ -210,9 +279,11 @@ export async function sampleXvenue(env, nowMs = Date.now()) {
     try { await env.DB.prepare(`DELETE FROM xvenue_quotes WHERE ts < ?`).bind(ts - XV_PRUNE_DAYS * 86400).run(); } catch (e) {}
   }
   try { await env.SIGNALS_CACHE.put(XV_KEYS.LAST, JSON.stringify(status), { expirationTtl: 86400 }); } catch (e) {}
+  await mark('done', { rows: status.rows });
   return status;
 }
 
+export const usFee = (p, rate = US_TAKER_RATE) => rate * p * (1 - p);
 export const kalshiFee = (p, rate = KALSHI_TAKER_RATE) => rate * p * (1 - p);
 
 // Pure: turn ordered rows for one (game, team) into lead/lag evidence.
@@ -222,8 +293,9 @@ export const kalshiFee = (p, rate = KALSHI_TAKER_RATE) => rate * p * (1 - p);
 //   down-move: Kalshi's bid still above Polymarket ask -> sell Kalshi (buy its NO)
 // Also: who moved first (sign agreement of this minute's Polymarket move with
 // Kalshi's move this minute vs next minute), and the average mid gap/spreads.
-export function analyzeSeries(rows, { moveC = 3, feeRate = KALSHI_TAKER_RATE } = {}) {
-  const out = { samples: 0, bothQuoted: 0, polyMoves: 0, staleKalshi: 0, staleEdgeC: 0, kalshiSameMin: 0, kalshiNextMin: 0, kalshiLeads: 0, gapAbsSumC: 0, kSpreadSumC: 0, pSpreadSumC: 0 };
+export function analyzeSeries(rows, { moveC = 3, feeRate = KALSHI_TAKER_RATE, usRate = US_TAKER_RATE } = {}) {
+  const out = { samples: 0, bothQuoted: 0, polyMoves: 0, staleKalshi: 0, staleEdgeC: 0, kalshiSameMin: 0, kalshiNextMin: 0, kalshiLeads: 0, gapAbsSumC: 0, kSpreadSumC: 0, pSpreadSumC: 0,
+    usQuoted: 0, usGapAbsSumC: 0, usSpreadSumC: 0, staleUs: 0, staleUsEdgeC: 0, kUsCross: 0, kUsCrossEdgeC: 0 };
   const mid = (b, a) => (b != null && a != null ? (b + a) / 2 : null);
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i]; out.samples++;
@@ -231,6 +303,15 @@ export function analyzeSeries(rows, { moveC = 3, feeRate = KALSHI_TAKER_RATE } =
     if (pm == null || km == null) continue;
     out.bothQuoted++;
     out.gapAbsSumC += Math.abs(pm - km) * 100; out.kSpreadSumC += (r.k_ask - r.k_bid) * 100; out.pSpreadSumC += (r.p_ask - r.p_bid) * 100;
+    const um = mid(r.us_bid, r.us_ask);
+    if (um != null) {
+      out.usQuoted++; out.usGapAbsSumC += Math.abs(pm - um) * 100; out.usSpreadSumC += (r.us_ask - r.us_bid) * 100;
+      // the one fully US-legal pair: buy on one venue, sell on the other, both taker fees paid
+      const c1 = r.k_bid - r.us_ask - kalshiFee(r.k_bid, feeRate) - usFee(r.us_ask, usRate);   // buy US, sell Kalshi
+      const c2 = r.us_bid - r.k_ask - usFee(r.us_bid, usRate) - kalshiFee(r.k_ask, feeRate);   // buy Kalshi, sell US
+      const c = Math.max(c1, c2);
+      if (c > 0) { out.kUsCross++; out.kUsCrossEdgeC += c * 100; }
+    }
     const prev = i > 0 ? rows[i - 1] : null;
     const ppm = prev ? mid(prev.p_bid, prev.p_ask) : null, pkm = prev ? mid(prev.k_bid, prev.k_ask) : null;
     if (ppm == null || pkm == null || r.ts - prev.ts > 180) continue;
@@ -239,6 +320,10 @@ export function analyzeSeries(rows, { moveC = 3, feeRate = KALSHI_TAKER_RATE } =
       out.polyMoves++;
       const edge = dP > 0 ? r.p_bid - r.k_ask - kalshiFee(r.k_ask, feeRate) : r.k_bid - r.p_ask - kalshiFee(r.k_bid, feeRate);
       if (edge > 0) { out.staleKalshi++; out.staleEdgeC += edge * 100; }
+      if (um != null) {
+        const ue = dP > 0 ? r.p_bid - r.us_ask - usFee(r.us_ask, usRate) : r.us_bid - r.p_ask - usFee(r.us_bid, usRate);
+        if (ue > 0) { out.staleUs++; out.staleUsEdgeC += ue * 100; }
+      }
       if (Math.sign(dK) === Math.sign(dP) && Math.abs(dK) >= moveC / 2) out.kalshiSameMin++;
       const next = rows[i + 1]; const nkm = next ? mid(next.k_bid, next.k_ask) : null;
       if (nkm != null && next.ts - r.ts <= 180 && Math.sign((nkm - km) * 100) === Math.sign(dP) && Math.abs(nkm - km) * 100 >= moveC / 2) out.kalshiNextMin++;
@@ -254,7 +339,7 @@ export function analyzeSeries(rows, { moveC = 3, feeRate = KALSHI_TAKER_RATE } =
 // Read back the last `hours` of live-phase rows and aggregate per sport.
 export async function xvenueReport(env, { hours = 48, moveC = 3 } = {}) {
   const since = Math.floor(Date.now() / 1000) - hours * 3600;
-  const q = await env.DB.prepare(`SELECT ts, sport, game, team, k_bid, k_ask, p_bid, p_ask FROM xvenue_quotes WHERE ts >= ? AND phase = 'live' ORDER BY sport, game, team, ts LIMIT 60000`).bind(since).all();
+  const q = await env.DB.prepare(`SELECT ts, sport, game, team, k_bid, k_ask, p_bid, p_ask, us_bid, us_ask FROM xvenue_quotes WHERE ts >= ? AND phase = 'live' ORDER BY sport, game, team, ts LIMIT 60000`).bind(since).all();
   const rows = (q && q.results) || [];
   const groups = new Map();
   for (const r of rows) { const k = `${r.sport}|${r.game}|${r.team}`; (groups.get(k) || groups.set(k, []).get(k)).push(r); }
@@ -262,7 +347,7 @@ export async function xvenueReport(env, { hours = 48, moveC = 3 } = {}) {
   for (const [k, series] of groups) {
     const sport = k.split('|')[0];
     const a = analyzeSeries(series, { moveC });
-    const s = bySport[sport] || (bySport[sport] = { legs: 0, samples: 0, bothQuoted: 0, polyMoves: 0, staleKalshi: 0, staleEdgeC: 0, kalshiSameMin: 0, kalshiNextMin: 0, kalshiLeads: 0, gapAbsSumC: 0, kSpreadSumC: 0, pSpreadSumC: 0 });
+    const s = bySport[sport] || (bySport[sport] = { legs: 0, samples: 0, bothQuoted: 0, polyMoves: 0, staleKalshi: 0, staleEdgeC: 0, kalshiSameMin: 0, kalshiNextMin: 0, kalshiLeads: 0, gapAbsSumC: 0, kSpreadSumC: 0, pSpreadSumC: 0, usQuoted: 0, usGapAbsSumC: 0, usSpreadSumC: 0, staleUs: 0, staleUsEdgeC: 0, kUsCross: 0, kUsCrossEdgeC: 0 });
     s.legs++; for (const f of Object.keys(a)) s[f] += a[f];
   }
   for (const s of Object.values(bySport)) {
@@ -271,11 +356,17 @@ export async function xvenueReport(env, { hours = 48, moveC = 3 } = {}) {
     s.avgPolySpreadC = s.bothQuoted ? +(s.pSpreadSumC / s.bothQuoted).toFixed(2) : null;
     s.staleRate = s.polyMoves ? +(s.staleKalshi / s.polyMoves).toFixed(3) : null;
     s.avgStaleEdgeC = s.staleKalshi ? +(s.staleEdgeC / s.staleKalshi).toFixed(2) : null;
-    delete s.gapAbsSumC; delete s.kSpreadSumC; delete s.pSpreadSumC; delete s.staleEdgeC;
+    s.avgUsGapC = s.usQuoted ? +(s.usGapAbsSumC / s.usQuoted).toFixed(2) : null;
+    s.avgUsSpreadC = s.usQuoted ? +(s.usSpreadSumC / s.usQuoted).toFixed(2) : null;
+    s.staleUsRate = s.polyMoves && s.usQuoted ? +(s.staleUs / s.polyMoves).toFixed(3) : null;
+    s.avgStaleUsEdgeC = s.staleUs ? +(s.staleUsEdgeC / s.staleUs).toFixed(2) : null;
+    s.kUsCrossRate = s.usQuoted ? +(s.kUsCross / s.usQuoted).toFixed(4) : null;
+    s.avgKUsCrossEdgeC = s.kUsCross ? +(s.kUsCrossEdgeC / s.kUsCross).toFixed(2) : null;
+    delete s.gapAbsSumC; delete s.kSpreadSumC; delete s.pSpreadSumC; delete s.staleEdgeC; delete s.usGapAbsSumC; delete s.usSpreadSumC; delete s.staleUsEdgeC; delete s.kUsCrossEdgeC;
   }
-  let last = null; try { last = await env.SIGNALS_CACHE.get(XV_KEYS.LAST, { type: 'json' }); } catch (e) {}
+  let last = null, boot = null; try { last = await env.SIGNALS_CACHE.get(XV_KEYS.LAST, { type: 'json' }); boot = await env.SIGNALS_CACHE.get(XV_KEYS.BOOT, { type: 'json' }); } catch (e) {}
   return {
-    success: true, hours, moveC, rows: rows.length, legs: groups.size, bySport, last,
-    read: `polyMoves = minutes where Polymarket's mid moved >= ${moveC}c; staleKalshi = of those, Kalshi's same-minute quote was still crossable after its ${KALSHI_TAKER_RATE * 100}% x p(1-p) taker fee (avgStaleEdgeC = cents of edge per share); kalshiSameMin/NextMin = Kalshi moved the same way that minute / the next; kalshiLeads = Kalshi moved first and Polymarket followed. A Kalshi lane is worth building only if staleRate x avgStaleEdgeC is meaningfully positive over many games.`,
+    success: true, hours, moveC, rows: rows.length, legs: groups.size, bySport, last, boot,
+    read: `polyMoves = minutes where Polymarket's mid moved >= ${moveC}c; staleKalshi = of those, Kalshi's same-minute quote was still crossable after its ${KALSHI_TAKER_RATE * 100}% x p(1-p) taker fee (avgStaleEdgeC = cents of edge per share); kalshiSameMin/NextMin = Kalshi moved the same way that minute / the next; kalshiLeads = Kalshi moved first and Polymarket followed. A Kalshi lane is worth building only if staleRate x avgStaleEdgeC is meaningfully positive over many games. us* = the same for Polymarket US (taker ${US_TAKER_RATE * 100}% x p(1-p)); kUsCross = minutes where buying on one US-legal venue and selling on the other cleared both taker fees (the only fully legal arbitrage pair for a US operator).`,
   };
 }
