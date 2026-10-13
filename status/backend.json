@@ -1,21 +1,21 @@
 {
-  "fetchedAt": "2026-10-13T16:00:49Z",
+  "fetchedAt": "2026-10-13T16:13:03Z",
   "health": {
     "status": "ok",
-    "timestamp": "2026-10-13T16:00:51.166Z",
+    "timestamp": "2026-10-13T16:13:04.903Z",
     "version": "21.1.0 - Modularize: extract src/odds.js + src/gamma.js from index.js",
     "cache": {
-      "signalCount": 14741,
-      "oldestSignal": "2026-10-06T16:00:35.000Z",
-      "newestSignal": "2026-10-13T15:49:46.000Z"
+      "signalCount": 14738,
+      "oldestSignal": "2026-10-06T16:10:21.000Z",
+      "newestSignal": "2026-10-13T16:06:25.000Z"
     }
   },
   "cronStatus": {
     "success": true,
     "lastRun": {
-      "startedAt": "2026-10-13T15:55:16.996Z",
+      "startedAt": "2026-10-13T16:10:18.386Z",
       "scan": {
-        "signals": 468,
+        "signals": 479,
         "success": true
       },
       "settlement": {
@@ -34,7 +34,7 @@
       },
       "overround": {
         "scanned": 72,
-        "flagged": 46
+        "flagged": 45
       },
       "sweep": {
         "skipped": "daily $ cap reached"
@@ -66,7 +66,7 @@
         "settled": 0
       },
       "invSettle": {
-        "checked": 5,
+        "checked": 0,
         "scored": 0
       },
       "signalBackfill": {
@@ -81,11 +81,11 @@
         "phase": "done"
       },
       "autotrader": {
-        "evaluated": 468,
+        "evaluated": 479,
         "tradesOpened": 0,
         "tradesPaperTraded": 0,
         "tradesQueued": 0,
-        "skipped": 468,
+        "skipped": 479,
         "skipReasons": {
           "Entry price too high for other (59% > 40%)": 1,
           "Entry price too high for other (58% > 40%)": 1,
@@ -97,7 +97,8 @@
           "Entry price too high for other (53% > 40%)": 1,
           "Entry price too high for sports_binary (67% > 40%)": 4,
           "Entry price too high for sports_binary (62% > 40%)": 2,
-          "No winning wallet on signal": 328,
+          "No winning wallet on signal": 337,
+          "Entry price too high for sports_binary (52% > 40%)": 4,
           "Market already closed/resolved on Gamma": 7,
           "Entry price too high for sports_binary (46% > 40%)": 2,
           "Entry price too high for sports_binary (43% > 40%)": 1,
@@ -106,7 +107,6 @@
           "Entry price too high for sports_binary (47% > 40%)": 1,
           "Entry price too high for sports_binary (51% > 40%)": 1,
           "Entry price too high for sports_binary (66% > 40%)": 2,
-          "Entry price too high for sports_binary (52% > 40%)": 3,
           "Entry price too high for sports_binary (49% > 40%)": 5,
           "Entry price too high for other (72% > 40%)": 1,
           "Signal has no market slug — cannot price or settle": 6,
@@ -126,7 +126,7 @@
           "Entry price too high for sports_binary (60% > 40%)": 2,
           "Entry price too high for sports_binary (63% > 40%)": 1,
           "Event too far out (81d > 7d horizon)": 3,
-          "Event too far out (9d > 7d horizon)": 2,
+          "Event too far out (9d > 7d horizon)": 1,
           "Entry price too high for other (57% > 40%)": 1,
           "Entry price too high for other (66% > 40%)": 1,
           "Entry price too high for sports_binary (56% > 40%)": 2,
@@ -136,7 +136,8 @@
           "Entry price too high for sports_other (50% > 40%)": 1,
           "Entry price too high for sports_binary (65% > 40%)": 1,
           "Event too far out (261d > 7d horizon)": 2,
-          "Event too far out (444d > 7d horizon)": 1,
+          "Event too far out (444d > 7d horizon)": 2,
+          "Event too far out (18d > 7d horizon)": 1,
           "Event too far out (19d > 7d horizon)": 5,
           "Event too far out (49d > 7d horizon)": 1,
           "Event too far out (21d > 7d horizon)": 1,
@@ -181,15 +182,15 @@
         "totalPnL": -30.109999999999978
       },
       "speed": {
-        "watching": 5,
-        "priced": 0,
-        "dropped": 0
+        "watching": 7,
+        "priced": 4,
+        "dropped": 1
       },
       "forge": {
         "skipped": "ran recently",
         "lastRun": "2026-10-13T05:45:45.948Z"
       },
-      "completedAt": "2026-10-13T15:56:21.350Z"
+      "completedAt": "2026-10-13T16:11:30.238Z"
     },
     "cronSchedule": "Every 5 minutes",
     "note": "Settlement runs automatically. Sports events settle ~12h after game ends."
@@ -1063,59 +1064,6 @@
   "tradeLog": [
     {
       "type": "SKIP",
-      "market": "LoL: Team WE vs FlyQuest (BO5) - Demacia Cup Global Invitational Playoffs",
-      "reason": "AI confidence too low: 16% (min 35%, time:16%)",
-      "aiConfidence": 16,
-      "aiComponents": [
-        {
-          "source": "time",
-          "confidence": 16,
-          "weight": 0.5
-        }
-      ],
-      "marketCategory": "sports_binary",
-      "timestamp": "2026-10-13T09:36:08.114Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "Bills vs. Rams",
-      "reason": "Entry price too high for sports_binary (61% > 40%)",
-      "walletTier": "STRONG",
-      "marketCategory": "sports_binary",
-      "timestamp": "2026-10-13T09:41:08.707Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "Will Jeremiah Smith win the 2026 Heisman Trophy?",
-      "reason": "AI confidence too low: 29% (min 35%, time:29%)",
-      "aiConfidence": 29,
-      "aiComponents": [
-        {
-          "source": "time",
-          "confidence": 29,
-          "weight": 0.5
-        }
-      ],
-      "marketCategory": "sports_other",
-      "timestamp": "2026-10-13T10:06:05.223Z"
-    },
-    {
-      "type": "SKIP",
-      "market": "LoL: Team WE vs FlyQuest (BO5) - Demacia Cup Global Invitational Playoffs",
-      "reason": "AI confidence too low: 26% (min 35%, time:26%)",
-      "aiConfidence": 26,
-      "aiComponents": [
-        {
-          "source": "time",
-          "confidence": 26,
-          "weight": 0.5
-        }
-      ],
-      "marketCategory": "sports_binary",
-      "timestamp": "2026-10-13T10:06:05.354Z"
-    },
-    {
-      "type": "SKIP",
       "market": "Spread: Bills (-3.5)",
       "reason": "Market already closed/resolved on Gamma",
       "marketCategory": "other",
@@ -1368,6 +1316,44 @@
       "walletTier": "STRONG",
       "marketCategory": "other",
       "timestamp": "2026-10-13T15:56:19.471Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Bills vs. Rams",
+      "reason": "Market already closed/resolved on Gamma",
+      "marketCategory": "sports_binary",
+      "timestamp": "2026-10-13T16:06:23.177Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Spread: FC Barcelona (-1.5)",
+      "reason": "Entry price too high for other (59% > 40%)",
+      "walletTier": "STRONG",
+      "marketCategory": "other",
+      "timestamp": "2026-10-13T16:11:24.901Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Bills vs. Rams",
+      "reason": "Entry price too high for sports_binary (61% > 40%)",
+      "walletTier": "STRONG",
+      "marketCategory": "sports_binary",
+      "timestamp": "2026-10-13T16:11:24.976Z"
+    },
+    {
+      "type": "SKIP",
+      "market": "Will Jeremiah Smith win the 2026 Heisman Trophy?",
+      "reason": "AI confidence too low: 29% (min 35%, time:29%)",
+      "aiConfidence": 29,
+      "aiComponents": [
+        {
+          "source": "time",
+          "confidence": 29,
+          "weight": 0.5
+        }
+      ],
+      "marketCategory": "sports_other",
+      "timestamp": "2026-10-13T16:11:25.250Z"
     }
   ],
   "tradeHistory": [
@@ -3043,7 +3029,7 @@
       "totalFactorsTracked": 13,
       "totalSignalsProcessed": 17575,
       "overallWinRate": 55,
-      "pendingSignals": 364
+      "pendingSignals": 370
     },
     "walletEdge": {
       "totalTracked": 500,
@@ -3283,7 +3269,7 @@
       "wins": 9711,
       "losses": 7864,
       "winRate": 55,
-      "pendingSignals": 364
+      "pendingSignals": 370
     },
     "insights": {
       "bestFactors": [
@@ -5601,7 +5587,7 @@
         "market_impact": "[{\"asset\":\"Crude oil (Brent/WTI)\",\"assetType\":\"commodity\",\"direction\":\"UP\",\"conviction\":\"HIGH\",\"rationale\":\"A US ground invasion aimed at controlling Iranian territory would dramatically escalate the Strait of Hormuz crisis, threatening the ~20% of global oil flow through the strait and spiking prices well beyond the already-elevated ~$103-105/bbl levels.\"},{\"asset\":\"Defense sector (e.g. LMT, RTX, NOC)\",\"assetType\":\"sector\",\"direction\":\"UP\",\"conviction\":\"MEDIUM\",\"rationale\":\"A full ground offensive would require massive sustained military resupply and new contracts, boosting defense contractor revenues and order backlogs.\"},{\"asset\":\"BTC\",\"assetType\":\"crypto\",\"direction\":\"DOWN\",\"conviction\":\"MEDIUM\",\"rationale\":\"A major escalation to ground invasion would likely trigger a broad risk-off shock across global markets, pressuring crypto alongside equities even as some view BTC as a geopolitical hedge.\"},{\"asset\":\"Gold\",\"assetType\":\"commodity\",\"direction\":\"UP\",\"conviction\":\"MEDIUM\",\"rationale\":\"Escalation to a full invasion scenario would drive safe-haven demand for gold amid heightened war risk and potential disruption to global energy and trade flows.\"}]",
         "last_error": null,
         "market_prob_now": 0.835,
-        "price_checked_at": "2026-10-13T16:01:00.869Z"
+        "price_checked_at": "2026-10-13T16:13:17.536Z"
       },
       {
         "inv_key": "investigation:next-zptai-glm-5pt4-released-by-october-31-2026-763::Yes",
@@ -5631,7 +5617,7 @@
         "market_impact": null,
         "last_error": null,
         "market_prob_now": 0.675,
-        "price_checked_at": "2026-10-13T16:01:00.869Z"
+        "price_checked_at": "2026-10-13T16:13:17.536Z"
       },
       {
         "inv_key": "investigation:will-jeremiah-smith-win-the-2026-heisman-trophy-20260731185756307::No",
@@ -5661,7 +5647,7 @@
         "market_impact": null,
         "last_error": null,
         "market_prob_now": 0.425,
-        "price_checked_at": "2026-10-13T16:01:00.869Z"
+        "price_checked_at": "2026-10-13T16:13:17.536Z"
       },
       {
         "inv_key": "investigation:lowest-temperature-in-warsaw-on-october-12-2026-2c::Yes",
@@ -5747,7 +5733,7 @@
         "market_impact": null,
         "last_error": null,
         "market_prob_now": 0.085,
-        "price_checked_at": "2026-10-13T16:01:00.869Z"
+        "price_checked_at": "2026-10-13T16:13:17.536Z"
       },
       {
         "inv_key": "investigation:lowest-temperature-in-chongqing-on-october-12-2026-16c::Yes",
@@ -5805,7 +5791,7 @@
         "market_impact": null,
         "last_error": null,
         "market_prob_now": 0.0005,
-        "price_checked_at": "2026-10-13T16:01:00.869Z"
+        "price_checked_at": "2026-10-13T16:13:17.536Z"
       },
       {
         "inv_key": "investigation:us-x-iran-ceasefire-continues-through-october-31-20260917::Yes",
@@ -5835,7 +5821,7 @@
         "market_impact": "[{\"asset\":\"Crude oil\",\"assetType\":\"commodity\",\"direction\":\"DOWN\",\"conviction\":\"MEDIUM\",\"rationale\":\"Continued ceasefire reduces risk premium tied to Strait of Hormuz disruption fears, easing upward pressure on oil prices.\"},{\"asset\":\"Defense sector\",\"assetType\":\"sector\",\"direction\":\"DOWN\",\"conviction\":\"LOW\",\"rationale\":\"Sustained de-escalation reduces near-term demand expectations for munitions and defense contracts tied to Middle East conflict risk.\"},{\"asset\":\"BTC\",\"assetType\":\"crypto\",\"direction\":\"UP\",\"conviction\":\"LOW\",\"rationale\":\"Reduced geopolitical risk-off sentiment generally supports risk assets including crypto as safe-haven demand diminishes.\"},{\"asset\":\"Gold\",\"assetType\":\"commodity\",\"direction\":\"DOWN\",\"conviction\":\"LOW\",\"rationale\":\"Easing war risk lowers safe-haven demand for gold, a typical beneficiary of Middle East conflict escalation fears.\"}]",
         "last_error": null,
         "market_prob_now": 0.805,
-        "price_checked_at": "2026-10-13T16:01:00.869Z"
+        "price_checked_at": "2026-10-13T16:13:17.536Z"
       },
       {
         "inv_key": "investigation:will-the-democratic-party-win-the-mn-08-house-seat::Yes",
@@ -7417,12 +7403,12 @@
   "speed": {
     "success": true,
     "overall": {
-      "n": 773,
-      "avg_lag_sec": 331,
-      "lag_cost_c": 0.06,
-      "drift_5m_c": 0.24,
+      "n": 778,
+      "avg_lag_sec": 330,
+      "lag_cost_c": 0.05,
+      "drift_5m_c": 0.27,
       "drift_15m_c": -0.01,
-      "drift_60m_c": 0.2
+      "drift_60m_c": 0.14
     },
     "byLag": [
       {
@@ -7433,13 +7419,13 @@
       },
       {
         "lag": "2-5m",
-        "n": 285,
-        "lag_cost_c": -0.13,
+        "n": 289,
+        "lag_cost_c": -0.15,
         "drift_15m_c": 0.69
       },
       {
         "lag": "5-15m",
-        "n": 444,
+        "n": 445,
         "lag_cost_c": 0.2,
         "drift_15m_c": 0.02
       }
@@ -7937,25 +7923,22 @@
       }
     },
     "last": {
-      "at": "2026-10-13T16:00:24.170Z",
-      "pairs": 31,
+      "at": "2026-10-13T16:13:17.259Z",
+      "pairs": 21,
       "live": 0,
       "rows": 0,
       "diag": {
         "nfl": {
-          "kalshi": 0
+          "error": "kalshi 429 /markets?series_ticker=KXNFLGAME&status=open&limit=1000"
         },
         "cfb": {
           "kalshi": 8,
-          "poly": 28049,
+          "poly": 28050,
           "matched": 4,
           "us": 4
         },
         "nba": {
-          "kalshi": 24,
-          "poly": 629,
-          "matched": 10,
-          "us": 10
+          "error": "kalshi 429 /markets?series_ticker=KXNBAGAME&status=open&limit=1000"
         },
         "nhl": {
           "kalshi": 36,
@@ -7965,17 +7948,17 @@
         },
         "mlb": {
           "kalshi": 4,
-          "poly": 2594,
+          "poly": 2704,
           "matched": 1,
           "us": 1
         },
         "wnba": {
-          "error": "kalshi 429 /markets?series_ticker=KXWNBAGAME&status=open&limit=1000"
+          "kalshi": 0
         }
       }
     },
     "boot": {
-      "at": "2026-10-13T16:00:24.170Z",
+      "at": "2026-10-13T16:13:17.259Z",
       "stage": "done",
       "rows": 0,
       "live": 0
