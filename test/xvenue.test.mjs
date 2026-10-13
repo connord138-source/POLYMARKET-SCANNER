@@ -54,7 +54,7 @@ const P = (q, outs, start, toks = ["t0", "t1"], extra = {}) => ({ question: q, o
 }
 {
   // end-to-end sample with mocked Kalshi, Gamma, CLOB, KV and D1
-  const kv = new Map(); const rows = []; let kalshiCalls = 0; let gammaUrl = "";
+  const kv = new Map(); const rows = []; let kalshiCalls = 0; let gammaUrl = ""; let kalshiUa = "";
   const env = {
     SIGNALS_CACHE: { get: async (k) => { const v = kv.get(k); return v === undefined ? null : JSON.parse(v); }, put: async (k, v) => { kv.set(k, v); } },
     DB: { prepare: (sql) => ({ bind: (...a) => ({ sql, a, run: async () => {} }), run: async () => {} }), batch: async (st) => { rows.push(...st); } },
@@ -62,7 +62,7 @@ const P = (q, outs, start, toks = ["t0", "t1"], extra = {}) => ({ question: q, o
   const now = Date.parse("2026-10-13T00:30:00Z");   // Bills-Rams kicked off 15 min ago
   globalThis.fetch = async (url, opts) => {
     const u = String(url);
-    if (u.includes("kalshi") && u.includes("series_ticker=KXNFLGAME")) { kalshiCalls++; if (kalshiCalls === 1) return { ok: false, status: 429, json: async () => ({}) }; return { ok: true, json: async () => ({ markets: [K("KXNFLGAME-26OCT13BUFLA", "Buffalo", "2026-10-13T04:00:00Z", "0.38", "0.39"), K("KXNFLGAME-26OCT13BUFLA", "Los Angeles", "2026-10-13T04:00:00Z", "0.61", "0.62")] }) }; }
+    if (u.includes("kalshi") && u.includes("series_ticker=KXNFLGAME")) { kalshiCalls++; kalshiUa = (opts && opts.headers && opts.headers['user-agent']) || ""; if (kalshiCalls === 1) return { ok: false, status: 429, headers: { get: (h) => (h === "retry-after" ? "1" : null) }, json: async () => ({}) }; return { ok: true, json: async () => ({ markets: [K("KXNFLGAME-26OCT13BUFLA", "Buffalo", "2026-10-13T04:00:00Z", "0.38", "0.39"), K("KXNFLGAME-26OCT13BUFLA", "Los Angeles", "2026-10-13T04:00:00Z", "0.61", "0.62")] }) }; }
     if (u.includes("kalshi") && u.includes("series_ticker=")) { kalshiCalls++; return { ok: true, json: async () => ({ markets: [] }) }; }
     if (u.includes("kalshi") && u.includes("tickers=")) return { ok: true, json: async () => ({ markets: [{ ticker: "KXNFLGAME-26OCT13BUFLA-BUF", yes_bid_dollars: "0.3700", yes_ask_dollars: "0.3900", last_price_dollars: "0.3800" }, { ticker: "KXNFLGAME-26OCT13BUFLA-LOS", yes_bid_dollars: "0.6100", yes_ask_dollars: "0.6300" }] }) };
     if (u.includes("gamma-api") && u.includes("tag_slug=nfl")) { gammaUrl = u; return { ok: true, json: async () => [{ title: "Bills vs. Rams", markets: [P("Bills vs. Rams", ["Bills", "Rams"], "2026-10-13T00:15:00Z")] }] }; }
@@ -77,7 +77,7 @@ const P = (q, outs, start, toks = ["t0", "t1"], extra = {}) => ({ question: q, o
   check("sample: pairs built, one live game, two rows, correct columns", s1.pairs === 1 && s1.live === 1 && s1.rows === 2 && rows[0].a[0] === Math.floor(now / 1000) && rows[0].a[3] === "Bills" && rows[0].a[4] === "live" && rows[0].a[6] === 0.37 && rows[0].a[7] === 0.39 && rows[0].a[10] === 0.38 && rows[0].a[11] === 0.39 && rows[0].a[13] === 0.03, JSON.stringify({ s1, row: rows[0] && rows[0].a }));
   check("sample: Polymarket US quotes on the long leg and complemented on the other", s1.usQuoted === 1 && rows[0].a[14] === 0.38 && rows[0].a[15] === 0.3825 && rows[0].a[16] === 0.381 && rows[1].a[3] === "Rams" && rows[1].a[14] === 0.6175 && rows[1].a[15] === 0.62 && rows[1].a[16] === 0.619, JSON.stringify([rows[0].a.slice(14), rows[1].a.slice(14)]));
   check("sample: stage marker reaches done", kv.has("xv_boot") && JSON.parse(kv.get("xv_boot")).stage === "done");
-  check("sample: a Kalshi 429 is retried once; Gamma asks for ending-soonest events", kalshiCalls >= 2 && s1.diag.nfl.matched === 1 && /order=endDate&ascending=true&end_date_min=/.test(gammaUrl), JSON.stringify({ kalshiCalls, gammaUrl, diag: s1.diag }));
+  check("sample: a Kalshi 429 is retried (Retry-After honoured), calls carry a User-Agent; Gamma asks for ending-soonest events", kalshiCalls >= 2 && /edgerunner-xvenue/.test(kalshiUa) && s1.diag.nfl.matched === 1 && /order=endDate&ascending=true&end_date_min=/.test(gammaUrl), JSON.stringify({ kalshiCalls, kalshiUa, gammaUrl, diag: s1.diag }));
   const callsAfterBuild = kalshiCalls;
   const s2 = await sampleXvenue(env, now + 60e3);
   check("sample: second minute reuses the cached pairs (no Kalshi series calls)", kalshiCalls === callsAfterBuild && s2.rows === 2 && rows.length === 4);

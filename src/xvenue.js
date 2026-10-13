@@ -14,7 +14,7 @@ const CLOB_API = 'https://clob.polymarket.com';
 const US_API = 'https://gateway.polymarket.us';   // Polymarket US public market data (no key)
 
 export const XV_KEYS = { PAIRS: 'xv_pairs', LAST: 'xv_last', BOOT: 'xv_boot' };
-export const XV_PAIRS_TTL_MS = 15 * 60e3;
+export const XV_PAIRS_TTL_MS = 30 * 60e3;        // pairs change slowly; fewer Kalshi series calls
 export const XV_LIVE_BEFORE_MS = 30 * 60e3;        // start sampling 30 min before kickoff
 export const XV_LIVE_AFTER_MS = 4.5 * 3600e3;      // ... and stop 4.5h after it
 export const XV_PRUNE_DAYS = 14;
@@ -133,11 +133,20 @@ export function isLive(pair, nowMs) {
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-// Kalshi rate-limits bursts (six series calls back to back drew 429s on the
-// first live run): one retry after a pause.
-async function kalshiJson(path, retry = 1) {
-  const res = await fetch(`${KALSHI_API}${path}`, { headers: { accept: 'application/json' } });
-  if (res.status === 429 && retry > 0) { await sleep(1500); return kalshiJson(path, retry - 1); }
+// Kalshi 429s most unauthenticated calls that arrive from Cloudflare's shared
+// egress (first night: 4 of 6 series calls, and every per-minute quote call,
+// while the same calls from elsewhere at 0.5s spacing all return 200). Workers
+// send no User-Agent by default, so identify ourselves, honour Retry-After,
+// and back off 2s/4s/8s before giving up.
+export const KALSHI_UA = 'edgerunner-xvenue/1.0 (+https://edgerunner.vip; research sampler)';
+export const KALSHI_RETRIES = 3;
+async function kalshiJson(path, retry = KALSHI_RETRIES) {
+  const res = await fetch(`${KALSHI_API}${path}`, { headers: { accept: 'application/json', 'user-agent': KALSHI_UA } });
+  if (res.status === 429 && retry > 0) {
+    const ra = Number(res.headers && typeof res.headers.get === 'function' ? res.headers.get('retry-after') : 0);
+    await sleep(Number.isFinite(ra) && ra > 0 ? Math.min(ra, 10) * 1000 : 2000 * Math.pow(2, KALSHI_RETRIES - retry));
+    return kalshiJson(path, retry - 1);
+  }
   if (!res.ok) throw new Error(`kalshi ${res.status} ${path.slice(0, 60)}`);
   return res.json();
 }
@@ -220,7 +229,7 @@ export async function buildPairs(env, nowMs = Date.now()) {
       }
       pairs.push(...got);
     } catch (e) { diag[sport] = { error: e.message.slice(0, 80) }; }
-    await sleep(400);   // pace the Kalshi series calls
+    await sleep(2500);   // pace the Kalshi series calls (6 sports x 2.5s fits the cron easily)
   }
   const blob = { builtAt: nowMs, pairs, diag };
   try { await env.SIGNALS_CACHE.put(XV_KEYS.PAIRS, JSON.stringify(blob), { expirationTtl: 3600 }); } catch (e) {}
