@@ -74,6 +74,15 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   stage the minute cron reached (`xv_boot`). Pregame scans
   (Oct 2026) found no cross-venue or neg-risk arbitrage — see
   `docs/PROFIT-AVENUES.md` Part 2 before proposing structural-arb features.
+- `src/crypto-fv.js` — crypto fair value: every Polymarket BTC/ETH/SOL price
+  contract ("above $X on <date>" = European digital; "dip to"/"reach" =
+  one-touch via reflection) priced from Coinbase realized vol (7d/30d/90d,
+  30d is the model sigma). KV `crypto_fv`, refreshed at the top of each cron;
+  `GET /crypto/fairvalue` (snapshot key `cryptoFv`); scan signals on those
+  markets carry `cryptoFv` (modelSide vs paid for the whale's side). The
+  frontend Crypto Lab re-prices client-side (src/lib/cryptoFv.js). Calibration
+  Oct 2026: median |gap| 1.4c on liquid BTC contracts; far-dated tails trade
+  7-12c above the lognormal — a tail gap is a model warning, not an edge.
 - `src/kalshi.js` — signed Kalshi API client (Ed25519 or RSA-PSS over
   `timestamp + METHOD + /trade-api/v2/path`, query stripped). Secrets
   `KALSHI_API_KEY_ID` + `KALSHI_PRIVATE_KEY` (PEM) are pushed by
