@@ -8,7 +8,7 @@
 // there is one, lives in-game, at minute resolution. Rows go to D1
 // `xvenue_quotes`; `xvenueReport` reads them back.
 
-const KALSHI_API = 'https://api.elections.kalshi.com/trade-api/v2';
+import { KALSHI_API, kalshiHeaders, kalshiAuthConfigured } from './kalshi.js';
 const GAMMA_API = 'https://gamma-api.polymarket.com';
 const CLOB_API = 'https://clob.polymarket.com';
 const US_API = 'https://gateway.polymarket.us';   // Polymarket US public market data (no key)
@@ -135,27 +135,25 @@ export function isLive(pair, nowMs) {
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 // Kalshi 429s most unauthenticated calls that arrive from Cloudflare's shared
-// egress (first night: 4 of 6 series calls, and every per-minute quote call,
-// while the same calls from elsewhere at 0.5s spacing all return 200). Workers
-// send no User-Agent by default, so identify ourselves, honour Retry-After,
-// and back off 2s/4s/8s before giving up.
-export const KALSHI_UA = 'edgerunner-xvenue/1.0 (+https://edgerunner.vip; research sampler)';
+// egress (the same calls from elsewhere return 200), so calls are signed with
+// the operator's API key when KALSHI_API_KEY_ID / KALSHI_PRIVATE_KEY are set
+// (src/kalshi.js, pushed by push-kalshi-key.yml). Either way: identify
+// ourselves, honour Retry-After, back off 2s/4s/8s.
+export { KALSHI_UA } from './kalshi.js';
 export const KALSHI_RETRIES = 3;
-async function kalshiJson(path, retry = KALSHI_RETRIES) {
-  const res = await fetch(`${KALSHI_API}${path}`, { headers: { accept: 'application/json', 'user-agent': KALSHI_UA } });
+async function kalshiJson(env, path, retry = KALSHI_RETRIES) {
+  const { headers } = await kalshiHeaders(env, 'GET', path);
+  const res = await fetch(`${KALSHI_API}${path}`, { headers });
   if (res.status === 429 && retry > 0) {
     const ra = Number(res.headers && typeof res.headers.get === 'function' ? res.headers.get('retry-after') : 0);
     await sleep(Number.isFinite(ra) && ra > 0 ? Math.min(ra, 10) * 1000 : 2000 * Math.pow(2, KALSHI_RETRIES - retry));
-    return kalshiJson(path, retry - 1);
+    return kalshiJson(env, path, retry - 1);
   }
+  if (res.status === 401 || res.status === 403) throw new Error(`kalshi ${res.status} (check KALSHI_API_KEY_ID / KALSHI_PRIVATE_KEY) ${path.slice(0, 40)}`);
   if (!res.ok) throw new Error(`kalshi ${res.status} ${path.slice(0, 60)}`);
   return res.json();
 }
 
-// Gamma's default order puts the oldest active events first, and a sport tag
-// carries thousands of season-long props, so this week's games never made the
-// first pages (first live run: NFL 4,934 markets, 0 matched). Ending-soonest
-// first with end_date_min puts the upcoming games at the front.
 async function gammaMarketsByTag(tag, nowMs = Date.now()) {
   const out = [];
   const endMin = new Date(nowMs - 6 * 3600e3).toISOString();
@@ -217,7 +215,7 @@ export async function buildPairs(env, nowMs = Date.now()) {
   const pairs = []; const diag = {};
   for (const [sport, cfg] of Object.entries(XV_SPORTS)) {
     try {
-      const k = await kalshiJson(`/markets?series_ticker=${cfg.series}&status=open&limit=1000`);
+      const k = await kalshiJson(env, `/markets?series_ticker=${cfg.series}&status=open&limit=1000`);
       const kal = (k.markets || []).filter(m => { const t = Date.parse(m.expected_expiration_time || m.close_time || ''); return !Number.isFinite(t) || (t > nowMs - 6 * 3600e3 && t < nowMs + 48 * 3600e3); });
       if (!kal.length) { diag[sport] = { kalshi: 0 }; continue; }
       let poly = [];
@@ -232,7 +230,7 @@ export async function buildPairs(env, nowMs = Date.now()) {
     } catch (e) { diag[sport] = { error: e.message.slice(0, 80) }; }
     await sleep(2500);   // pace the Kalshi series calls (6 sports x 2.5s fits the cron easily)
   }
-  const blob = { builtAt: nowMs, pairs, diag };
+  const blob = { builtAt: nowMs, pairs, diag, kalshiAuth: kalshiAuthConfigured(env) };
   try { await env.SIGNALS_CACHE.put(XV_KEYS.PAIRS, JSON.stringify(blob), { expirationTtl: 3600 }); } catch (e) {}
   return blob;
 }
@@ -252,14 +250,14 @@ export async function sampleXvenue(env, nowMs = Date.now()) {
   if (!blob || !Array.isArray(blob.pairs) || nowMs - (blob.builtAt || 0) > XV_PAIRS_TTL_MS) { await mark('build'); blob = await buildPairs(env, nowMs); }
   const live = blob.pairs.filter(p => isLive(p, nowMs));
   await mark('quotes', { pairs: blob.pairs.length, live: live.length });
-  const status = { at: new Date(nowMs).toISOString(), pairs: blob.pairs.length, live: live.length, rows: 0, diag: blob.diag };
+  const status = { at: new Date(nowMs).toISOString(), pairs: blob.pairs.length, live: live.length, rows: 0, kalshiAuth: kalshiAuthConfigured(env), diag: blob.diag };
   if (!live.length) { try { await env.SIGNALS_CACHE.put(XV_KEYS.LAST, JSON.stringify(status), { expirationTtl: 86400 }); } catch (e) {} await mark('done', { rows: 0, live: 0 }); return status; }
   const legs = live.flatMap(p => p.legs.map((l, i) => ({ ...l, sport: p.sport, game: p.game, startMs: p.startMs, feeRate: p.feeRate, usSlug: p.usSlug || null, usLong: p.usLongIdx === i })));
   const kq = new Map();
   let kalshiCooldown = null; try { kalshiCooldown = await env.SIGNALS_CACHE.get(XV_KEYS.KALSHI_COOLDOWN); } catch (e) {}
   if (kalshiCooldown) status.kalshiSkipped = 'cooldown after 429';
   else for (let i = 0; i < legs.length; i += 40) {
-    try { const r = await kalshiJson(`/markets?tickers=${legs.slice(i, i + 40).map(l => l.kTicker).join(',')}&limit=100`); for (const m of r.markets || []) kq.set(m.ticker, m); }
+    try { const r = await kalshiJson(env, `/markets?tickers=${legs.slice(i, i + 40).map(l => l.kTicker).join(',')}&limit=100`); for (const m of r.markets || []) kq.set(m.ticker, m); }
     catch (e) {
       status.kalshiError = e.message.slice(0, 80);
       if (/429/.test(e.message)) { try { await env.SIGNALS_CACHE.put(XV_KEYS.KALSHI_COOLDOWN, '1', { expirationTtl: XV_KALSHI_COOLDOWN_S }); } catch (e2) {} }

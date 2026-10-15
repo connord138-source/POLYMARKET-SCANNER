@@ -268,6 +268,9 @@ by roughly the spread (NFL books average 1.8c) plus the taker fee.
    only fully legal arbitrage pair for a US operator. Rule: the same as
    Kalshi's; and if `kUsCross` is non-zero in-game, that pair is the first
    real-money lane to build (both venues are tradable from the US today).
+   Note (Oct 15): Kalshi throttles unauthenticated calls from Cloudflare's
+   shared egress, so the Kalshi columns stay empty until the operator's API
+   key is pushed with `push-kalshi-key.yml` (`src/kalshi.js` signs the calls).
 4. **Not worth building** (measured above): neg-risk arbitrage, strike
    monotonicity, cross-venue pregame arbitrage, settlement-lag sniping,
    liquidity-reward market making (Track A), faster whale copying.

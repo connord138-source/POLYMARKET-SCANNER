@@ -104,5 +104,33 @@ const P = (q, outs, start, toks = ["t0", "t1"], extra = {}) => ({ question: q, o
   const s5 = await sampleXvenue(env, now + 3 * 60e3);
   check("sample: a 429 on the quote call sets a cooldown; the next minute skips Kalshi but still records Polymarket rows", /429/.test(s4.kalshiError || "") && s4.kQuoted === 0 && s4.rows === 2 && s5.kalshiSkipped && s5.rows === 2 && kv.has("xv_kalshi_cooldown"), JSON.stringify({ s4, s5 }));
 }
+{
+  // With the operator's key configured, every Kalshi call is signed (src/kalshi.js) and the status says so.
+  const { generateKeyPairSync, verify } = await import("node:crypto");
+  const ed = generateKeyPairSync("ed25519");
+  const kv = new Map(); const rows = []; const kalshiReqs = [];
+  const env = {
+    KALSHI_API_KEY_ID: "kid-1", KALSHI_PRIVATE_KEY: ed.privateKey.export({ type: "pkcs8", format: "pem" }),
+    SIGNALS_CACHE: { get: async (k) => { const v = kv.get(k); return v === undefined ? null : JSON.parse(v); }, put: async (k, v) => { kv.set(k, v); }, delete: async (k) => { kv.delete(k); } },
+    DB: { prepare: (sql) => ({ bind: (...a) => ({ sql, a, run: async () => {} }), run: async () => {} }), batch: async (st) => { rows.push(...st); } },
+  };
+  const now = Date.parse("2026-10-13T00:30:00Z");
+  globalThis.fetch = async (url, opts) => {
+    const u = String(url);
+    if (u.includes("kalshi")) { kalshiReqs.push({ u, h: (opts && opts.headers) || {} }); }
+    if (u.includes("kalshi") && u.includes("series_ticker=KXNFLGAME")) return { ok: true, status: 200, json: async () => ({ markets: [K("KXNFLGAME-26OCT13BUFLA", "Buffalo", "2026-10-13T04:00:00Z", "0.38", "0.39"), K("KXNFLGAME-26OCT13BUFLA", "Los Angeles", "2026-10-13T04:00:00Z", "0.61", "0.62")] }) };
+    if (u.includes("kalshi") && u.includes("series_ticker=")) return { ok: true, status: 200, json: async () => ({ markets: [] }) };
+    if (u.includes("kalshi") && u.includes("tickers=")) return { ok: true, status: 200, json: async () => ({ markets: [{ ticker: "KXNFLGAME-26OCT13BUFLA-BUF", yes_bid_dollars: "0.3700", yes_ask_dollars: "0.3900" }, { ticker: "KXNFLGAME-26OCT13BUFLA-LOS", yes_bid_dollars: "0.6100", yes_ask_dollars: "0.6300" }] }) };
+    if (u.includes("gamma-api") && u.includes("tag_slug=nfl")) return { ok: true, json: async () => [{ title: "Bills vs. Rams", markets: [P("Bills vs. Rams", ["Bills", "Rams"], "2026-10-13T00:15:00Z")] }] };
+    if (u.includes("gamma-api")) return { ok: true, json: async () => [] };
+    if (u.includes("gateway.polymarket.us/v2/leagues/")) return { ok: true, json: async () => ({ events: [] }) };
+    if (u.endsWith("/books") && opts && opts.method === "POST") return { ok: true, json: async () => [{ asset_id: "t0", bids: [{ price: "0.38", size: "1" }], asks: [{ price: "0.39", size: "1" }] }, { asset_id: "t1", bids: [{ price: "0.61", size: "1" }], asks: [{ price: "0.62", size: "1" }] }] };
+    return { ok: false, status: 404, json: async () => ({}) };
+  };
+  const st = await sampleXvenue(env, now);
+  const q = kalshiReqs.find(r => r.u.includes("tickers="));
+  const signedOk = q && verify(null, Buffer.from(q.h["KALSHI-ACCESS-TIMESTAMP"] + "GET/trade-api/v2/markets"), ed.publicKey, Buffer.from(q.h["KALSHI-ACCESS-SIGNATURE"], "base64"));
+  check("signed: series and quote calls carry a valid Kalshi signature; status reports kalshiAuth; Kalshi quotes land", st.kalshiAuth === true && st.kQuoted === 2 && kalshiReqs.length >= 7 && kalshiReqs.every(r => r.h["KALSHI-ACCESS-KEY"] === "kid-1") && signedOk === true && rows[0].a[6] === 0.37, JSON.stringify({ st, nReq: kalshiReqs.length, row: rows[0] && rows[0].a.slice(0, 8) }));
+}
 console.log(`${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
