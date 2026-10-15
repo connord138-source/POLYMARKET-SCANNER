@@ -1,27 +1,27 @@
 {
-  "fetchedAt": "2026-10-15T11:52:57Z",
+  "fetchedAt": "2026-10-15T15:11:48Z",
   "health": {
     "status": "ok",
-    "timestamp": "2026-10-15T11:52:58.291Z",
+    "timestamp": "2026-10-15T15:11:50.336Z",
     "version": "21.1.0 - Modularize: extract src/odds.js + src/gamma.js from index.js",
     "cache": {
-      "signalCount": 15518,
-      "oldestSignal": "2026-10-08T11:51:41.000Z",
-      "newestSignal": "2026-10-15T11:43:55.000Z"
+      "signalCount": 15581,
+      "oldestSignal": "2026-10-08T15:14:03.000Z",
+      "newestSignal": "2026-10-15T15:05:23.000Z"
     }
   },
   "cronStatus": {
     "success": true,
     "lastRun": {
-      "startedAt": "2026-10-15T11:50:58.309Z",
+      "startedAt": "2026-10-15T15:05:57.181Z",
       "scan": {
-        "signals": 300,
+        "signals": 359,
         "success": true
       },
       "settlement": {
-        "processed": 0,
+        "processed": 1,
         "wins": 0,
-        "losses": 0,
+        "losses": 1,
         "errors": 0
       },
       "investigations": {
@@ -44,7 +44,29 @@
         "confirmed": 0,
         "total": 0
       },
-      "optimization": null,
+      "optimization": {
+        "optimized": true,
+        "totalFactors": 13,
+        "totalOptimized": 2,
+        "optimizations": [
+          {
+            "factor": "strongWallet",
+            "winRate": 58,
+            "samples": 3031,
+            "oldWeight": 1.29,
+            "newWeight": 1.23,
+            "change": -0.06
+          },
+          {
+            "factor": "sportsMarket",
+            "winRate": 53,
+            "samples": 3068,
+            "oldWeight": 1.22,
+            "newWeight": 1.16,
+            "change": -0.06
+          }
+        ]
+      },
       "error": null,
       "edgeScan": {
         "skipped": "odds credits low (128 left)"
@@ -66,7 +88,7 @@
         "settled": 0
       },
       "invSettle": {
-        "checked": 0,
+        "checked": 1,
         "scored": 0
       },
       "signalBackfill": {
@@ -81,27 +103,31 @@
         "phase": "done"
       },
       "autotrader": {
-        "evaluated": 300,
+        "evaluated": 359,
         "tradesOpened": 0,
         "tradesPaperTraded": 0,
         "tradesQueued": 0,
-        "skipped": 300,
+        "skipped": 359,
         "skipReasons": {
-          "Duplicate market (already traded)": 95,
+          "Duplicate market (already traded)": 100,
           "Entry price too high for sports_binary (45% > 40%)": 2,
           "Entry price too high for sports_binary (42% > 40%)": 1,
+          "Entry price too high for sports_binary (70% > 40%)": 4,
+          "Entry price too high for sports_binary (43% > 40%)": 2,
           "Entry price too high for sports_binary (79% > 40%)": 1,
+          "No winning wallet on signal": 193,
           "Entry price too high for other (62% > 40%)": 1,
           "Entry price too high for sports_binary (65% > 40%)": 1,
           "Event too far out (13d > 7d horizon)": 1,
-          "No winning wallet on signal": 151,
           "Entry price too high for sports_binary (56% > 40%)": 1,
           "Entry price too high for sports_other (50% > 40%)": 1,
           "Entry price too high for sports_binary (63% > 40%)": 2,
+          "Event too far out (77d > 7d horizon)": 2,
+          "Entry price too high for sports_binary (67% > 40%)": 1,
+          "Entry price too high for sports_binary (69% > 40%)": 3,
           "Event too far out (78d > 7d horizon)": 9,
           "Entry price too high for sports_binary (41% > 40%)": 2,
           "Entry price too high for sports_binary (57% > 40%)": 1,
-          "Entry price too high for sports_binary (69% > 40%)": 1,
           "Entry price too high for sports_binary (51% > 40%)": 1,
           "Event too far out (444d > 7d horizon)": 4,
           "Event too far out (18d > 7d horizon)": 5,
@@ -110,7 +136,7 @@
           "Event too far out (259d > 7d horizon)": 1,
           "Event too far out (79d > 7d horizon)": 4,
           "No proven edge for entry band 1-20 (-7pt)": 2,
-          "Signal has no market slug — cannot price or settle": 2,
+          "Signal has no market slug — cannot price or settle": 3,
           "Event too far out (47d > 7d horizon)": 1,
           "Event too far out (33d > 7d horizon)": 1,
           "Event too far out (1175d > 7d horizon)": 1,
@@ -153,15 +179,15 @@
         "totalPnL": -30.109999999999978
       },
       "speed": {
-        "watching": 7,
-        "priced": 2,
+        "watching": 8,
+        "priced": 0,
         "dropped": 0
       },
       "forge": {
         "skipped": "ran recently",
         "lastRun": "2026-10-15T05:51:29.790Z"
       },
-      "completedAt": "2026-10-15T11:52:01.046Z"
+      "completedAt": "2026-10-15T15:07:18.921Z"
     },
     "cronSchedule": "Every 5 minutes",
     "note": "Settlement runs automatically. Sports events settle ~12h after game ends."
@@ -890,25 +916,25 @@
       },
       {
         "name": "freshWallet",
-        "wins": 148,
+        "wins": 151,
         "losses": 109,
         "winRate": 58,
         "weight": 1.23,
-        "lastUpdated": "2026-10-14T21:31:41.609Z",
+        "lastUpdated": "2026-10-15T14:57:04.703Z",
         "previousWeight": 1.29,
-        "optimizedAt": "2026-10-14T21:37:01.577Z",
-        "total": 257
+        "optimizedAt": "2026-10-15T15:02:47.192Z",
+        "total": 260
       },
       {
         "name": "strongWallet",
-        "wins": 1739,
+        "wins": 1743,
         "losses": 1288,
-        "winRate": 57,
-        "weight": 1.27,
-        "lastUpdated": "2026-10-15T11:41:47.394Z",
-        "previousWeight": 1.355,
-        "optimizedAt": "2026-10-15T11:41:57.612Z",
-        "total": 3027
+        "winRate": 58,
+        "weight": 1.23,
+        "lastUpdated": "2026-10-15T15:02:27.170Z",
+        "previousWeight": 1.29,
+        "optimizedAt": "2026-10-15T15:07:18.795Z",
+        "total": 3031
       },
       {
         "name": "whaleSize50k",
@@ -934,25 +960,25 @@
       },
       {
         "name": "whaleSize15k",
-        "wins": 1211,
+        "wins": 1212,
         "losses": 969,
         "winRate": 56,
         "weight": 1.2,
-        "lastUpdated": "2026-10-15T03:51:28.661Z",
+        "lastUpdated": "2026-10-15T14:22:22.956Z",
         "previousWeight": 1.26,
-        "optimizedAt": "2026-10-15T03:56:29.186Z",
-        "total": 2180
+        "optimizedAt": "2026-10-15T14:42:36.748Z",
+        "total": 2181
       },
       {
         "name": "whaleSize25k",
-        "wins": 645,
+        "wins": 646,
         "losses": 552,
         "winRate": 54,
         "weight": 1.18,
-        "lastUpdated": "2026-10-15T05:21:34.568Z",
+        "lastUpdated": "2026-10-15T14:42:22.492Z",
         "previousWeight": 1.23,
-        "optimizedAt": "2026-10-15T05:26:32.532Z",
-        "total": 1197
+        "optimizedAt": "2026-10-15T14:57:21.349Z",
+        "total": 1198
       }
     ],
     "bottomFactors": [
@@ -969,47 +995,47 @@
       },
       {
         "name": "sportsMarket",
-        "wins": 1635,
+        "wins": 1636,
         "losses": 1432,
         "winRate": 53,
         "weight": 1.16,
-        "lastUpdated": "2026-10-15T05:26:25.567Z",
+        "lastUpdated": "2026-10-15T15:02:27.170Z",
         "previousWeight": 1.22,
-        "optimizedAt": "2026-10-15T05:41:36.554Z",
-        "total": 3067
+        "optimizedAt": "2026-10-15T15:07:18.795Z",
+        "total": 3068
       },
       {
         "name": "concentrated",
-        "wins": 1766,
-        "losses": 1537,
+        "wins": 1767,
+        "losses": 1538,
         "winRate": 53,
         "weight": 1.16,
-        "lastUpdated": "2026-10-15T05:41:29.122Z",
+        "lastUpdated": "2026-10-15T14:42:12.690Z",
         "previousWeight": 1.22,
-        "optimizedAt": "2026-10-15T06:06:35.554Z",
-        "total": 3303
+        "optimizedAt": "2026-10-15T14:57:21.349Z",
+        "total": 3305
       },
       {
         "name": "whaleSize25k",
-        "wins": 645,
+        "wins": 646,
         "losses": 552,
         "winRate": 54,
         "weight": 1.18,
-        "lastUpdated": "2026-10-15T05:21:34.568Z",
+        "lastUpdated": "2026-10-15T14:42:22.492Z",
         "previousWeight": 1.23,
-        "optimizedAt": "2026-10-15T05:26:32.532Z",
-        "total": 1197
+        "optimizedAt": "2026-10-15T14:57:21.349Z",
+        "total": 1198
       },
       {
         "name": "whaleSize15k",
-        "wins": 1211,
+        "wins": 1212,
         "losses": 969,
         "winRate": 56,
         "weight": 1.2,
-        "lastUpdated": "2026-10-15T03:51:28.661Z",
+        "lastUpdated": "2026-10-15T14:22:22.956Z",
         "previousWeight": 1.26,
-        "optimizedAt": "2026-10-15T03:56:29.186Z",
-        "total": 2180
+        "optimizedAt": "2026-10-15T14:42:36.748Z",
+        "total": 2181
       },
       {
         "name": "lastMinute6h",
@@ -1035,25 +1061,25 @@
       },
       {
         "name": "strongWallet",
-        "wins": 1739,
+        "wins": 1743,
         "losses": 1288,
-        "winRate": 57,
-        "weight": 1.27,
-        "lastUpdated": "2026-10-15T11:41:47.394Z",
-        "previousWeight": 1.355,
-        "optimizedAt": "2026-10-15T11:41:57.612Z",
-        "total": 3027
+        "winRate": 58,
+        "weight": 1.23,
+        "lastUpdated": "2026-10-15T15:02:27.170Z",
+        "previousWeight": 1.29,
+        "optimizedAt": "2026-10-15T15:07:18.795Z",
+        "total": 3031
       },
       {
         "name": "freshWallet",
-        "wins": 148,
+        "wins": 151,
         "losses": 109,
         "winRate": 58,
         "weight": 1.23,
-        "lastUpdated": "2026-10-14T21:31:41.609Z",
+        "lastUpdated": "2026-10-15T14:57:04.703Z",
         "previousWeight": 1.29,
-        "optimizedAt": "2026-10-14T21:37:01.577Z",
-        "total": 257
+        "optimizedAt": "2026-10-15T15:02:47.192Z",
+        "total": 260
       },
       {
         "name": "eliteWallet",
@@ -1100,13 +1126,13 @@
         {
           "name": "sportsMarket",
           "winRate": 53,
-          "record": "1635W-1432L",
+          "record": "1636W-1432L",
           "isDiscovered": false
         },
         {
           "name": "concentrated",
           "winRate": 53,
-          "record": "1766W-1537L",
+          "record": "1767W-1538L",
           "isDiscovered": false
         }
       ],
@@ -3192,9 +3218,9 @@
     "success": true,
     "overview": {
       "totalFactorsTracked": 13,
-      "totalSignalsProcessed": 18079,
+      "totalSignalsProcessed": 18091,
       "overallWinRate": 55,
-      "pendingSignals": 422
+      "pendingSignals": 435
     },
     "walletEdge": {
       "totalTracked": 500,
@@ -3203,6 +3229,44 @@
       "strongCount": 0,
       "fadeCount": 0,
       "topPerformers": [
+        {
+          "address": "0xf4f88a1e25ff5dfae68326eb62049d6a1b7c5bf1",
+          "tier": "AVERAGE",
+          "winRate": 100,
+          "record": "5W-0L",
+          "totalVolume": 1698.4800001,
+          "edgeMetrics": {
+            "avgOdds": 65,
+            "avgBetTiming": 0,
+            "consistencyScore": 103,
+            "bigBetWinRate": 0,
+            "sportWinRate": 100,
+            "politicalWinRate": 0,
+            "cryptoWinRate": 0,
+            "totalBigBets": 0,
+            "roi": 14,
+            "bigBetWins": 1
+          }
+        },
+        {
+          "address": "0x08a30a0a0fb71ebddc8907145791030782b88666",
+          "tier": "AVERAGE",
+          "winRate": 71,
+          "record": "5W-2L",
+          "totalVolume": 579554.3130942566,
+          "edgeMetrics": {
+            "avgOdds": 61,
+            "avgBetTiming": 0,
+            "consistencyScore": 75,
+            "bigBetWinRate": 25,
+            "sportWinRate": 100,
+            "politicalWinRate": 0,
+            "cryptoWinRate": 0,
+            "totalBigBets": 16,
+            "roi": 0,
+            "bigBetWins": 4
+          }
+        },
         {
           "address": "0x2a25f7cbf3fc823e315c31602d2eccab85788055",
           "tier": "AVERAGE",
@@ -3277,49 +3341,49 @@
         "optimizedAt": "2026-10-15T03:51:40.851Z"
       },
       "whaleSize25k": {
-        "wins": 645,
+        "wins": 646,
         "losses": 552,
         "winRate": 54,
         "weight": 1.18,
-        "lastUpdated": "2026-10-15T05:21:34.568Z",
+        "lastUpdated": "2026-10-15T14:42:22.492Z",
         "previousWeight": 1.23,
-        "optimizedAt": "2026-10-15T05:26:32.532Z"
+        "optimizedAt": "2026-10-15T14:57:21.349Z"
       },
       "concentrated": {
-        "wins": 1766,
-        "losses": 1537,
+        "wins": 1767,
+        "losses": 1538,
         "winRate": 53,
         "weight": 1.16,
-        "lastUpdated": "2026-10-15T05:41:29.122Z",
+        "lastUpdated": "2026-10-15T14:42:12.690Z",
         "previousWeight": 1.22,
-        "optimizedAt": "2026-10-15T06:06:35.554Z"
+        "optimizedAt": "2026-10-15T14:57:21.349Z"
       },
       "whaleSize15k": {
-        "wins": 1211,
+        "wins": 1212,
         "losses": 969,
         "winRate": 56,
         "weight": 1.2,
-        "lastUpdated": "2026-10-15T03:51:28.661Z",
+        "lastUpdated": "2026-10-15T14:22:22.956Z",
         "previousWeight": 1.26,
-        "optimizedAt": "2026-10-15T03:56:29.186Z"
+        "optimizedAt": "2026-10-15T14:42:36.748Z"
       },
       "freshWallet": {
-        "wins": 148,
+        "wins": 151,
         "losses": 109,
         "winRate": 58,
         "weight": 1.23,
-        "lastUpdated": "2026-10-14T21:31:41.609Z",
+        "lastUpdated": "2026-10-15T14:57:04.703Z",
         "previousWeight": 1.29,
-        "optimizedAt": "2026-10-14T21:37:01.577Z"
+        "optimizedAt": "2026-10-15T15:02:47.192Z"
       },
       "strongWallet": {
-        "wins": 1739,
+        "wins": 1743,
         "losses": 1288,
-        "winRate": 57,
-        "weight": 1.27,
-        "lastUpdated": "2026-10-15T11:41:47.394Z",
-        "previousWeight": 1.355,
-        "optimizedAt": "2026-10-15T11:41:57.612Z"
+        "winRate": 58,
+        "weight": 1.23,
+        "lastUpdated": "2026-10-15T15:02:27.170Z",
+        "previousWeight": 1.29,
+        "optimizedAt": "2026-10-15T15:07:18.795Z"
       },
       "eliteWallet": {
         "wins": 679,
@@ -3331,13 +3395,13 @@
         "optimizedAt": "2026-10-15T10:12:17.468Z"
       },
       "sportsMarket": {
-        "wins": 1635,
+        "wins": 1636,
         "losses": 1432,
         "winRate": 53,
         "weight": 1.16,
-        "lastUpdated": "2026-10-15T05:26:25.567Z",
+        "lastUpdated": "2026-10-15T15:02:27.170Z",
         "previousWeight": 1.22,
-        "optimizedAt": "2026-10-15T05:41:36.554Z"
+        "optimizedAt": "2026-10-15T15:07:18.795Z"
       },
       "cryptoMarket": {
         "wins": 35,
@@ -3411,11 +3475,11 @@
   "learningInsights": {
     "success": true,
     "systemPerformance": {
-      "totalSignalsProcessed": 18079,
-      "wins": 9967,
-      "losses": 8112,
+      "totalSignalsProcessed": 18091,
+      "wins": 9978,
+      "losses": 8113,
       "winRate": 55,
-      "pendingSignals": 422
+      "pendingSignals": 435
     },
     "insights": {
       "bestFactors": [
@@ -3483,17 +3547,17 @@
       {
         "factor": "freshWallet",
         "winRate": 58,
-        "wins": 148,
+        "wins": 151,
         "losses": 109,
         "weight": 1.23,
         "performance": "AVERAGE"
       },
       {
         "factor": "strongWallet",
-        "winRate": 57,
-        "wins": 1739,
+        "winRate": 58,
+        "wins": 1743,
         "losses": 1288,
-        "weight": 1.27,
+        "weight": 1.23,
         "performance": "AVERAGE"
       },
       {
@@ -3515,7 +3579,7 @@
       {
         "factor": "whaleSize15k",
         "winRate": 56,
-        "wins": 1211,
+        "wins": 1212,
         "losses": 969,
         "weight": 1.2,
         "performance": "AVERAGE"
@@ -3523,7 +3587,7 @@
       {
         "factor": "whaleSize25k",
         "winRate": 54,
-        "wins": 645,
+        "wins": 646,
         "losses": 552,
         "weight": 1.18,
         "performance": "AVERAGE"
@@ -3531,15 +3595,15 @@
       {
         "factor": "concentrated",
         "winRate": 53,
-        "wins": 1766,
-        "losses": 1537,
+        "wins": 1767,
+        "losses": 1538,
         "weight": 1.16,
         "performance": "AVERAGE"
       },
       {
         "factor": "sportsMarket",
         "winRate": 53,
-        "wins": 1635,
+        "wins": 1636,
         "losses": 1432,
         "weight": 1.16,
         "performance": "AVERAGE"
@@ -3596,11 +3660,11 @@
         "key": "all",
         "label": "Follow all signals",
         "side": "follow",
-        "settled": 10313,
-        "wins": 5702,
-        "losses": 4611,
-        "staked": 1031300,
-        "pnl": 1370.08,
+        "settled": 10325,
+        "wins": 5710,
+        "losses": 4615,
+        "staked": 1032500,
+        "pnl": 1531.7,
         "roi": 0.1,
         "winRate": 55,
         "readyForAuto": true
@@ -3609,12 +3673,12 @@
         "key": "underdog",
         "label": "Underdog entries (≤40¢)",
         "side": "follow",
-        "settled": 1275,
+        "settled": 1276,
         "wins": 412,
-        "losses": 863,
-        "staked": 127500,
-        "pnl": -1952.93,
-        "roi": -1.5,
+        "losses": 864,
+        "staked": 127600,
+        "pnl": -2052.93,
+        "roi": -1.6,
         "winRate": 32,
         "readyForAuto": false
       },
@@ -3622,12 +3686,12 @@
         "key": "high_score",
         "label": "High score (≥100)",
         "side": "follow",
-        "settled": 2628,
-        "wins": 1426,
+        "settled": 2630,
+        "wins": 1428,
         "losses": 1202,
-        "staked": 262800,
-        "pnl": -5752.53,
-        "roi": -2.2,
+        "staked": 263000,
+        "pnl": -5602.1,
+        "roi": -2.1,
         "winRate": 54,
         "readyForAuto": false
       },
@@ -3635,12 +3699,12 @@
         "key": "fade_favorites",
         "label": "Fade favorites (≥60¢)",
         "side": "fade",
-        "settled": 3573,
+        "settled": 3578,
         "wins": 1048,
-        "losses": 2525,
-        "staked": 357300,
-        "pnl": -12470.57,
-        "roi": -3.5,
+        "losses": 2530,
+        "staked": 357800,
+        "pnl": -12970.57,
+        "roi": -3.6,
         "winRate": 29,
         "readyForAuto": false
       },
@@ -5733,7 +5797,7 @@
         "market_impact": "[{\"asset\":\"Defense sector\",\"assetType\":\"sector\",\"direction\":\"DOWN\",\"conviction\":\"LOW\",\"rationale\":\"Full Democratic control of Congress could slow growth in defense appropriations and increase oversight/scrutiny of Pentagon spending compared to unified GOP control.\"},{\"asset\":\"Healthcare/Hospital stocks (e.g., HCA, Centene)\",\"assetType\":\"sector\",\"direction\":\"UP\",\"conviction\":\"LOW\",\"rationale\":\"Democratic trifecta-adjacent Congress would reduce near-term risk of ACA subsidy cuts or Medicaid rollbacks, supporting insurer and hospital revenue visibility.\"},{\"asset\":\"USD\",\"assetType\":\"fx\",\"direction\":\"VOLATILE\",\"conviction\":\"LOW\",\"rationale\":\"A Democratic Congress checking the Trump administration raises prospects of gridlock over fiscal policy, debt ceiling fights, and tariff legislation, increasing policy uncertainty priced into the dollar and rate markets.\"},{\"asset\":\"Renewable energy ETFs (e.g., ICLN, TAN)\",\"assetType\":\"etf\",\"direction\":\"UP\",\"conviction\":\"LOW\",\"rationale\":\"Democratic control could block further rollback of clean energy tax credits and climate rules, supporting sentiment in solar/wind equities relative to a GOP-controlled Congress scenario.\"}]",
         "last_error": null,
         "market_prob_now": 0.625,
-        "price_checked_at": "2026-10-15T11:53:07.510Z"
+        "price_checked_at": "2026-10-15T15:12:03.360Z"
       },
       {
         "inv_key": "investigation:will-religious-zionist-party-zehut-win-3pt25-4-percent-of-the-vote-in-the-2026-knesset-elections::Yes",
@@ -5762,8 +5826,8 @@
         "updated_at": "2026-10-15T05:09:18.383Z",
         "market_impact": null,
         "last_error": null,
-        "market_prob_now": 0.101,
-        "price_checked_at": "2026-10-15T11:53:07.510Z"
+        "market_prob_now": 0.1755,
+        "price_checked_at": "2026-10-15T15:12:03.360Z"
       },
       {
         "inv_key": "investigation:how-many-ships-transit-bab-el-mandeb-strait-week-of-october-12-20261006t134953677z-will-190-209-ships-transit-the-bab-el-mandeb-strait-between-october-12-october-18::Yes",
@@ -5792,8 +5856,8 @@
         "updated_at": "2026-10-15T00:25:34.444Z",
         "market_impact": "[{\"asset\":\"Crude oil (Brent)\",\"assetType\":\"commodity\",\"direction\":\"UP\",\"conviction\":\"MEDIUM\",\"rationale\":\"A mid-range (190-209) rather than high transit count signals continued Red Sea disruption layered on top of a near-total Hormuz shutdown, reinforcing supply risk premia and tanker rerouting costs that support oil prices.\"},{\"asset\":\"Shipping/tanker sector (e.g., Frontline, Euronav)\",\"assetType\":\"sector\",\"direction\":\"UP\",\"conviction\":\"MEDIUM\",\"rationale\":\"Suppressed Bab el-Mandeb transits combined with Hormuz closure force longer Cape of Good Hope routings, tightening tanker/bulk vessel supply and lifting freight rates for carriers able to operate safely.\"},{\"asset\":\"Defense sector\",\"assetType\":\"sector\",\"direction\":\"UP\",\"conviction\":\"LOW\",\"rationale\":\"Continued suppressed-but-not-zero shipping through Bab el-Mandeb reflects an active, unresolved Houthi/Iran-linked conflict, sustaining elevated demand expectations for naval escort and munitions spending.\"},{\"asset\":\"Egypt Suez Canal revenue proxies (EGX, regional equities)\",\"assetType\":\"stock\",\"direction\":\"DOWN\",\"conviction\":\"LOW\",\"rationale\":\"Mid-range transit levels still imply Suez Canal traffic well below pre-crisis norms, continuing to depress canal toll revenues and related regional trade equities.\"}]",
         "last_error": null,
-        "market_prob_now": 0.315,
-        "price_checked_at": "2026-10-15T11:53:07.510Z"
+        "market_prob_now": 0.37,
+        "price_checked_at": "2026-10-15T15:12:03.360Z"
       },
       {
         "inv_key": "investigation:will-rklb-reach-74-by-october-12-2026::Yes",
@@ -5822,8 +5886,8 @@
         "updated_at": "2026-10-15T00:01:51.212Z",
         "market_impact": "[{\"asset\":\"RKLB\",\"assetType\":\"stock\",\"direction\":\"UP\",\"conviction\":\"LOW\",\"rationale\":\"If RKLB were to spike to $74 this week it would reflect a major positive surprise (e.g., reversal of Neutron delay news, acquisition rumor, or short squeeze) that would also lift sentiment toward space/launch sector peers.\"},{\"asset\":\"Space/aerospace sector\",\"assetType\":\"sector\",\"direction\":\"UP\",\"conviction\":\"LOW\",\"rationale\":\"A sharp unexpected RKLB rally could spill over to small-cap space launch and satellite peers via sector sentiment and short-covering flows.\"}]",
         "last_error": null,
-        "market_prob_now": 0.1,
-        "price_checked_at": "2026-10-15T11:53:07.510Z"
+        "market_prob_now": 0.0195,
+        "price_checked_at": "2026-10-15T15:12:03.360Z"
       },
       {
         "inv_key": "investigation:lowest-temperature-in-cape-town-on-october-14-2026-6c::Yes",
@@ -5881,7 +5945,7 @@
         "market_impact": "[{\"asset\":\"SPY\",\"assetType\":\"etf\",\"direction\":\"UP\",\"conviction\":\"LOW\",\"rationale\":\"A hold (no surprise) typically supports equity markets by removing policy uncertainty, especially if it aligns with consensus expectations rather than signaling renewed tightening.\"},{\"asset\":\"US 10Y Treasury\",\"assetType\":\"commodity\",\"direction\":\"VOLATILE\",\"conviction\":\"MEDIUM\",\"rationale\":\"A hold with hawkish-leaning commentary (given hike risk priced at ~18%) could keep yields elevated or push them higher if the Fed signals further tightening bias.\"},{\"asset\":\"BTC\",\"assetType\":\"crypto\",\"direction\":\"UP\",\"conviction\":\"LOW\",\"rationale\":\"A confirmed hold (no hike) would reduce fears of restrictive policy tightening further, generally supportive of risk assets like crypto in the near term.\"},{\"asset\":\"DXY (US Dollar Index)\",\"assetType\":\"fx\",\"direction\":\"VOLATILE\",\"conviction\":\"LOW\",\"rationale\":\"Dollar strength is sensitive to any surprise hike risk priced in (~18%); a hold removes some of that premium, but accompanying hawkish guidance could still support the dollar.\"}]",
         "last_error": null,
         "market_prob_now": 0.725,
-        "price_checked_at": "2026-10-15T11:53:07.510Z"
+        "price_checked_at": "2026-10-15T15:12:03.360Z"
       },
       {
         "inv_key": "investigation:highest-temperature-in-chengdu-on-october-15-2026-23c::Yes",
@@ -5911,7 +5975,7 @@
         "market_impact": null,
         "last_error": null,
         "market_prob_now": 0.0005,
-        "price_checked_at": "2026-10-15T11:53:07.510Z"
+        "price_checked_at": "2026-10-15T15:12:03.360Z"
       },
       {
         "inv_key": "investigation:highest-temperature-in-lucknow-on-october-16-2026-33c::Yes",
@@ -5940,8 +6004,8 @@
         "updated_at": "2026-10-14T08:24:28.771Z",
         "market_impact": null,
         "last_error": null,
-        "market_prob_now": 0.055,
-        "price_checked_at": "2026-10-15T11:53:07.510Z"
+        "market_prob_now": 0.095,
+        "price_checked_at": "2026-10-15T15:12:03.360Z"
       },
       {
         "inv_key": "investigation:procter-gamble-pg-q1-organic-sales-growth-20261008120030000-0pt5-to-1pt5::Yes",
@@ -6027,7 +6091,7 @@
         "market_impact": "[{\"asset\":\"Crude oil (Brent/WTI)\",\"assetType\":\"commodity\",\"direction\":\"UP\",\"conviction\":\"HIGH\",\"rationale\":\"A US ground invasion aimed at controlling Iranian territory would dramatically escalate the Strait of Hormuz crisis, threatening the ~20% of global oil flow through the strait and spiking prices well beyond the already-elevated ~$103-105/bbl levels.\"},{\"asset\":\"Defense sector (e.g. LMT, RTX, NOC)\",\"assetType\":\"sector\",\"direction\":\"UP\",\"conviction\":\"MEDIUM\",\"rationale\":\"A full ground offensive would require massive sustained military resupply and new contracts, boosting defense contractor revenues and order backlogs.\"},{\"asset\":\"BTC\",\"assetType\":\"crypto\",\"direction\":\"DOWN\",\"conviction\":\"MEDIUM\",\"rationale\":\"A major escalation to ground invasion would likely trigger a broad risk-off shock across global markets, pressuring crypto alongside equities even as some view BTC as a geopolitical hedge.\"},{\"asset\":\"Gold\",\"assetType\":\"commodity\",\"direction\":\"UP\",\"conviction\":\"MEDIUM\",\"rationale\":\"Escalation to a full invasion scenario would drive safe-haven demand for gold amid heightened war risk and potential disruption to global energy and trade flows.\"}]",
         "last_error": null,
         "market_prob_now": 0.835,
-        "price_checked_at": "2026-10-15T11:53:07.510Z"
+        "price_checked_at": "2026-10-15T15:12:03.360Z"
       },
       {
         "inv_key": "investigation:next-zptai-glm-5pt4-released-by-october-31-2026-763::Yes",
@@ -6056,8 +6120,8 @@
         "updated_at": "2026-10-13T00:07:39.176Z",
         "market_impact": null,
         "last_error": null,
-        "market_prob_now": 0.625,
-        "price_checked_at": "2026-10-15T11:53:07.510Z"
+        "market_prob_now": 0.62,
+        "price_checked_at": "2026-10-15T15:12:03.360Z"
       },
       {
         "inv_key": "investigation:will-jeremiah-smith-win-the-2026-heisman-trophy-20260731185756307::No",
@@ -6087,7 +6151,7 @@
         "market_impact": null,
         "last_error": null,
         "market_prob_now": 0.435,
-        "price_checked_at": "2026-10-15T11:53:07.510Z"
+        "price_checked_at": "2026-10-15T15:12:03.360Z"
       },
       {
         "inv_key": "investigation:lowest-temperature-in-warsaw-on-october-12-2026-2c::Yes",
@@ -6172,8 +6236,8 @@
         "updated_at": "2026-10-12T00:17:17.059Z",
         "market_impact": null,
         "last_error": null,
-        "market_prob_now": 0.0505,
-        "price_checked_at": "2026-10-15T11:53:07.510Z"
+        "market_prob_now": 0.0955,
+        "price_checked_at": "2026-10-15T15:12:03.360Z"
       },
       {
         "inv_key": "investigation:lowest-temperature-in-chongqing-on-october-12-2026-16c::Yes",
@@ -6231,7 +6295,7 @@
         "market_impact": "[{\"asset\":\"Crude oil\",\"assetType\":\"commodity\",\"direction\":\"DOWN\",\"conviction\":\"MEDIUM\",\"rationale\":\"Continued ceasefire reduces risk premium tied to Strait of Hormuz disruption fears, easing upward pressure on oil prices.\"},{\"asset\":\"Defense sector\",\"assetType\":\"sector\",\"direction\":\"DOWN\",\"conviction\":\"LOW\",\"rationale\":\"Sustained de-escalation reduces near-term demand expectations for munitions and defense contracts tied to Middle East conflict risk.\"},{\"asset\":\"BTC\",\"assetType\":\"crypto\",\"direction\":\"UP\",\"conviction\":\"LOW\",\"rationale\":\"Reduced geopolitical risk-off sentiment generally supports risk assets including crypto as safe-haven demand diminishes.\"},{\"asset\":\"Gold\",\"assetType\":\"commodity\",\"direction\":\"DOWN\",\"conviction\":\"LOW\",\"rationale\":\"Easing war risk lowers safe-haven demand for gold, a typical beneficiary of Middle East conflict escalation fears.\"}]",
         "last_error": null,
         "market_prob_now": 0.795,
-        "price_checked_at": "2026-10-15T11:53:07.510Z"
+        "price_checked_at": "2026-10-15T15:12:03.360Z"
       },
       {
         "inv_key": "investigation:will-the-democratic-party-win-the-mn-08-house-seat::Yes",
@@ -6292,56 +6356,7 @@
     ]
   },
   "brier": {
-    "success": true,
-    "report": {
-      "note": "Brier score (lower is better). agentBeatsMarket / edgeDirection are honest but small-sample: this is a survivorship-biased set of markets that happened to resolve, self-reported confidence is uncalibrated (shown for description, not weighting), and N is small. Treat as directional until N is large.",
-      "counts": {
-        "total": 349,
-        "done": 78,
-        "pending": 0,
-        "error": 229,
-        "scored": 66
-      },
-      "overall": {
-        "n": 66,
-        "meanAgentBrier": 0.1399,
-        "meanMarketBrier": 0.1089,
-        "meanPairedDiff": -0.031,
-        "agentBeatsMarketRate": 53,
-        "edgeDirectionHitRate": 53,
-        "edgeDirectionN": 66
-      },
-      "byConfidence": {
-        "MEDIUM": {
-          "n": 51,
-          "meanAgentBrier": 0.1477,
-          "meanMarketBrier": 0.1147
-        },
-        "LOW": {
-          "n": 13,
-          "meanAgentBrier": 0.1302,
-          "meanMarketBrier": 0.0839
-        },
-        "HIGH": {
-          "n": 2,
-          "meanAgentBrier": 0.0037,
-          "meanMarketBrier": 0.1244
-        }
-      },
-      "bySource": {
-        "sweep": {
-          "n": 63,
-          "meanAgentBrier": 0.1366,
-          "meanMarketBrier": 0.1087
-        },
-        "whale": {
-          "n": 3,
-          "meanAgentBrier": 0.2091,
-          "meanMarketBrier": 0.113
-        }
-      }
-    },
-    "records": null
+    "error": "fetch failed"
   },
   "council": {
     "success": true,
@@ -7503,13 +7518,6 @@
         "excess": 32.3
       },
       {
-        "wallet": "0x193b76967952d0713c5912cb4a9be23c7806f6ec",
-        "n": 15,
-        "wr": 80,
-        "px": 47.9,
-        "excess": 32.1
-      },
-      {
         "wallet": "0x1e52bbdf389526f57abc62641d518868f4c5eb43",
         "n": 10,
         "wr": 90,
@@ -7543,6 +7551,13 @@
         "wr": 81.8,
         "px": 54.2,
         "excess": 27.6
+      },
+      {
+        "wallet": "0x193b76967952d0713c5912cb4a9be23c7806f6ec",
+        "n": 16,
+        "wr": 75,
+        "px": 48.4,
+        "excess": 26.6
       },
       {
         "wallet": "0x5331121e9f2f206d8c06ae6235761b1a3f8d3672",
@@ -7591,12 +7606,12 @@
   "speed": {
     "success": true,
     "overall": {
-      "n": 1088,
-      "avg_lag_sec": 340,
-      "lag_cost_c": 0.09,
-      "drift_5m_c": 0.26,
-      "drift_15m_c": 0.35,
-      "drift_60m_c": 0.31
+      "n": 1110,
+      "avg_lag_sec": 341,
+      "lag_cost_c": 0.07,
+      "drift_5m_c": 0.25,
+      "drift_15m_c": 0.4,
+      "drift_60m_c": 0.32
     },
     "byLag": [
       {
@@ -7607,21 +7622,21 @@
       },
       {
         "lag": "2-5m",
-        "n": 381,
-        "lag_cost_c": -0.24,
-        "drift_15m_c": 0.6
+        "n": 385,
+        "lag_cost_c": -0.26,
+        "drift_15m_c": 0.64
       },
       {
         "lag": "5-15m",
-        "n": 650,
-        "lag_cost_c": 0.34,
-        "drift_15m_c": 0.55
+        "n": 668,
+        "lag_cost_c": 0.32,
+        "drift_15m_c": 0.61
       }
     ],
     "settled": {
-      "n": 905,
-      "roi_at_whale": -0.5,
-      "roi_at_detect": -0.2
+      "n": 918,
+      "roi_at_whale": -0.4,
+      "roi_at_detect": 0.1
     },
     "read": "lag_cost_c = cents the price moved against us before we saw it; drift = movement after. roi_at_whale vs roi_at_detect = the value of being as fast as the whale."
   },
@@ -8150,45 +8165,45 @@
       }
     },
     "last": {
-      "at": "2026-10-15T11:52:59.810Z",
-      "pairs": 22,
+      "at": "2026-10-15T15:12:08.996Z",
+      "pairs": 27,
       "live": 0,
       "rows": 0,
       "diag": {
         "nfl": {
-          "error": "kalshi 429 /markets?series_ticker=KXNFLGAME&status=open&limit=1000"
+          "kalshi": 2,
+          "poly": 19849,
+          "matched": 1,
+          "us": 1
         },
         "cfb": {
-          "kalshi": 82,
-          "poly": 27765,
-          "matched": 5,
-          "us": 5
+          "error": "kalshi 429 /markets?series_ticker=KXNCAAFGAME&status=open&limit=1000"
         },
         "nba": {
           "kalshi": 28,
-          "poly": 2795,
-          "matched": 6,
-          "us": 6
+          "poly": 2803,
+          "matched": 13,
+          "us": 13
         },
         "nhl": {
           "kalshi": 26,
           "poly": 2677,
-          "matched": 9,
-          "us": 8
+          "matched": 11,
+          "us": 10
         },
         "mlb": {
           "kalshi": 6,
-          "poly": 2661,
+          "poly": 2777,
           "matched": 2,
           "us": 2
         },
         "wnba": {
-          "error": "kalshi 429 /markets?series_ticker=KXWNBAGAME&status=open&limit=1000"
+          "kalshi": 0
         }
       }
     },
     "boot": {
-      "at": "2026-10-15T11:52:59.810Z",
+      "at": "2026-10-15T15:12:08.996Z",
       "stage": "done",
       "rows": 0,
       "live": 0
