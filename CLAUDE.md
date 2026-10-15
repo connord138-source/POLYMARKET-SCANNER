@@ -74,6 +74,13 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   stage the minute cron reached (`xv_boot`). Pregame scans
   (Oct 2026) found no cross-venue or neg-risk arbitrage — see
   `docs/PROFIT-AVENUES.md` Part 2 before proposing structural-arb features.
+- `src/kalshi.js` — signed Kalshi API client (Ed25519 or RSA-PSS over
+  `timestamp + METHOD + /trade-api/v2/path`, query stripped). Secrets
+  `KALSHI_API_KEY_ID` + `KALSHI_PRIVATE_KEY` (PEM) are pushed by
+  `.github/workflows/push-kalshi-key.yml` (operator creates the key at
+  kalshi.com/account/profile). Without them Kalshi 429s most calls from
+  Cloudflare's shared egress and `xvenue_quotes.k_*` stays empty;
+  `xvenue.last.kalshiAuth` in the snapshot shows which mode is active.
 - `src/odds.js` — The Odds API client (KV-cached; `ODDS_API_KEY` secret).
 - `src/gamma.js` — Gamma API settlement (`findGammaMarket` handles
   closed markets + multi-market moneyline preference).

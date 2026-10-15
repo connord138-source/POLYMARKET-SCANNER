@@ -1,0 +1,54 @@
+name: Push Kalshi API Key
+
+# Gives the worker an authenticated Kalshi API client (src/kalshi.js). Without
+# it, Kalshi throttles the worker's calls from Cloudflare's shared addresses and
+# the cross-venue sampler (src/xvenue.js) records no Kalshi quotes.
+#
+# One-time setup, all on the operator's side, nothing through chat:
+#   1. Kalshi -> https://kalshi.com/account/profile -> "API Keys" ->
+#      "Create New API Key". Ed25519 (the default) or RSA both work. Save the
+#      private key file when it is shown - Kalshi does not store it.
+#   2. GitHub repo -> Settings > Secrets and variables > Actions:
+#        KALSHI_API_KEY_ID   = the Key ID shown next to the key
+#        KALSHI_PRIVATE_KEY  = the whole PEM file contents, including the
+#                              -----BEGIN ... ----- / -----END ... ----- lines
+#      (multi-line values paste fine; an escaped single line also works)
+#   3. Run this workflow (Actions > Push Kalshi API Key > Run workflow).
+#
+# The sampler picks the key up on its next minute tick; status/backend.json ->
+# xvenue.last.kalshiAuth turns true and the kalshi quote counts fill in.
+# The key is used only for signed GETs of public market data (own use).
+
+on:
+  workflow_dispatch:
+
+jobs:
+  push-key:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Push KALSHI_API_KEY_ID and KALSHI_PRIVATE_KEY repo secrets into the worker
+        env:
+          KALSHI_API_KEY_ID: ${{ secrets.KALSHI_API_KEY_ID }}
+          KALSHI_PRIVATE_KEY: ${{ secrets.KALSHI_PRIVATE_KEY }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$KALSHI_API_KEY_ID" ]; then
+            echo "::error::KALSHI_API_KEY_ID repo secret is not set. Add it under Settings > Secrets and variables > Actions (the Key ID from kalshi.com/account/profile > API Keys), then re-run."
+            exit 1
+          fi
+          if [ -z "$KALSHI_PRIVATE_KEY" ]; then
+            echo "::error::KALSHI_PRIVATE_KEY repo secret is not set. Add the full PEM (BEGIN/END lines included) that Kalshi showed when the key was created, then re-run."
+            exit 1
+          fi
+          # Accept a PEM pasted either with real newlines or as one line with \n escapes.
+          PEM="$(printf '%s' "$KALSHI_PRIVATE_KEY" | sed 's/\\n/\n/g')"
+          if ! printf '%s' "$PEM" | grep -q -- '-----BEGIN .*PRIVATE KEY-----'; then
+            echo "::error::KALSHI_PRIVATE_KEY does not look like a PEM private key (no -----BEGIN ... PRIVATE KEY----- line)."
+            exit 1
+          fi
+          printf '%s' "$KALSHI_API_KEY_ID" | tr -d '[:space:]' | npx wrangler@4 secret put KALSHI_API_KEY_ID
+          printf '%s' "$PEM" | npx wrangler@4 secret put KALSHI_PRIVATE_KEY
+          echo "Kalshi key pushed. The sampler signs its Kalshi calls from the next minute tick; xvenue.last.kalshiAuth in status/backend.json will read true."
