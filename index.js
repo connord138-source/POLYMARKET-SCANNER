@@ -27,6 +27,7 @@ import { settleDkPicks } from "./src/dk-picks.js";
 import { collectBooks, MM_SCHEMA } from "./src/mm-collector.js";
 import { sampleXvenue, xvenueReport, XV_SCHEMA } from "./src/xvenue.js";
 import { getExecReport } from "./src/execution.js";
+import { getCryptoFairValue, refreshCryptoFairValue, annotateCryptoFairValue } from "./src/crypto-fv.js";
 import { addToWaitlist, loadWaitlist, waitlistSummary, isIpThrottled, markIpSubmitted } from "./src/waitlist.js";
 import {
   getCouncilStats, getCouncilFeed, leaderboard as councilLeaderboard
@@ -3633,6 +3634,7 @@ function requiresAdmin(path, url, method) {
   if (path.startsWith("/forge") && method === "POST") return true;      // /forge/run spends D1 reads
   if (path.startsWith("/agents/crew") && method === "POST") return true; // crew orders steer paper bets
   if (path === "/waitlist" && method === "GET") return true;        // lists sign-up emails (PII); POST stays public
+  if (path === "/crypto/fairvalue" && url.searchParams.get("refresh")) return true; // forces 12 upstream fetches
   if (path.startsWith("/admin")) return true;                       // /admin/ping, /admin/reprocess-wallets, ...
   if (path.startsWith("/debug")) return true;                       // internal diagnostics
   if (path.startsWith("/learning/debug")) return true;              // internal diagnostics
@@ -4847,6 +4849,10 @@ export default {
       // Execution shadow ledger: paper vs taker vs maker on the same trades.
       if (path === "/autotrader/execution" && request.method === "GET") {
         return atJson(await getExecReport(env, await getTradeHistory(env, 1000), await getOpenPositions(env)));
+      }
+      // Crypto fair value: every BTC/ETH/SOL price contract priced from realized vol (KV-cached; ?refresh=1 is admin).
+      if (path === "/crypto/fairvalue" && request.method === "GET") {
+        return atJson(url.searchParams.get("refresh") === "1" ? await refreshCryptoFairValue(env) : await getCryptoFairValue(env));
       }
       // Cross-venue sampler read-back (Kalshi vs Polymarket, live games).
       if (path === "/xvenue/report" && request.method === "GET") {
@@ -6766,6 +6772,9 @@ export default {
     };
     
     try {
+      // Crypto fair value first, so this scan's crypto signals carry fresh model prices.
+      try { const fv = await refreshCryptoFairValue(env); cronStatus.cryptoFv = { ...fv.summary, errors: fv.errors }; }
+      catch (e) { cronStatus.cryptoFv = { error: e.message }; }
       // Run scan with 48h window and low minScore to capture everything
       const result = await runScan(48, 30, env);
       console.log("Cron scan completed successfully");
@@ -7741,6 +7750,11 @@ function formatDirectionForDisplay(direction, marketTitle, marketSlug) {
   // current edge profile, so the Scanner's positive-edge filter reflects the
   // latest history for the whole list, not just this run's fresh signals.
   allSignals.forEach(s => annotateSignalEdge(s, edgeProfile));
+
+  // Crypto fair value (src/crypto-fv.js): the volatility model's probability for
+  // the whale's side next to what they paid, on every crypto price contract.
+  try { annotateCryptoFairValue(allSignals, await getCryptoFairValue(env)); }
+  catch (e) { console.log("crypto fair value annotate error:", e.message); }
 
   // Filter out signals older than 7 days
   const maxAge = 7 * 24 * 60 * 60 * 1000;
