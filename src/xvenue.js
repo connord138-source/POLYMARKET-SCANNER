@@ -13,7 +13,8 @@ const GAMMA_API = 'https://gamma-api.polymarket.com';
 const CLOB_API = 'https://clob.polymarket.com';
 const US_API = 'https://gateway.polymarket.us';   // Polymarket US public market data (no key)
 
-export const XV_KEYS = { PAIRS: 'xv_pairs', LAST: 'xv_last', BOOT: 'xv_boot' };
+export const XV_KEYS = { PAIRS: 'xv_pairs', LAST: 'xv_last', BOOT: 'xv_boot', KALSHI_COOLDOWN: 'xv_kalshi_cooldown' };
+export const XV_KALSHI_COOLDOWN_S = 300;           // after a 429 on the per-minute quote call, skip Kalshi for 5 minutes
 export const XV_PAIRS_TTL_MS = 30 * 60e3;        // pairs change slowly; fewer Kalshi series calls
 export const XV_LIVE_BEFORE_MS = 30 * 60e3;        // start sampling 30 min before kickoff
 export const XV_LIVE_AFTER_MS = 4.5 * 3600e3;      // ... and stop 4.5h after it
@@ -255,10 +256,17 @@ export async function sampleXvenue(env, nowMs = Date.now()) {
   if (!live.length) { try { await env.SIGNALS_CACHE.put(XV_KEYS.LAST, JSON.stringify(status), { expirationTtl: 86400 }); } catch (e) {} await mark('done', { rows: 0, live: 0 }); return status; }
   const legs = live.flatMap(p => p.legs.map((l, i) => ({ ...l, sport: p.sport, game: p.game, startMs: p.startMs, feeRate: p.feeRate, usSlug: p.usSlug || null, usLong: p.usLongIdx === i })));
   const kq = new Map();
-  for (let i = 0; i < legs.length; i += 40) {
+  let kalshiCooldown = null; try { kalshiCooldown = await env.SIGNALS_CACHE.get(XV_KEYS.KALSHI_COOLDOWN); } catch (e) {}
+  if (kalshiCooldown) status.kalshiSkipped = 'cooldown after 429';
+  else for (let i = 0; i < legs.length; i += 40) {
     try { const r = await kalshiJson(`/markets?tickers=${legs.slice(i, i + 40).map(l => l.kTicker).join(',')}&limit=100`); for (const m of r.markets || []) kq.set(m.ticker, m); }
-    catch (e) { status.kalshiError = e.message.slice(0, 80); }
+    catch (e) {
+      status.kalshiError = e.message.slice(0, 80);
+      if (/429/.test(e.message)) { try { await env.SIGNALS_CACHE.put(XV_KEYS.KALSHI_COOLDOWN, '1', { expirationTtl: XV_KALSHI_COOLDOWN_S }); } catch (e2) {} }
+      break;
+    }
   }
+  status.kQuoted = kq.size;
   const pq = new Map();
   for (let i = 0; i < legs.length; i += 40) {
     try {
@@ -319,38 +327,44 @@ export function analyzeSeries(rows, { moveC = 3, feeRate = KALSHI_TAKER_RATE, us
   const mid = (b, a) => (b != null && a != null ? (b + a) / 2 : null);
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i]; out.samples++;
-    const pm = mid(r.p_bid, r.p_ask), km = mid(r.k_bid, r.k_ask);
-    if (pm == null || km == null) continue;
-    out.bothQuoted++;
-    out.gapAbsSumC += Math.abs(pm - km) * 100; out.kSpreadSumC += (r.k_ask - r.k_bid) * 100; out.pSpreadSumC += (r.p_ask - r.p_bid) * 100;
-    const um = mid(r.us_bid, r.us_ask);
+    const pm = mid(r.p_bid, r.p_ask);
+    if (pm == null) continue;                       // Polymarket is the reference; nothing to compare without it
+    const km = mid(r.k_bid, r.k_ask), um = mid(r.us_bid, r.us_ask);
+    if (km != null) { out.bothQuoted++; out.gapAbsSumC += Math.abs(pm - km) * 100; out.kSpreadSumC += (r.k_ask - r.k_bid) * 100; out.pSpreadSumC += (r.p_ask - r.p_bid) * 100; }
     if (um != null) {
       out.usQuoted++; out.usGapAbsSumC += Math.abs(pm - um) * 100; out.usSpreadSumC += (r.us_ask - r.us_bid) * 100;
-      // the one fully US-legal pair: buy on one venue, sell on the other, both taker fees paid
-      const c1 = r.k_bid - r.us_ask - kalshiFee(r.k_bid, feeRate) - usFee(r.us_ask, usRate);   // buy US, sell Kalshi
-      const c2 = r.us_bid - r.k_ask - usFee(r.us_bid, usRate) - kalshiFee(r.k_ask, feeRate);   // buy Kalshi, sell US
-      const c = Math.max(c1, c2);
-      if (c > 0) { out.kUsCross++; out.kUsCrossEdgeC += c * 100; }
+      if (km != null) {
+        // the one fully US-legal pair: buy on one venue, sell on the other, both taker fees paid
+        const c1 = r.k_bid - r.us_ask - kalshiFee(r.k_bid, feeRate) - usFee(r.us_ask, usRate);   // buy US, sell Kalshi
+        const c2 = r.us_bid - r.k_ask - usFee(r.us_bid, usRate) - kalshiFee(r.k_ask, feeRate);   // buy Kalshi, sell US
+        const c = Math.max(c1, c2);
+        if (c > 0) { out.kUsCross++; out.kUsCrossEdgeC += c * 100; }
+      }
     }
     const prev = i > 0 ? rows[i - 1] : null;
-    const ppm = prev ? mid(prev.p_bid, prev.p_ask) : null, pkm = prev ? mid(prev.k_bid, prev.k_ask) : null;
-    if (ppm == null || pkm == null || r.ts - prev.ts > 180) continue;
-    const dP = (pm - ppm) * 100, dK = (km - pkm) * 100;
+    const ppm = prev ? mid(prev.p_bid, prev.p_ask) : null;
+    if (ppm == null || r.ts - prev.ts > 180) continue;
+    const pkm = mid(prev.k_bid, prev.k_ask);
+    const dP = (pm - ppm) * 100;
+    const next = rows[i + 1]; const nextOk = next && next.ts - r.ts <= 180;
     if (Math.abs(dP) >= moveC) {
       out.polyMoves++;
-      const edge = dP > 0 ? r.p_bid - r.k_ask - kalshiFee(r.k_ask, feeRate) : r.k_bid - r.p_ask - kalshiFee(r.k_bid, feeRate);
-      if (edge > 0) { out.staleKalshi++; out.staleEdgeC += edge * 100; }
+      if (km != null) {
+        const edge = dP > 0 ? r.p_bid - r.k_ask - kalshiFee(r.k_ask, feeRate) : r.k_bid - r.p_ask - kalshiFee(r.k_bid, feeRate);
+        if (edge > 0) { out.staleKalshi++; out.staleEdgeC += edge * 100; }
+        if (pkm != null) { const dK = (km - pkm) * 100; if (Math.sign(dK) === Math.sign(dP) && Math.abs(dK) >= moveC / 2) out.kalshiSameMin++; }
+        const nkm = nextOk ? mid(next.k_bid, next.k_ask) : null;
+        if (nkm != null && Math.sign((nkm - km) * 100) === Math.sign(dP) && Math.abs(nkm - km) * 100 >= moveC / 2) out.kalshiNextMin++;
+      }
       if (um != null) {
         const ue = dP > 0 ? r.p_bid - r.us_ask - usFee(r.us_ask, usRate) : r.us_bid - r.p_ask - usFee(r.us_bid, usRate);
         if (ue > 0) { out.staleUs++; out.staleUsEdgeC += ue * 100; }
       }
-      if (Math.sign(dK) === Math.sign(dP) && Math.abs(dK) >= moveC / 2) out.kalshiSameMin++;
-      const next = rows[i + 1]; const nkm = next ? mid(next.k_bid, next.k_ask) : null;
-      if (nkm != null && next.ts - r.ts <= 180 && Math.sign((nkm - km) * 100) === Math.sign(dP) && Math.abs(nkm - km) * 100 >= moveC / 2) out.kalshiNextMin++;
     }
-    if (Math.abs(dK) >= moveC) {
-      const next = rows[i + 1]; const npm = next ? mid(next.p_bid, next.p_ask) : null;
-      if (Math.abs(dP) < moveC / 2 && npm != null && next.ts - r.ts <= 180 && Math.sign((npm - pm) * 100) === Math.sign(dK) && Math.abs(npm - pm) * 100 >= moveC / 2) out.kalshiLeads++;
+    if (km != null && pkm != null) {
+      const dK = (km - pkm) * 100;
+      const npm = nextOk ? mid(next.p_bid, next.p_ask) : null;
+      if (Math.abs(dK) >= moveC && Math.abs(dP) < moveC / 2 && npm != null && Math.sign((npm - pm) * 100) === Math.sign(dK) && Math.abs(npm - pm) * 100 >= moveC / 2) out.kalshiLeads++;
     }
   }
   return out;
@@ -361,6 +375,12 @@ export async function xvenueReport(env, { hours = 48, moveC = 3 } = {}) {
   const since = Math.floor(Date.now() / 1000) - hours * 3600;
   const q = await env.DB.prepare(`SELECT ts, sport, game, team, k_bid, k_ask, p_bid, p_ask, us_bid, us_ask FROM xvenue_quotes WHERE ts >= ? AND phase = 'live' ORDER BY sport, game, team, ts LIMIT 60000`).bind(since).all();
   const rows = (q && q.results) || [];
+  // Which venues actually delivered quotes (a 429 from Kalshi leaves k_* null while p_*/us_* fill).
+  let quoted = {};
+  try {
+    const h = await env.DB.prepare(`SELECT sport, COUNT(*) AS n, SUM(k_bid IS NOT NULL) AS k, SUM(p_bid IS NOT NULL) AS p, SUM(us_bid IS NOT NULL) AS us FROM xvenue_quotes WHERE ts >= ? AND phase = 'live' GROUP BY sport`).bind(since).all();
+    for (const r of (h && h.results) || []) quoted[r.sport] = { rows: r.n, kalshi: r.k, polymarket: r.p, polymarketUs: r.us };
+  } catch (e) { quoted = { error: e.message.slice(0, 60) }; }
   const groups = new Map();
   for (const r of rows) { const k = `${r.sport}|${r.game}|${r.team}`; (groups.get(k) || groups.set(k, []).get(k)).push(r); }
   const bySport = {};
@@ -386,7 +406,7 @@ export async function xvenueReport(env, { hours = 48, moveC = 3 } = {}) {
   }
   let last = null, boot = null; try { last = await env.SIGNALS_CACHE.get(XV_KEYS.LAST, { type: 'json' }); boot = await env.SIGNALS_CACHE.get(XV_KEYS.BOOT, { type: 'json' }); } catch (e) {}
   return {
-    success: true, hours, moveC, rows: rows.length, legs: groups.size, bySport, last, boot,
+    success: true, hours, moveC, rows: rows.length, legs: groups.size, quoted, bySport, last, boot,
     read: `polyMoves = minutes where Polymarket's mid moved >= ${moveC}c; staleKalshi = of those, Kalshi's same-minute quote was still crossable after its ${KALSHI_TAKER_RATE * 100}% x p(1-p) taker fee (avgStaleEdgeC = cents of edge per share); kalshiSameMin/NextMin = Kalshi moved the same way that minute / the next; kalshiLeads = Kalshi moved first and Polymarket followed. A Kalshi lane is worth building only if staleRate x avgStaleEdgeC is meaningfully positive over many games. us* = the same for Polymarket US (taker ${US_TAKER_RATE * 100}% x p(1-p)); kUsCross = minutes where buying on one US-legal venue and selling on the other cleared both taker fees (the only fully legal arbitrage pair for a US operator).`,
   };
 }

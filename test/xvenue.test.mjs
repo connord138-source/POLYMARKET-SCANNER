@@ -83,9 +83,26 @@ const P = (q, outs, start, toks = ["t0", "t1"], extra = {}) => ({ question: q, o
   check("sample: second minute reuses the cached pairs (no Kalshi series calls)", kalshiCalls === callsAfterBuild && s2.rows === 2 && rows.length === 4);
   const s3 = await sampleXvenue(env, now + 6 * 3600e3);
   check("sample: nothing live -> no rows, status still written", s3.live === 0 && s3.rows === 0 && rows.length === 4 && kv.has("xv_last"));
-  env.DB.prepare = () => ({ bind: () => ({ all: async () => ({ results: [{ ts: 0, sport: "nfl", game: "g", team: "Bills", k_bid: 0.4, k_ask: 0.42, p_bid: 0.4, p_ask: 0.41, us_bid: 0.39, us_ask: 0.40 }, { ts: 60, sport: "nfl", game: "g", team: "Bills", k_bid: 0.4, k_ask: 0.42, p_bid: 0.45, p_ask: 0.46, us_bid: 0.39, us_ask: 0.40 }] }) }) });
+  env.DB.prepare = (sql) => ({ bind: () => ({ all: async () => (/GROUP BY sport/.test(sql)
+    ? { results: [{ sport: "nfl", n: 2, k: 2, p: 2, us: 2 }] }
+    : { results: [{ ts: 0, sport: "nfl", game: "g", team: "Bills", k_bid: 0.4, k_ask: 0.42, p_bid: 0.4, p_ask: 0.41, us_bid: 0.39, us_ask: 0.40 }, { ts: 60, sport: "nfl", game: "g", team: "Bills", k_bid: 0.4, k_ask: 0.42, p_bid: 0.45, p_ask: 0.46, us_bid: 0.39, us_ask: 0.40 }] }) }) });
   const rep = await xvenueReport(env, { hours: 1 });
-  check("report: per-sport aggregates incl. US", rep.rows === 2 && rep.legs === 1 && rep.bySport.nfl.polyMoves === 1 && rep.bySport.nfl.staleKalshi === 1 && rep.bySport.nfl.staleRate === 1 && rep.bySport.nfl.avgKalshiSpreadC === 2 && rep.bySport.nfl.staleUs === 1 && rep.bySport.nfl.avgUsSpreadC === 1 && rep.bySport.nfl.kUsCross === 0 && rep.last && rep.last.live === 0 && rep.boot && rep.boot.stage === "done", JSON.stringify(rep.bySport));
+  check("report: per-sport aggregates incl. US and quoted counts", rep.rows === 2 && rep.legs === 1 && rep.bySport.nfl.polyMoves === 1 && rep.bySport.nfl.staleKalshi === 1 && rep.bySport.nfl.staleRate === 1 && rep.bySport.nfl.avgKalshiSpreadC === 2 && rep.bySport.nfl.staleUs === 1 && rep.bySport.nfl.avgUsSpreadC === 1 && rep.bySport.nfl.kUsCross === 0 && rep.quoted.nfl.kalshi === 2 && rep.quoted.nfl.polymarketUs === 2 && rep.last && rep.last.live === 0 && rep.boot && rep.boot.stage === "done", JSON.stringify({ bySport: rep.bySport, quoted: rep.quoted }));
+  // Kalshi missing entirely (the throttled nights): Polymarket US metrics must still compute
+  const noK = analyzeSeries([{ ts: 0, k_bid: null, k_ask: null, p_bid: 0.40, p_ask: 0.41, us_bid: 0.39, us_ask: 0.40 }, { ts: 60, k_bid: null, k_ask: null, p_bid: 0.45, p_ask: 0.46, us_bid: 0.39, us_ask: 0.40 }]);
+  check("analyze: US stale edge counted without any Kalshi quote", noK.bothQuoted === 0 && noK.usQuoted === 2 && noK.polyMoves === 1 && noK.staleUs === 1 && noK.kUsCross === 0, JSON.stringify(noK));
+  // Kalshi 429 on the per-minute quote call -> cooldown key set, next minute skips Kalshi
+  const baseFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    const u = String(url);
+    if (u.includes("kalshi") && u.includes("tickers=")) return { ok: false, status: 429, headers: { get: () => null }, json: async () => ({}) };
+    return baseFetch(url, opts);
+  };
+  env.DB.prepare = (sql) => ({ bind: (...a) => ({ sql, a, run: async () => {} }), run: async () => {} });
+  kv.delete("xv_pairs");   // force a rebuild at the live minute (the earlier idle sample cached an empty pairs list)
+  const s4 = await sampleXvenue(env, now + 2 * 60e3);
+  const s5 = await sampleXvenue(env, now + 3 * 60e3);
+  check("sample: a 429 on the quote call sets a cooldown; the next minute skips Kalshi but still records Polymarket rows", /429/.test(s4.kalshiError || "") && s4.kQuoted === 0 && s4.rows === 2 && s5.kalshiSkipped && s5.rows === 2 && kv.has("xv_kalshi_cooldown"), JSON.stringify({ s4, s5 }));
 }
 console.log(`${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
