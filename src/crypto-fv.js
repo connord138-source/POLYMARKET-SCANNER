@@ -5,7 +5,9 @@
 // date", the reflection-principle one-touch for "dip to"/"reach" (Polymarket
 // resolves those on any 1-minute print, i.e. continuous monitoring).
 //
-// Candles come from Coinbase's public exchange API (US-accessible, no key):
+// Candles come from Kraken's public API first (one call returns 720 bars, and
+// it answers Cloudflare's shared egress), Coinbase's public exchange API as
+// the fallback (it 429'd every call from the worker on the first live run):
 // hourly for the 7-day and 30-day realized vols, daily for 90-day. Spot is the
 // live ticker. Everything is cached in KV `crypto_fv` for FV_TTL_S and
 // refreshed by the 5-minute cron; the frontend re-prices client-side when the
@@ -17,16 +19,18 @@
 // a lognormal, so a big gap on a tail contract is a model warning, not an edge.
 
 const COINBASE = 'https://api.exchange.coinbase.com';
+const KRAKEN = 'https://api.kraken.com/0/public';
 const GAMMA = 'https://gamma-api.polymarket.com';
 
 export const FV_KEYS = { CACHE: 'crypto_fv' };
 export const FV_TTL_S = 600;               // KV TTL; cron refreshes every 5 min
 export const FV_MAX_ROWS = 200;
 export const ASSETS = {
-  BTC: { product: 'BTC-USD', names: ['bitcoin', 'btc'] },
-  ETH: { product: 'ETH-USD', names: ['ethereum', 'ether', 'eth'] },
-  SOL: { product: 'SOL-USD', names: ['solana', 'sol'] },
+  BTC: { product: 'BTC-USD', kraken: 'XBTUSD', names: ['bitcoin', 'btc'] },
+  ETH: { product: 'ETH-USD', kraken: 'ETHUSD', names: ['ethereum', 'ether', 'eth'] },
+  SOL: { product: 'SOL-USD', kraken: 'SOLUSD', names: ['solana', 'sol'] },
 };
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 const YEAR_MS = 365 * 86400e3;
 const MONTHS = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
 
@@ -122,21 +126,52 @@ export async function fetchCandles(product, granularity, bars, nowMs = Date.now(
   return [...out.entries()].sort((a, b) => a[0] - b[0]).slice(-bars).map(([, c]) => c);
 }
 
+// Kraken: {error:[], result:{<pair key>:[[t,o,h,l,c,vwap,vol,n]...], last}} oldest first, up to 720 bars.
+async function krakenJson(path) {
+  const res = await fetch(`${KRAKEN}${path}`, { headers: { accept: 'application/json', 'user-agent': 'edgerunner-crypto-fv/1.0' } });
+  if (!res.ok) throw new Error(`kraken ${res.status} ${path.slice(0, 50)}`);
+  const data = await res.json();
+  if (Array.isArray(data.error) && data.error.length) throw new Error(`kraken ${data.error[0]}`);
+  const key = Object.keys(data.result || {}).find(k => k !== 'last');
+  return data.result[key];
+}
+export async function fetchKrakenCandles(pair, intervalMin, bars) {
+  const rows = await krakenJson(`/OHLC?pair=${pair}&interval=${intervalMin}`);
+  if (!Array.isArray(rows) || rows.length < 10) throw new Error('kraken: no candles');
+  return rows.slice(-bars).map(r => Number(r[4]));
+}
+async function statsFromKraken(a) {
+  const hourly = await fetchKrakenCandles(a.kraken, 60, 24 * 30);
+  await sleep(250);
+  const daily = await fetchKrakenCandles(a.kraken, 1440, 90);
+  await sleep(250);
+  let spot = hourly[hourly.length - 1];
+  try { const t = await krakenJson(`/Ticker?pair=${a.kraken}`); spot = Number(t && t.c && t.c[0]) || spot; } catch (e) {}
+  return { source: 'kraken', spot, hourly, daily };
+}
+async function statsFromCoinbase(a, nowMs) {
+  const hourly = await fetchCandles(a.product, 3600, 24 * 30, nowMs);
+  await sleep(300);
+  const daily = await fetchCandles(a.product, 86400, 90, nowMs);
+  await sleep(300);
+  let spot = hourly[hourly.length - 1];
+  try { const t = await coinbaseJson(`/products/${a.product}/ticker`); spot = Number(t.price) || spot; } catch (e) {}
+  return { source: 'coinbase', spot, hourly, daily };
+}
+
 export async function fetchAssetStats(sym, nowMs = Date.now()) {
   const a = ASSETS[sym];
-  const [ticker, hourly, daily] = await Promise.all([
-    coinbaseJson(`/products/${a.product}/ticker`),
-    fetchCandles(a.product, 3600, 24 * 30, nowMs),
-    fetchCandles(a.product, 86400, 90, nowMs),
-  ]);
-  const spot = Number(ticker.price) || hourly[hourly.length - 1];
+  let got, firstErr;
+  try { got = await statsFromKraken(a); }
+  catch (e) { firstErr = e; got = await statsFromCoinbase(a, nowMs).catch(e2 => { throw new Error(`${e.message}; ${e2.message}`); }); }
+  const { source, spot, hourly, daily } = got;
   const vols = {
     h7: realizedVol(hourly.slice(-24 * 7), 24 * 365),
     h30: realizedVol(hourly, 24 * 365),
     d90: realizedVol(daily, 365),
   };
   const sigma = vols.h30 || vols.d90 || vols.h7;
-  return { spot, sigma, vols, bars: { hourly: hourly.length, daily: daily.length }, change24h: hourly.length > 24 ? (spot / hourly[hourly.length - 25] - 1) : null };
+  return { spot, sigma, vols, source, bars: { hourly: hourly.length, daily: daily.length }, change24h: hourly.length > 24 ? (spot / hourly[hourly.length - 25] - 1) : null };
 }
 
 async function gammaCryptoMarkets(pages = 3) {
@@ -189,7 +224,8 @@ export function summarize(rows) {
 export async function refreshCryptoFairValue(env, nowMs = Date.now()) {
   const assets = {}; const errors = {};
   for (const sym of Object.keys(ASSETS)) {
-    try { assets[sym] = await fetchAssetStats(sym, nowMs); } catch (e) { errors[sym] = e.message.slice(0, 80); }
+    try { assets[sym] = await fetchAssetStats(sym, nowMs); } catch (e) { errors[sym] = e.message.slice(0, 120); }
+    await sleep(300);   // three assets, two venues: never a burst
   }
   let markets = [];
   try { markets = await gammaCryptoMarkets(3); } catch (e) { errors.gamma = e.message.slice(0, 80); }
