@@ -24,6 +24,8 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Fetch backend state
+        env:
+          ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
         run: |
           BASE="https://polymarket-scanner.connord138.workers.dev"
           mkdir -p status /tmp/snap
@@ -52,12 +54,13 @@ jobs:
             "execution|/autotrader/execution"
             "xvenue|/xvenue/report?hours=48"
             "cryptoFv|/crypto/fairvalue"
+            "business|/admin/business"
           )
           args=(--arg fetchedAt "$(date -u +%FT%TZ)")
           prog='{fetchedAt: $fetchedAt}'
           for e in "${endpoints[@]}"; do
             name="${e%%|*}"; path="${e#*|}"
-            if ! curl -sf --max-time 45 "$BASE$path" -o "/tmp/snap/$name.json" \
+            if ! curl -sf --max-time 45 -H "Authorization: Bearer ${ADMIN_TOKEN}" "$BASE$path" -o "/tmp/snap/$name.json" \
                || ! jq -e . "/tmp/snap/$name.json" >/dev/null 2>&1; then
               echo '{"error":"fetch failed"}' > "/tmp/snap/$name.json"
               echo "WARN: $path failed"
