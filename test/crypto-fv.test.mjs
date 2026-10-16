@@ -54,7 +54,7 @@ check("Phi", near(Phi(0), 0.5) && near(Phi(1.96), 0.975, 2e-4) && near(Phi(-3), 
   const kv = new Map();
   const env = { SIGNALS_CACHE: { get: async (k) => (kv.has(k) ? JSON.parse(kv.get(k)) : null), put: async (k, v) => { kv.set(k, v); } } };
   const now = Date.parse("2026-10-15T20:00:00Z");
-  let candleCalls = 0;
+  let candleCalls = 0, krakenCalls = 0, krakenOk = false;
   globalThis.fetch = async (url) => {
     const u = String(url);
     if (u.includes("/candles?")) {
@@ -64,17 +64,21 @@ check("Phi", near(Phi(0), 0.5) && near(Phi(1.96), 0.975, 2e-4) && near(Phi(-3), 
       return { ok: true, json: async () => rows };
     }
     if (u.includes("/ticker")) return { ok: true, json: async () => ({ price: "82000.5" }) };
+    if (u.includes("api.kraken.com")) { krakenCalls++; return krakenOk ? { ok: true, json: async () => { const iv = Number((u.match(/interval=(\d+)/) || [])[1] || 0); if (u.includes("/Ticker")) return { error: [], result: { XXBTZUSD: { c: ["82100.0", "1"] } } }; const n = 720; const rows = []; for (let i = 0; i < n; i++) { const c = 80000 + 2000 * Math.sin(i / 7); rows.push([1700000000 + i * iv * 60, c, c, c, String(c), c, 1, 1]); } return { error: [], result: { XXBTZUSD: rows, last: 1 } }; } } : { ok: false, status: 429, json: async () => ({}) }; }
     if (u.includes("gamma-api")) return { ok: true, json: async () => (u.includes("offset=0") ? [{ slug: "ev", markets: [{ question: "Will the price of Bitcoin be above $84,000 on October 16?", slug: "btc-84k-oct16", endDate: "2026-10-16T00:00:00Z", active: true, closed: false, outcomePrices: '["0.137","0.863"]', clobTokenIds: '["t1","t2"]', volume24hr: 73000, bestBid: 0.13, bestAsk: 0.14 }, { question: "Will ETH be above $2,500 on October 16?", slug: "eth", endDate: "2026-10-16T00:00:00Z", active: true, closed: false, outcomePrices: '["0.5","0.5"]', volume24hr: 10 }] }] : []) };
     return { ok: false, status: 404, json: async () => ({}) };
   };
   const hourly = await fetchCandles("BTC-USD", 3600, 720, now);
   check("candles: paged to the requested bar count, oldest first", hourly.length === 720 && candleCalls === 3, { n: hourly.length, candleCalls });
   const blob = await refreshCryptoFairValue(env, now);
-  check("refresh: spot from ticker, vols from candles, rows priced, cached", blob.assets.BTC.spot === 82000.5 && blob.assets.BTC.vols.h30 > 0 && blob.assets.BTC.vols.d90 > 0 && blob.assets.ETH && blob.rows.length === 2 && blob.rows[0].slug === "btc-84k-oct16" && blob.rows[0].bestBid === 0.13 && blob.summary.contracts === 2 && kv.has("crypto_fv"), JSON.stringify({ a: blob.assets.BTC, s: blob.summary, e: blob.errors }));
+  check("refresh (Kraken down -> Coinbase): spot from ticker, vols from candles, rows priced, cached", blob.assets.BTC.source === "coinbase" && krakenCalls >= 3 && blob.assets.BTC.spot === 82000.5 && blob.assets.BTC.vols.h30 > 0 && blob.assets.BTC.vols.d90 > 0 && blob.assets.ETH && blob.rows.length === 2 && blob.rows[0].slug === "btc-84k-oct16" && blob.rows[0].bestBid === 0.13 && blob.summary.contracts === 2 && kv.has("crypto_fv"), JSON.stringify({ a: blob.assets.BTC, s: blob.summary, e: blob.errors }));
   const again = await getCryptoFairValue(env, { nowMs: now + 60e3 });
   check("get: fresh cache served without refetch", again.at === blob.at);
   const stale = await getCryptoFairValue(env, { nowMs: now + 3600e3 });
   check("get: stale cache refreshed", stale.at !== blob.at);
+  krakenOk = true; candleCalls = 0;
+  const viaKraken = await refreshCryptoFairValue(env, now + 7200e3);
+  check("refresh (Kraken up): one OHLC call per horizon, 720 hourly bars, Kraken ticker spot, Coinbase untouched", viaKraken.assets.BTC.source === "kraken" && viaKraken.assets.BTC.spot === 82100 && viaKraken.assets.BTC.bars.hourly === 720 && viaKraken.assets.BTC.bars.daily === 90 && viaKraken.assets.BTC.vols.h30 > 0 && candleCalls === 0, JSON.stringify(viaKraken.assets.BTC));
 }
 console.log(`${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
