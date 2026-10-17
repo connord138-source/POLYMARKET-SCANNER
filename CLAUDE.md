@@ -74,6 +74,20 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   stage the minute cron reached (`xv_boot`). Pregame scans
   (Oct 2026) found no cross-venue or neg-risk arbitrage — see
   `docs/PROFIT-AVENUES.md` Part 2 before proposing structural-arb features.
+  The sampler reads Polymarket US from `/v1/markets/{slug}/book` (top of
+  book + shares shown, `us_bid_qty`/`us_ask_qty`), falling back to `/bbo`.
+- `src/us-lane.js` — Polymarket US stale-quote **paper** lane (Oct 17 2026):
+  in-game, the US book lagged global Polymarket by more than its taker fee on
+  ~20-30% of 3c+ minute moves (NHL/NBA/CFB). The sampler's `afterSample` hook
+  logs a hypothetical taker fill at the sampled US quote for every such
+  minute (D1 `us_lane_events`, KV `xv_prev` holds the previous minute), the
+  minute cron marks events against global Polymarket's mid at +1/+5/+15/+60
+  min and end of game, the 5-min cron settles them through Gamma
+  (`cronStatus.usLane`). `GET /xvenue/uslane?hours=168` (snapshot key
+  `usLane`): marks are cents per share after the entry fee, exit costs not
+  charged. Decision rule: ~200 events with m15 and settle positive and the
+  shown size tradable before a real-money lane is proposed; that flip is the
+  operator's call. Places no orders.
 - `src/crypto-fv.js` — crypto fair value: every Polymarket BTC/ETH/SOL price
   contract ("above $X on <date>" = European digital; "dip to"/"reach" =
   one-touch via reflection) priced from Coinbase realized vol (7d/30d/90d,

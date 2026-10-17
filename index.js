@@ -26,6 +26,7 @@ import { handleCrewOrder, runCrewHunt, getCrewState, saveBrowserDkBoard } from "
 import { settleDkPicks } from "./src/dk-picks.js";
 import { collectBooks, MM_SCHEMA } from "./src/mm-collector.js";
 import { sampleXvenue, xvenueReport, XV_SCHEMA } from "./src/xvenue.js";
+import { US_LANE_SCHEMA, recordUsLaneEvents, markUsLaneEvents, settleUsLaneEvents, usLaneReport } from "./src/us-lane.js";
 import { getExecReport } from "./src/execution.js";
 import { getCryptoFairValue, refreshCryptoFairValue, annotateCryptoFairValue } from "./src/crypto-fv.js";
 import { getUser, authConfigured } from "./src/auth.js";
@@ -1082,6 +1083,7 @@ var SCHEMA_MIGRATIONS = [
   "ALTER TABLE investigations ADD COLUMN last_error TEXT",     // investigation failure visibility (half of day-1 runs were error_transient with no stored reason)
   ...MM_SCHEMA,
   ...XV_SCHEMA,                                               // migrations/0008_xvenue_quotes.sql (Kalshi vs Polymarket live quotes)                                               // migrations/0007_mm_books.sql (market-making depth snapshots)
+  ...US_LANE_SCHEMA,                                          // migrations/0009_us_lane_events.sql (Polymarket US stale-quote paper lane)
 ];
 var schemaEnsured = false;
 async function ensureSchema(env) {
@@ -4955,6 +4957,11 @@ export default {
         const moveC = Math.min(10, Math.max(1, parseFloat(url.searchParams.get("moveC") || "3") || 3));
         return atJson(await xvenueReport(env, { hours, moveC }));
       }
+      // Polymarket US stale-quote paper lane read-back (src/us-lane.js).
+      if (path === "/xvenue/uslane" && request.method === "GET") {
+        const hours = Math.min(14 * 24, Math.max(1, parseInt(url.searchParams.get("hours") || "168", 10) || 168));
+        return atJson(await usLaneReport(env, { hours }));
+      }
       if (path === "/autotrader/positions") {
         const positions = await getOpenPositions(env);
         return atJson(positions);
@@ -6800,7 +6807,12 @@ export default {
     // Minute trigger: only the cross-venue sampler (Kalshi vs Polymarket top-of-book
     // for live games -> D1 xvenue_quotes). Everything else stays on the 5-minute cron.
     if (event && event.cron === "* * * * *") {
-      try { await ensureSchema(env); const r = await sampleXvenue(env); console.log("xvenue:", JSON.stringify(r).slice(0, 300)); }
+      try {
+        await ensureSchema(env);
+        const usLane = async (legs, now) => ({ ...(await recordUsLaneEvents(env, legs, now)), ...(await markUsLaneEvents(env, now)) });
+        const r = await sampleXvenue(env, Date.now(), { afterSample: usLane });
+        console.log("xvenue:", JSON.stringify(r).slice(0, 300));
+      }
       catch (e) { console.error("xvenue error:", e.message); }
       return;
     }
@@ -7063,6 +7075,9 @@ export default {
       cronStatus.lines = lineResults;
       try { cronStatus.speed = await updateSpeed(env, gammaSidePriceCents, 40); }
       catch (e) { cronStatus.speed = { error: e.message }; }
+      // Polymarket US paper lane: settle events through Gamma (<= 15 tokens a run).
+      try { cronStatus.usLane = await settleUsLaneEvents(env); }
+      catch (e) { cronStatus.usLane = { error: e.message }; }
       
       // PHASE 3: Optimize factor weights periodically (every ~hour based on 5min cron)
       // Only run if we've processed some signals
