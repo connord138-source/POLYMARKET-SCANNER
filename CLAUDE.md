@@ -90,6 +90,20 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   kalshi.com/account/profile). Without them Kalshi 429s most calls from
   Cloudflare's shared egress and `xvenue_quotes.k_*` stays empty;
   `xvenue.last.kalshiAuth` in the snapshot shows which mode is active.
+- Accounts + billing (Oct 2026): `src/auth.js` verifies Supabase access
+  tokens (HS256 via `SUPABASE_JWT_SECRET`, or ES256/RS256 via the project's
+  JWKS at `SUPABASE_URL`); `src/tiers.js` holds PLANS (free / pro $19
+  founding → $29 / desk $49), `ROUTE_POLICY` (which routes need which plan,
+  which are trimmed for Free via `degradeFor`) and `planOf`; `src/billing.js`
+  is Stripe without the SDK (Checkout, portal, signed webhook at
+  `POST /billing/webhook`, entitlements in KV `ent:<userId>`, founding-seat
+  counter); `src/business.js` is the operator view (`GET /admin/business`:
+  subscribers, MRR, sign-ups via service role, affiliate clicks from
+  `/go/:venue`, waitlist). `GET /me`, `POST /billing/checkout|portal`,
+  `GET /public/record` (landing page proof). Enforcement is behind the
+  wrangler var `AUTH_GATE` ("off" until the sign-in frontend is live); admin
+  token bypasses it, and the snapshot job sends ADMIN_TOKEN. Secrets via
+  `.github/workflows/push-billing-keys.yml`; price ids in wrangler.toml.
 - `src/odds.js` — The Odds API client (KV-cached; `ODDS_API_KEY` secret).
 - `src/gamma.js` — Gamma API settlement (`findGammaMarket` handles
   closed markets + multi-market moneyline preference).

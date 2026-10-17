@@ -28,6 +28,18 @@ database_id = "524fc0f8-e5dd-46d1-a93b-156857668363"
 crons = ["*/5 * * * *", "* * * * *"]   # minute trigger = src/xvenue.js sampler only
 
 [vars]
+# Accounts + billing (src/auth.js, src/tiers.js, src/billing.js). AUTH_GATE="on"
+# makes member routes require a Supabase sign-in and enforces plans; leave
+# "off" until the sign-in frontend is live. SUPABASE_URL is public (the
+# project's API URL); the JWT secret / service role key are wrangler secrets
+# pushed by push-billing-keys.yml. Stripe price ids are not secrets.
+AUTH_GATE = "off"
+SUPABASE_URL = ""
+STRIPE_PRICE_PRO_FOUNDING = "price_1UQzEHJlttnL5vK2ll7RP7xu"
+STRIPE_PRICE_PRO_MONTHLY = "price_1UQziaJlttnL5vK2sIwdNtGh"
+STRIPE_PRICE_PRO_ANNUAL = "price_1UQzieJlttnL5vK2If47w9xu"
+STRIPE_PRICE_DESK_MONTHLY = "price_1UQzy3JlttnL5vK2NBgI0ywr"
+STRIPE_PRICE_DESK_ANNUAL = "price_1UR0J1JlttnL5vK2PsPoh0fm"
 # Agent investigation defaults. The ANTHROPIC_API_KEY secret activates the
 # investigator; these bound its cost. Sonnet is ~5x cheaper than Opus per
 # investigation — calibration (agent vs market Brier) will show whether the

@@ -28,6 +28,11 @@ import { collectBooks, MM_SCHEMA } from "./src/mm-collector.js";
 import { sampleXvenue, xvenueReport, XV_SCHEMA } from "./src/xvenue.js";
 import { getExecReport } from "./src/execution.js";
 import { getCryptoFairValue, refreshCryptoFairValue, annotateCryptoFairValue } from "./src/crypto-fv.js";
+import { getUser, authConfigured } from "./src/auth.js";
+import { PLANS, planOf, hasPlan, limitsFor, policyFor, degradeFor } from "./src/tiers.js";
+import { billingConfigured, getEntitlement, createCheckoutSession, createPortalSession, verifyStripeSignature, handleStripeEvent, grantPlan, meFor, foundingSeatsUsed } from "./src/billing.js";
+import { businessReport, allowedOutbound, recordClick } from "./src/business.js";
+import { getDkPicksLedger } from "./src/dk-picks.js";
 import { addToWaitlist, loadWaitlist, waitlistSummary, isIpThrottled, markIpSubmitted } from "./src/waitlist.js";
 import {
   getCouncilStats, getCouncilFeed, leaderboard as councilLeaderboard
@@ -3629,6 +3634,31 @@ function atJson(data, status) {
   });
 }
 
+// ---- Accounts and plans (src/auth.js, src/tiers.js, src/billing.js) ----
+// AUTH_GATE="on" (wrangler var) turns tier enforcement on; until then every
+// route behaves as before so the current frontend keeps working while the
+// sign-in frontend ships. Admin-token requests always bypass the gate.
+const gateEnabled = (env) => String(env.AUTH_GATE || "").toLowerCase() === "on";
+
+// Resolve the viewer for a gated route. -> { plan, user, policy } or a Response (401/402).
+async function resolveViewer(request, env, path) {
+  const policy = policyFor(path, request.method);
+  if (!policy) return { plan: "public", user: null, policy: null };
+  const user = await getUser(request, env);
+  if (!user) return atJson({ success: false, error: "sign_in_required", requiredPlan: policy.tier }, 401);
+  const plan = planOf(await getEntitlement(env, user.id));
+  if (!policy.degrade && !hasPlan(plan, policy.tier)) return atJson({ success: false, error: "plan_required", plan, requiredPlan: policy.tier }, 402);
+  return { plan, user, policy };
+}
+
+// Absolute return URL for Checkout/Portal: only our own origins.
+function returnBase(request, body) {
+  const allowed = ["https://edgerunner.vip", "https://www.edgerunner.vip"];
+  const cand = [body && body.returnBase, request.headers.get("Origin"), request.headers.get("Referer")].filter(Boolean);
+  for (const c of cand) { try { const o = new URL(c).origin; if (allowed.includes(o) || /^http:\/\/localhost(:\d+)?$/.test(o)) return o; } catch (e) {} }
+  return allowed[0];
+}
+
 function requiresAdmin(path, url, method) {
   if (path.startsWith("/autotrader") && method === "POST") return true;
   if (path.startsWith("/forge") && method === "POST") return true;      // /forge/run spends D1 reads
@@ -4125,6 +4155,56 @@ export default {
       return new Response(null, { headers: corsHeaders });
     }
 
+    // ---- Stripe webhook: raw body + signature, no auth, before anything else ----
+    if (path === "/billing/webhook" && request.method === "POST") {
+      if (!env.STRIPE_WEBHOOK_SECRET) return atJson({ success: false, error: "webhook secret not configured" }, 503);
+      const raw = await request.text();
+      const ok = await verifyStripeSignature(raw, request.headers.get("Stripe-Signature"), env.STRIPE_WEBHOOK_SECRET);
+      if (!ok) return atJson({ success: false, error: "bad signature" }, 400);
+      let event; try { event = JSON.parse(raw); } catch (e) { return atJson({ success: false, error: "bad json" }, 400); }
+      const r = await handleStripeEvent(env, event);
+      return atJson({ success: true, received: true, ...r });
+    }
+    // ---- Who am I / plan ----
+    if (path === "/me" && request.method === "GET") {
+      const user = await getUser(request, env);
+      if (!user) return atJson({ success: false, error: "sign_in_required", authConfigured: authConfigured(env) }, 401);
+      return atJson({ success: true, ...(await meFor(env, user)), foundingSeatsLeft: Math.max(0, 100 - (await foundingSeatsUsed(env))) });
+    }
+    if (path === "/billing/config" && request.method === "GET") {
+      return atJson({ success: true, billingEnabled: billingConfigured(env), authConfigured: authConfigured(env), gate: gateEnabled(env), plans: PLANS, foundingSeatsLeft: Math.max(0, 100 - (await foundingSeatsUsed(env))) });
+    }
+    if ((path === "/billing/checkout" || path === "/billing/portal") && request.method === "POST") {
+      const user = await getUser(request, env);
+      if (!user) return atJson({ success: false, error: "sign_in_required" }, 401);
+      if (!billingConfigured(env)) return atJson({ success: false, error: "billing not configured" }, 503);
+      let body = {}; try { body = await request.json(); } catch (e) {}
+      const base = returnBase(request, body);
+      try {
+        if (path === "/billing/portal") return atJson({ success: true, ...(await createPortalSession(env, { user, returnUrl: `${base}/Account` })) });
+        const plan = body.plan === "desk" ? "desk" : "pro", interval = body.interval === "annual" ? "annual" : "monthly";
+        const founding = plan === "pro" && interval === "monthly" && (await foundingSeatsUsed(env)) < 100;
+        return atJson({ success: true, ...(await createCheckoutSession(env, { user, plan, interval, founding, successUrl: `${base}/Account?checkout=success`, cancelUrl: `${base}/Pro?checkout=cancelled` })) });
+      } catch (e) { return atJson({ success: false, error: e.message }, 400); }
+    }
+    // ---- Public proof for the landing page ----
+    if (path === "/public/record" && request.method === "GET") {
+      let perf = null, dk = null, fv = null, signals24h = 0;
+      try { const p = await getBotPerformance(env); perf = p ? { totalTrades: p.totalTrades, winRate: p.winRate, totalPnL: Math.round((p.totalPnL || 0) * 100) / 100, startedAt: p.startedAt } : null; } catch (e) {}
+      try { const l = await getDkPicksLedger(env); dk = l && l.summary ? l.summary : l; } catch (e) {}
+      try { const c = await getCryptoFairValue(env); fv = c && c.summary ? { contracts: c.summary.contracts, medianAbsGapLiquid: c.summary.medianAbsGapLiquid, at: c.at } : null; } catch (e) {}
+      try { const all = (await env.SIGNALS_CACHE.get("signals", { type: "json" })) || []; const d = Date.now() - 86400e3; signals24h = all.filter(x => Date.parse(x.detectedAt || 0) > d).length; } catch (e) {}
+      return atJson({ success: true, at: new Date().toISOString(), bot: perf, dkRecord: dk, cryptoFv: fv, signals24h, plans: PLANS, foundingSeatsLeft: Math.max(0, 100 - (await foundingSeatsUsed(env))) });
+    }
+    // ---- Tracked outbound links (affiliate reporting): /go/:venue?u=https://... ----
+    if (path.startsWith("/go/") && request.method === "GET") {
+      const venue = path.slice(4); const target = allowedOutbound(venue, url.searchParams.get("u"));
+      if (!target) return atJson({ success: false, error: "unknown venue or link" }, 400);
+      const user = await getUser(request, env).catch(() => null);
+      ctx.waitUntil(recordClick(env, venue, user && user.id));
+      return new Response(null, { status: 302, headers: { ...corsHeaders, Location: target, "Cache-Control": "no-store" } });
+    }
+
     if (requiresAdmin(path, url, request.method)) {
       if (!isAdminAuthorized(request, env)) {
         return new Response(JSON.stringify({
@@ -4142,12 +4222,26 @@ export default {
       }
     }
 
+    // ---- Plan gate (AUTH_GATE=on): sign-in for member routes, plan checks, trimmed payloads for Free ----
+    let viewer = { plan: "public", user: null, policy: null };
+    if (gateEnabled(env) && !isAdminAuthorized(request, env)) {
+      const v = await resolveViewer(request, env, path);
+      if (v instanceof Response) return v;
+      viewer = v;
+    }
+    if (path === "/admin/business" && request.method === "GET") return atJson(await businessReport(env));
+    if (path === "/admin/grant" && request.method === "POST") {
+      let body = {}; try { body = await request.json(); } catch (e) {}
+      if (!body.userId || !PLANS[body.plan]) return atJson({ success: false, error: "userId and plan required" }, 400);
+      return atJson({ success: true, entitlement: await grantPlan(env, body.userId, body.plan, Number(body.days) || 30) });
+    }
+
     try {
       if (path === "/scan" || path === "/api/scan") {
         const hours = parseInt(url.searchParams.get("hours") || "48");
         const minScore = parseInt(url.searchParams.get("minScore") || "40");
         const result = await runScan(hours, minScore, env);
-        return new Response(JSON.stringify(result), {
+        return new Response(JSON.stringify(viewer.policy ? degradeFor("scan", result, viewer.plan) : result), {
           headers: { ...corsHeaders, "Content-Type": "application/json" }
         });
       }
@@ -4793,7 +4887,7 @@ export default {
 
       // Agent Crew orders: the chat box on the Agent Crew page.
       if (path === "/agents/crew" && request.method === "GET") {
-        return atJson(await getCrewState(env, { getTradeHistory, getOpenPositions }));
+        return atJson(viewer.policy ? degradeFor("crew", await getCrewState(env, { getTradeHistory, getOpenPositions }), viewer.plan) : await getCrewState(env, { getTradeHistory, getOpenPositions }));
       }
       if (path === "/agents/crew/orders" && request.method === "POST") {
         const body = await request.json().catch(() => ({}));
@@ -4852,7 +4946,8 @@ export default {
       }
       // Crypto fair value: every BTC/ETH/SOL price contract priced from realized vol (KV-cached; ?refresh=1 is admin).
       if (path === "/crypto/fairvalue" && request.method === "GET") {
-        return atJson(url.searchParams.get("refresh") === "1" ? await refreshCryptoFairValue(env) : await getCryptoFairValue(env));
+        const sheet = url.searchParams.get("refresh") === "1" ? await refreshCryptoFairValue(env) : await getCryptoFairValue(env);
+        return atJson(viewer.policy ? degradeFor("cryptoFv", sheet, viewer.plan) : sheet);
       }
       // Cross-venue sampler read-back (Kalshi vs Polymarket, live games).
       if (path === "/xvenue/report" && request.method === "GET") {

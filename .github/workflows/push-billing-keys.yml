@@ -1,0 +1,58 @@
+name: Push Billing Keys
+
+# Pushes the account/billing secrets from GitHub repo secrets into the worker.
+# Nothing is pasted in chat. Add these under Settings > Secrets and variables >
+# Actions, then run this workflow (Actions > Push Billing Keys > Run workflow):
+#
+#   STRIPE_SECRET_KEY          Stripe Dashboard > Developers > API keys > Secret key (sk_live_...)
+#   STRIPE_WEBHOOK_SECRET      Stripe Dashboard > Developers > Webhooks > the endpoint
+#                              https://polymarket-scanner.connord138.workers.dev/billing/webhook
+#                              (events: checkout.session.completed, customer.subscription.created,
+#                              customer.subscription.updated, customer.subscription.deleted,
+#                              invoice.payment_failed) > Signing secret (whsec_...)
+#   SUPABASE_JWT_SECRET        optional: Supabase > Project Settings > API > JWT Secret. Only
+#                              needed if the project signs tokens with HS256 (legacy). Projects
+#                              using JWT signing keys (ES256) need nothing here - the worker
+#                              verifies against the public JWKS.
+#   SUPABASE_SERVICE_ROLE_KEY  optional: lets /admin/business count sign-ups. Server-only.
+#
+# SUPABASE_URL (public) and the Stripe price ids live in wrangler.toml [vars].
+# After pushing: set AUTH_GATE = "on" in wrangler.toml when the sign-in
+# frontend is live, so member routes start requiring an account.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  push-keys:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Push billing / auth secrets into the worker
+        env:
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          SUPABASE_JWT_SECRET: ${{ secrets.SUPABASE_JWT_SECRET }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          pushed=0
+          push() {
+            name="$1"; value="$2"
+            if [ -z "$value" ]; then echo "skip $name (repo secret not set)"; return; fi
+            printf '%s' "$value" | npx wrangler@4 secret put "$name"
+            pushed=$((pushed+1))
+          }
+          if [ -z "$STRIPE_SECRET_KEY" ] && [ -z "$STRIPE_WEBHOOK_SECRET" ] && [ -z "$SUPABASE_JWT_SECRET" ] && [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "::error::None of STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET / SUPABASE_JWT_SECRET / SUPABASE_SERVICE_ROLE_KEY are set as repo secrets. Add at least one under Settings > Secrets and variables > Actions, then re-run."
+            exit 1
+          fi
+          case "$STRIPE_SECRET_KEY" in ""|sk_live_*|sk_test_*|rk_live_*|rk_test_*) ;; *) echo "::error::STRIPE_SECRET_KEY does not look like a Stripe secret key (expected sk_live_... / sk_test_...)"; exit 1;; esac
+          case "$STRIPE_WEBHOOK_SECRET" in ""|whsec_*) ;; *) echo "::error::STRIPE_WEBHOOK_SECRET does not look like a webhook signing secret (expected whsec_...)"; exit 1;; esac
+          push STRIPE_SECRET_KEY "$STRIPE_SECRET_KEY"
+          push STRIPE_WEBHOOK_SECRET "$STRIPE_WEBHOOK_SECRET"
+          push SUPABASE_JWT_SECRET "$SUPABASE_JWT_SECRET"
+          push SUPABASE_SERVICE_ROLE_KEY "$SUPABASE_SERVICE_ROLE_KEY"
+          echo "Pushed $pushed secret(s). GET /billing/config on the worker reports billingEnabled / authConfigured."
