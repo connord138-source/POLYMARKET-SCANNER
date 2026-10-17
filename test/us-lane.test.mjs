@@ -1,9 +1,9 @@
 // Polymarket US stale-quote paper lane. Run with: node test/us-lane.test.mjs
-import { detectUsLaneEvent, pnlC, marksFromSeries, settlementFromGamma, summarizeUsLane, recordUsLaneEvents, markUsLaneEvents, settleUsLaneEvents, usLaneReport, NO_DATA, FINAL_AFTER_S } from "../src/us-lane.js";
+import { detectUsLaneEvent, pnlC, marksFromSeries, settlementFromGamma, summarizeUsLane, recordUsLaneEvents, markUsLaneEvents, settleUsLaneEvents, usLaneReport, nextDueS, NO_DATA, FINAL_AFTER_S } from "../src/us-lane.js";
 import { usFee } from "../src/xvenue.js";
 let pass = 0, fail = 0;
 const check = (n, c, x) => { if (c) pass++; else { fail++; console.error("FAIL:", n, x ?? ""); } };
-const leg = (ts, p_bid, p_ask, us_bid, us_ask, extra = {}) => ({ ts, sport: "nhl", game: "Devils vs. Capitals", team: "Devils", p_token: "tok1", us_slug: "aec-nhl-nj-was", p_bid, p_ask, us_bid, us_ask, us_bid_qty: 1200, us_ask_qty: 800, ...extra });
+const leg = (ts, p_bid, p_ask, us_bid, us_ask, extra = {}) => ({ ts, sport: "nhl", game: "Devils vs. Capitals", team: "Devils", p_token: "tok1", us_slug: "aec-nhl-nj-was", us_long: true, p_bid, p_ask, us_bid, us_ask, us_bid_qty: 1200, us_ask_qty: 800, ...extra });
 
 {
   // +5c global move, US ask still 0.40: buy on US at 0.40, edge = 0.45 - 0.40 - fee(0.40)
@@ -51,6 +51,9 @@ const leg = (ts, p_bid, p_ask, us_bid, us_ask, extra = {}) => ({ ts, sport: "nhl
   const m5 = s.all.marks.m5;   // pnls: +5-f, -2-f, +4-f (cents) -> avg (7 - 3f)/3, 2 hits of 3
   check("summary: m5 average and hit rate after fee", m5.n === 3 && Math.abs(m5.avgC - (7 - 3 * f * 100) / 3) < 0.02 && Math.abs(m5.hitRate - 0.67) < 0.01 && m5.noData === 0, JSON.stringify(m5));
   check("summary: NO_DATA counted separately, nulls skipped, settlement averaged", s.all.marks.m15.n === 2 && s.all.marks.m15.noData === 1 && s.all.marks.final.n === 2 && s.all.marks.settle.n === 2 && Math.abs(s.all.marks.settle.avgC - ((60 - f * 100) + (-40 - f * 100)) / 2) < 0.02 && s.all.marks.settle.roiPct !== null, JSON.stringify(s.all.marks));
+  // tradable subset: only the 800-share and 200-share events; usd on the shown size
+  check("summary: tradable subset (>= 50 shares) with dollars on the shown size", s.all.tradable.n === 2 && s.all.tradable.share === 0.67 && s.all.tradable.marks.m5.n === 2 && Math.abs(s.all.tradable.marks.m5.usd - ((5 - f * 100) / 100 * 800 + (-2 - f * 100) / 100 * 200)) < 0.05 && s.all.tradable.marks.settle.n === 2 && s.bySport.nba.tradable.n === 0 && summarizeUsLane(evs, { tradableQty: 1000 }).all.tradable.n === 0, JSON.stringify(s.all.tradable));
+  check("nextDue: earliest unfilled horizon, else end of game", nextDueS({ ts: 100 }) === 220 && nextDueS({ ts: 100, m1: 0.5 }) === 460 && nextDueS({ ts: 100, m1: 0.5, m5: 0.5, m15: 0.5, m60: NO_DATA }) === 100 + FINAL_AFTER_S);
 }
 {
   // end to end with a mock D1 that stores events and quotes and answers the lane's queries
@@ -81,11 +84,17 @@ const leg = (ts, p_bid, p_ask, us_bid, us_ask, extra = {}) => ({ ts, sport: "nhl
   const r1 = await push(T + 60, 0.45, 0.46, 0.39, 0.40);     // stale US ask -> event
   const r2 = await push(T + 120, 0.45, 0.46, 0.44, 0.45);    // US caught up, no move -> nothing
   check("record: first minute has nothing to compare, second minute logs one event, third none; prev blob rolls", r0.events === 0 && r0.compared === 0 && r1.events === 1 && r1.compared === 1 && r2.events === 0 && events.length === 1 && events[0].side === "buy" && events[0].qty === 800 && JSON.parse(kv.get("xv_prev")).legs["nhl|Devils vs. Capitals|Devils"].ts === T + 120, JSON.stringify({ r0, r1, r2, ev: events[0] }));
+  // the complement leg (us_long false) mirrors the same quote from the other side: never a second event
+  const comp = (ts, pb, pa, ub, ua) => leg(ts, pb, pa, ub, ua, { team: "Capitals", p_token: "tok2", us_long: false });
+  const c0 = await recordUsLaneEvents(env, [leg(T + 180, 0.45, 0.46, 0.44, 0.45), comp(T + 180, 0.54, 0.55, 0.55, 0.56)], (T + 180) * 1000);
+  const c1 = await recordUsLaneEvents(env, [leg(T + 240, 0.40, 0.41, 0.44, 0.45), comp(T + 240, 0.59, 0.60, 0.55, 0.56)], (T + 240) * 1000);
+  check("record: a down-move logs one sell on the long leg and nothing on its complement", c0.events === 0 && c1.events === 1 && c1.compared === 1 && events.length === 2 && events[1].side === "sell" && events[1].team === "Devils" && !("nhl|Devils vs. Capitals|Capitals" in JSON.parse(kv.get("xv_prev")).legs), JSON.stringify({ c0, c1, ev: events[1] }));
+  events.pop(); quotes.push({ ts: T + 180, game: "Devils vs. Capitals", team: "Devils", p_bid: 0.45, p_ask: 0.46 });
   for (const [dt, pb, pa] of [[300, 0.47, 0.48], [900, 0.50, 0.51], [3600, 0.55, 0.56]]) quotes.push({ ts: T + 60 + dt, game: "Devils vs. Capitals", team: "Devils", p_bid: pb, p_ask: pa });
   const m1 = await markUsLaneEvents(env, (T + 60 + 400) * 1000);
-  check("mark: after 6.7 min, m1 and m5 are set (m1 from the T+120 sample), m15/m60/final wait", m1.due === 1 && m1.marked === 1 && events[0].m1 === 0.455 && events[0].m5 === 0.475 && events[0].m15 == null && events[0].final == null && events[0].marked_at === T + 460, JSON.stringify({ m1, ev: events[0] }));
-  const m2 = await markUsLaneEvents(env, (T + 60 + 500) * 1000);
-  check("mark: re-checked only after the marked_at cooldown", m2.due === 0, JSON.stringify(m2));
+  check("mark: after 6.7 min, m1 and m5 are set (m1 from the T+120 sample), m15/m60/final wait; next read scheduled for the m15 horizon", m1.due === 1 && m1.marked === 1 && events[0].m1 === 0.455 && events[0].m5 === 0.475 && events[0].m15 == null && events[0].final == null && events[0].marked_at === T + 60 + 900 + 60 - 120, JSON.stringify({ m1, ev: events[0] }));
+  const m2 = await markUsLaneEvents(env, (T + 60 + 800) * 1000);
+  check("mark: not re-read before its next horizon is due", m2.due === 0, JSON.stringify(m2));
   const m3 = await markUsLaneEvents(env, (T + 60 + FINAL_AFTER_S + 5) * 1000);
   check("mark: at end of game m15, m60 and final land; the event leaves the due set", m3.marked === 1 && events[0].m15 === 0.505 && events[0].m60 === 0.555 && events[0].final === 0.555 && (await markUsLaneEvents(env, (T + 60 + FINAL_AFTER_S + 700) * 1000)).due === 0, JSON.stringify(events[0]));
   // settlement: Gamma says the Devils won
