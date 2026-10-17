@@ -109,24 +109,34 @@ export function settlementFromGamma(market, token) {
 }
 
 // Pure: aggregate events (with marks) into the report shape.
-export function summarizeUsLane(events) {
-  const mk = () => ({ n: 0, buy: 0, sell: 0, edgeSumC: 0, qtySum: 0, qtyN: 0, qtys: [], pxSum: 0, marks: Object.fromEntries([...Object.keys(HORIZONS), 'final', 'settle'].map(k => [k, { n: 0, sumC: 0, hits: 0, noData: 0 }])) });
+export const TRADABLE_QTY = 50;   // shares shown at the stale price for an event to count as fillable
+const mkMarks = () => Object.fromEntries([...Object.keys(HORIZONS), 'final', 'settle'].map(k => [k, { n: 0, sumC: 0, hits: 0, noData: 0, usdSum: 0 }]));
+export function summarizeUsLane(events, { tradableQty = TRADABLE_QTY } = {}) {
+  const mk = () => ({ n: 0, buy: 0, sell: 0, edgeSumC: 0, qtySum: 0, qtyN: 0, qtys: [], pxSum: 0, marks: mkMarks(), tradable: { n: 0, pxSum: 0, marks: mkMarks() } });
   const all = mk(), bySport = {};
+  const addMarks = (marks, ev, usd) => {
+    for (const k of Object.keys(marks)) {
+      const m = ev[k]; if (m == null) continue;
+      if (m < 0) { marks[k].noData++; continue; }
+      const p = pnlC({ side: ev.side, px: ev.px, fee: ev.fee }, m);
+      marks[k].n++; marks[k].sumC += p; if (p > 0) marks[k].hits++;
+      if (usd) marks[k].usdSum += p / 100 * Math.min(ev.qty, 1000);   // dollars on the shown size, capped at 1000 shares
+    }
+  };
   const add = (s, ev) => {
     s.n++; s[ev.side]++; s.edgeSumC += ev.edge_c || 0; s.pxSum += ev.px;
     if (ev.qty != null) { s.qtySum += ev.qty; s.qtyN++; s.qtys.push(ev.qty); }
-    for (const k of Object.keys(s.marks)) {
-      const m = ev[k]; if (m == null) continue;
-      if (m < 0) { s.marks[k].noData++; continue; }
-      const p = pnlC({ side: ev.side, px: ev.px, fee: ev.fee }, m);
-      s.marks[k].n++; s.marks[k].sumC += p; if (p > 0) s.marks[k].hits++;
-    }
+    addMarks(s.marks, ev, false);
+    if (ev.qty != null && ev.qty >= tradableQty) { s.tradable.n++; s.tradable.pxSum += ev.px; addMarks(s.tradable.marks, ev, true); }
   };
   for (const ev of events || []) { add(all, ev); add(bySport[ev.sport] || (bySport[ev.sport] = mk()), ev); }
+  const finishMarks = (marks, avgPx, usd) => Object.fromEntries(Object.entries(marks).map(([k, m]) => [k, { n: m.n, avgC: m.n ? r2(m.sumC / m.n) : null, hitRate: m.n ? r2(m.hits / m.n) : null, noData: m.noData, roiPct: m.n && avgPx ? r2((m.sumC / m.n) / (avgPx * 100) * 100) : null, ...(usd ? { usd: r2(m.usdSum) } : {}) }]));
   const finish = (s) => {
-    const o = { n: s.n, buy: s.buy, sell: s.sell, avgEdgeC: s.n ? r2(s.edgeSumC / s.n) : null, avgPx: s.n ? r4(s.pxSum / s.n) : null, avgQty: s.qtyN ? Math.round(s.qtySum / s.qtyN) : null, medQty: null, marks: {} };
+    const o = { n: s.n, buy: s.buy, sell: s.sell, avgEdgeC: s.n ? r2(s.edgeSumC / s.n) : null, avgPx: s.n ? r4(s.pxSum / s.n) : null, avgQty: s.qtyN ? Math.round(s.qtySum / s.qtyN) : null, medQty: null };
     if (s.qtys.length) { const q = [...s.qtys].sort((a, b) => a - b); o.medQty = Math.round(q[Math.floor(q.length / 2)]); }
-    for (const [k, m] of Object.entries(s.marks)) o.marks[k] = { n: m.n, avgC: m.n ? r2(m.sumC / m.n) : null, hitRate: m.n ? r2(m.hits / m.n) : null, noData: m.noData, roiPct: m.n && o.avgPx ? r2((m.sumC / m.n) / (o.avgPx * 100) * 100) : null };
+    o.marks = finishMarks(s.marks, o.avgPx, false);
+    const tp = s.tradable.n ? s.tradable.pxSum / s.tradable.n : null;
+    o.tradable = { minQty: tradableQty, n: s.tradable.n, share: s.n ? r2(s.tradable.n / s.n) : null, marks: finishMarks(s.tradable.marks, tp, true) };
     return o;
   };
   const out = { all: finish(all), bySport: {} };
@@ -137,12 +147,16 @@ export function summarizeUsLane(events) {
 // Sampler hook: compare this minute's sampled legs with the previous minute
 // (KV `xv_prev`), insert any qualifying events, roll the prev blob forward.
 // `legs` = [{ts, sport, game, team, p_token, us_slug, p_bid, p_ask, us_bid, us_ask, us_bid_qty, us_ask_qty}].
+// Only the leg the US instrument actually quotes (`us_long`) is examined: the
+// other leg's US bid/ask are that quote's complements, so an up-move there is
+// the same trade seen from the other side and would double-count every event.
 export async function recordUsLaneEvents(env, legs, nowMs = Date.now(), opts = {}) {
   let prev = null; try { prev = await env.SIGNALS_CACHE.get(US_LANE_KEYS.PREV, { type: 'json' }); } catch (e) {}
   const prevMap = (prev && prev.legs) || {};
   const key = (l) => `${l.sport}|${l.game}|${l.team}`;
   const events = []; const next = {};
   for (const l of legs || []) {
+    if (!l.us_long) continue;
     next[key(l)] = { ts: l.ts, p_bid: l.p_bid, p_ask: l.p_ask, us_bid: l.us_bid, us_ask: l.us_ask, us_bid_qty: l.us_bid_qty ?? null, us_ask_qty: l.us_ask_qty ?? null };
     const ev = detectUsLaneEvent(prevMap[key(l)], l, opts);
     if (ev) events.push(ev);
@@ -154,6 +168,13 @@ export async function recordUsLaneEvents(env, legs, nowMs = Date.now(), opts = {
     for (let i = 0; i < stmts.length; i += 50) await env.DB.batch(stmts.slice(i, i + 50));
   }
   return { events: events.length, compared: Object.keys(prevMap).length };
+}
+
+// Pure: when is this event next worth re-reading? The earliest unfilled
+// horizon (+60s slack), else the end of the live window for `final`.
+export function nextDueS(ev) {
+  for (const [k, h] of Object.entries(HORIZONS)) if (ev[k] == null) return ev.ts + h + 60;
+  return ev.ts + FINAL_AFTER_S;
 }
 
 // Minute cron: fill marks for events whose horizons have passed, from the
@@ -168,8 +189,11 @@ export async function markUsLaneEvents(env, nowMs = Date.now()) {
     const q = await env.DB.prepare(`SELECT ts, p_bid, p_ask FROM xvenue_quotes WHERE game = ? AND team = ? AND ts > ? AND ts <= ? AND p_bid IS NOT NULL ORDER BY ts LIMIT 400`).bind(ev.game, ev.team, ev.ts, ev.ts + FINAL_AFTER_S + 600).all();
     const m = marksFromSeries(ev, (q && q.results) || [], nowS);
     const cols = Object.keys(m);
-    if (!cols.length) { stmts.push(env.DB.prepare(`UPDATE us_lane_events SET marked_at = ? WHERE id = ?`).bind(nowS, ev.id)); continue; }
-    stmts.push(env.DB.prepare(`UPDATE us_lane_events SET ${cols.map(c => `${c} = ?`).join(', ')}, marked_at = ? WHERE id = ?`).bind(...cols.map(c => m[c]), nowS, ev.id));
+    // marked_at doubles as "not before": the row is re-read when its next unfilled horizon is due, not every two minutes
+    const dueS = nextDueS({ ...ev, ...m });
+    const notBefore = Math.max(nowS, dueS - 120);
+    if (!cols.length) { stmts.push(env.DB.prepare(`UPDATE us_lane_events SET marked_at = ? WHERE id = ?`).bind(notBefore, ev.id)); continue; }
+    stmts.push(env.DB.prepare(`UPDATE us_lane_events SET ${cols.map(c => `${c} = ?`).join(', ')}, marked_at = ? WHERE id = ?`).bind(...cols.map(c => m[c]), notBefore, ev.id));
     marked++;
   }
   for (let i = 0; i < stmts.length; i += 50) await env.DB.batch(stmts.slice(i, i + 50));
@@ -213,6 +237,6 @@ export async function usLaneReport(env, { hours = 168, recent = 20, nowMs = Date
   let prev = null; try { prev = await env.SIGNALS_CACHE.get(US_LANE_KEYS.PREV, { type: 'json' }); } catch (e) {}
   return {
     success: true, hours, events: rows.length, legs, games, ...sum, recent: rec, prevAt: prev && prev.at ? new Date(prev.at).toISOString() : null,
-    read: `Paper only: each event is a hypothetical taker fill on Polymarket US at the sampled quote (px, qty = shares shown at that price) in a minute where global Polymarket's mid moved >= 3c and the US quote was still crossable after the ${US_TAKER_RATE * 100}% x p(1-p) taker fee (edgeC = cents of edge at entry). marks.* = cents per share after the entry fee, marked at global Polymarket's mid 1/5/15/60 minutes later and at the end of the game (final), and at settlement (0/1). Exit fees and the US spread are not charged. roiPct = avg mark pnl / avg entry price. noData = horizon passed with no sample. Decision rule (docs/PROFIT-AVENUES.md Part 2): after ~200 events, if m15 and settle are both positive after fees with a hit rate above 50% and the shown size is tradable, a Polymarket US lane is worth building; the real-money flip stays the operator's call.`,
+    read: `Paper only: each event is a hypothetical taker fill on Polymarket US at the sampled quote (px, qty = shares shown at that price; one event per game minute, on the leg the US instrument quotes). tradable = the subset with at least ${TRADABLE_QTY} shares shown (usd = dollars on the shown size, capped at 1000 shares) in a minute where global Polymarket's mid moved >= 3c and the US quote was still crossable after the ${US_TAKER_RATE * 100}% x p(1-p) taker fee (edgeC = cents of edge at entry). marks.* = cents per share after the entry fee, marked at global Polymarket's mid 1/5/15/60 minutes later and at the end of the game (final), and at settlement (0/1). Exit fees and the US spread are not charged. roiPct = avg mark pnl / avg entry price. noData = horizon passed with no sample. Decision rule (docs/PROFIT-AVENUES.md Part 2): after ~200 events, if m15 and settle are both positive after fees with a hit rate above 50% and the shown size is tradable, a Polymarket US lane is worth building; the real-money flip stays the operator's call.`,
   };
 }
