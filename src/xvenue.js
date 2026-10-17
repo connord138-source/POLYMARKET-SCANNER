@@ -246,7 +246,8 @@ export async function usTopOfBook(slug) {
     if (res.ok) {
       const md = (await res.json()).marketData || {};
       const top = (lv, pick) => { const xs = (lv || []).map(l => ({ px: v(l.px), qty: l.qty != null ? Number(l.qty) : null })).filter(l => l.px > 0); if (!xs.length) return null; return xs.reduce((a, b) => (pick(b.px, a.px) ? b : a)); };
-      const b = top(md.bids, (x, y) => x > y), a = top(md.asks, (x, y) => x < y);
+      // the gateway names the ask side `offers` (older docs: `asks`); either is accepted
+      const b = top(md.bids, (x, y) => x > y), a = top(md.offers || md.asks, (x, y) => x < y);
       if (b || a) return { bid: b ? b.px : null, ask: a ? a.px : null, last: null, bidQty: b ? b.qty : null, askQty: a ? a.qty : null };
     }
   } catch (e) { /* fall through to /bbo */ }
