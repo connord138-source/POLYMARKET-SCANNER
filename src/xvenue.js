@@ -33,6 +33,8 @@ export const XV_SCHEMA = [
   `ALTER TABLE xvenue_quotes ADD COLUMN us_bid REAL`,
   `ALTER TABLE xvenue_quotes ADD COLUMN us_ask REAL`,
   `ALTER TABLE xvenue_quotes ADD COLUMN us_last REAL`,
+  `ALTER TABLE xvenue_quotes ADD COLUMN us_bid_qty REAL`,    // shares shown at the US best bid / ask (from /book; null when only /bbo answered)
+  `ALTER TABLE xvenue_quotes ADD COLUMN us_ask_qty REAL`,
 ];
 
 export const XV_SPORTS = {
@@ -235,6 +237,25 @@ export async function buildPairs(env, nowMs = Date.now()) {
   return blob;
 }
 
+// Polymarket US top of book for one market: best bid/ask with the shares shown
+// there (/book), else best bid/ask alone (/bbo). null when neither answers.
+export async function usTopOfBook(slug) {
+  const v = (x) => (x && x.value != null ? Number(x.value) : null);
+  try {
+    const res = await fetch(`${US_API}/v1/markets/${encodeURIComponent(slug)}/book`);
+    if (res.ok) {
+      const md = (await res.json()).marketData || {};
+      const top = (lv, pick) => { const xs = (lv || []).map(l => ({ px: v(l.px), qty: l.qty != null ? Number(l.qty) : null })).filter(l => l.px > 0); if (!xs.length) return null; return xs.reduce((a, b) => (pick(b.px, a.px) ? b : a)); };
+      const b = top(md.bids, (x, y) => x > y), a = top(md.asks, (x, y) => x < y);
+      if (b || a) return { bid: b ? b.px : null, ask: a ? a.px : null, last: null, bidQty: b ? b.qty : null, askQty: a ? a.qty : null };
+    }
+  } catch (e) { /* fall through to /bbo */ }
+  const res = await fetch(`${US_API}/v1/markets/${encodeURIComponent(slug)}/bbo`);
+  if (!res.ok) return null;
+  const md = (await res.json()).marketData || {};
+  return { bid: v(md.bestBid), ask: v(md.bestAsk), last: v(md.lastTradePx), bidQty: null, askQty: null };
+}
+
 const bestOf = (book) => {
   const asks = (book?.asks || []).map(a => Number(a.price)).filter(x => x > 0), bids = (book?.bids || []).map(a => Number(a.price)).filter(x => x > 0);
   return { bid: bids.length ? Math.max(...bids) : null, ask: asks.length ? Math.min(...asks) : null, last: book?.last_trade_price != null ? Number(book.last_trade_price) : null };
@@ -242,7 +263,10 @@ const bestOf = (book) => {
 
 // One sample: Kalshi top-of-book (one call, ticker list) + Polymarket books
 // (one POST) for every live leg -> D1 rows. Returns a small status object.
-export async function sampleXvenue(env, nowMs = Date.now()) {
+// `hooks.afterSample(sampledLiveLegs, nowMs)` runs once the rows are stored
+// (the Polymarket US paper lane, src/us-lane.js, hangs off it); its result
+// lands in status.usLane and its failure never fails the sample.
+export async function sampleXvenue(env, nowMs = Date.now(), hooks = {}) {
   const mark = async (stage, extra) => { try { await env.SIGNALS_CACHE.put(XV_KEYS.BOOT, JSON.stringify({ at: new Date(nowMs).toISOString(), stage, ...(extra || {}) }), { expirationTtl: 86400 }); } catch (e) {} };
   await mark('start');
   let blob = null;
@@ -272,34 +296,38 @@ export async function sampleXvenue(env, nowMs = Date.now()) {
       if (res.ok) for (const b of await res.json()) pq.set(b.asset_id, b);
     } catch (e) { status.polyError = e.message.slice(0, 80); }
   }
-  // Polymarket US: one BBO call per live game (the instrument quotes the long side).
+  // Polymarket US: one call per live game (the instrument quotes the long side).
+  // /book gives the top of book with the shares shown there; /bbo (no sizes) is the fallback.
   const uq = new Map();
   const usSlugs = [...new Set(live.map(p => p.usSlug).filter(Boolean))].slice(0, US_MAX_BBO_CALLS);
   for (const slug of usSlugs) {
     try {
-      const res = await fetch(`${US_API}/v1/markets/${encodeURIComponent(slug)}/bbo`);
-      if (!res.ok) continue;
-      const md = (await res.json()).marketData || {};
-      const v = (x) => (x && x.value != null ? Number(x.value) : null);
-      uq.set(slug, { bid: v(md.bestBid), ask: v(md.bestAsk), last: v(md.lastTradePx) });
+      const q = await usTopOfBook(slug);
+      if (q) uq.set(slug, q);
     } catch (e) { status.usError = e.message.slice(0, 80); }
   }
   const ts = Math.floor(nowMs / 1000);
-  const stmts = [];
+  const stmts = []; const sampled = [];
   for (const l of legs) {
     const k = kq.get(l.kTicker), b = pq.get(l.pToken), u = l.usSlug ? uq.get(l.usSlug) : null;
     if (!k && !b && !u) continue;
     const p = bestOf(b);
     const num = (v) => (v == null || v === '' ? null : Number(v));
-    // the US instrument quotes one side; the other leg's bid/ask are the complements
-    const us = !u ? { bid: null, ask: null, last: null } : l.usLong ? u : { bid: u.ask == null ? null : Math.round((1 - u.ask) * 10000) / 10000, ask: u.bid == null ? null : Math.round((1 - u.bid) * 10000) / 10000, last: u.last == null ? null : Math.round((1 - u.last) * 10000) / 10000 };
-    stmts.push(env.DB.prepare(`INSERT INTO xvenue_quotes (ts, sport, game, team, phase, k_ticker, k_bid, k_ask, k_last, p_token, p_bid, p_ask, p_last, p_fee_rate, us_bid, us_ask, us_last) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-      .bind(ts, l.sport, l.game, l.team, l.startMs > nowMs ? 'pre' : 'live', l.kTicker, k ? num(k.yes_bid_dollars) : null, k ? num(k.yes_ask_dollars) : null, k ? num(k.last_price_dollars) : null, l.pToken, p.bid, p.ask, p.last, l.feeRate, us.bid, us.ask, us.last));
+    const c = (x) => (x == null ? null : Math.round((1 - x) * 10000) / 10000);
+    // the US instrument quotes one side; the other leg's bid/ask are the complements (and its sizes swap)
+    const us = !u ? { bid: null, ask: null, last: null, bidQty: null, askQty: null } : l.usLong ? u : { bid: c(u.ask), ask: c(u.bid), last: c(u.last), bidQty: u.askQty ?? null, askQty: u.bidQty ?? null };
+    const phase = l.startMs > nowMs ? 'pre' : 'live';
+    stmts.push(env.DB.prepare(`INSERT INTO xvenue_quotes (ts, sport, game, team, phase, k_ticker, k_bid, k_ask, k_last, p_token, p_bid, p_ask, p_last, p_fee_rate, us_bid, us_ask, us_last, us_bid_qty, us_ask_qty) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .bind(ts, l.sport, l.game, l.team, phase, l.kTicker, k ? num(k.yes_bid_dollars) : null, k ? num(k.yes_ask_dollars) : null, k ? num(k.last_price_dollars) : null, l.pToken, p.bid, p.ask, p.last, l.feeRate, us.bid, us.ask, us.last, us.bidQty, us.askQty));
+    if (phase === 'live') sampled.push({ ts, sport: l.sport, game: l.game, team: l.team, p_token: l.pToken, us_slug: l.usSlug, p_bid: p.bid, p_ask: p.ask, us_bid: us.bid, us_ask: us.ask, us_bid_qty: us.bidQty, us_ask_qty: us.askQty });
   }
   status.usQuoted = uq.size;
   if (stmts.length) {
     for (let i = 0; i < stmts.length; i += 50) await env.DB.batch(stmts.slice(i, i + 50));
     status.rows = stmts.length;
+  }
+  if (typeof hooks.afterSample === 'function') {
+    try { status.usLane = await hooks.afterSample(sampled, nowMs); } catch (e) { status.usLaneError = e.message.slice(0, 80); }
   }
   if (new Date(nowMs).getUTCMinutes() === 7) {
     try { await env.DB.prepare(`DELETE FROM xvenue_quotes WHERE ts < ?`).bind(ts - XV_PRUNE_DAYS * 86400).run(); } catch (e) {}

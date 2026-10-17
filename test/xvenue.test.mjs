@@ -54,7 +54,7 @@ const P = (q, outs, start, toks = ["t0", "t1"], extra = {}) => ({ question: q, o
 }
 {
   // end-to-end sample with mocked Kalshi, Gamma, CLOB, KV and D1
-  const kv = new Map(); const rows = []; let kalshiCalls = 0; let gammaUrl = ""; let kalshiUa = "";
+  const kv = new Map(); const rows = []; let kalshiCalls = 0; let gammaUrl = ""; let kalshiUa = ""; let bookDown = false; const hookCalls = [];
   const env = {
     SIGNALS_CACHE: { get: async (k) => { const v = kv.get(k); return v === undefined ? null : JSON.parse(v); }, put: async (k, v) => { kv.set(k, v); } },
     DB: { prepare: (sql) => ({ bind: (...a) => ({ sql, a, run: async () => {} }), run: async () => {} }), batch: async (st) => { rows.push(...st); } },
@@ -68,14 +68,20 @@ const P = (q, outs, start, toks = ["t0", "t1"], extra = {}) => ({ question: q, o
     if (u.includes("gamma-api") && u.includes("tag_slug=nfl")) { gammaUrl = u; return { ok: true, json: async () => [{ title: "Bills vs. Rams", markets: [P("Bills vs. Rams", ["Bills", "Rams"], "2026-10-13T00:15:00Z")] }] }; }
     if (u.includes("gateway.polymarket.us/v2/leagues/nfl/events")) return { ok: true, json: async () => ({ events: [{ title: "BUF Bills vs. LA Rams", startDate: "2026-10-13T00:15:00Z", closed: false, markets: [{ slug: "aec-nfl-buf-lar-2026-10-12", sportsMarketTypeV2: "SPORTS_MARKET_TYPE_MONEYLINE", marketSides: [{ description: "Rams", long: false, team: { name: "Los Angeles Rams" } }, { description: "Bills", long: true, team: { name: "Buffalo Bills" } }] }] }] }) };
     if (u.includes("gateway.polymarket.us/v2/leagues/")) return { ok: true, json: async () => ({ events: [] }) };
+    if (u.includes("gateway.polymarket.us/v1/markets/aec-nfl-buf-lar-2026-10-12/book")) { if (bookDown) return { ok: false, status: 404, json: async () => ({}) }; return { ok: true, json: async () => ({ marketData: { bids: [{ px: { value: "0.3700" }, qty: "50.00" }, { px: { value: "0.3800" }, qty: "1200.50" }], asks: [{ px: { value: "0.3900" }, qty: "10.00" }, { px: { value: "0.3825" }, qty: "800.00" }] } }) }; }
     if (u.includes("gateway.polymarket.us/v1/markets/aec-nfl-buf-lar-2026-10-12/bbo")) return { ok: true, json: async () => ({ marketData: { bestBid: { value: "0.3800" }, bestAsk: { value: "0.3825" }, lastTradePx: { value: "0.3810" } } }) };
     if (u.includes("gamma-api")) return { ok: true, json: async () => [] };
     if (u.endsWith("/books") && opts && opts.method === "POST") return { ok: true, json: async () => [{ asset_id: "t0", bids: [{ price: "0.38", size: "100" }], asks: [{ price: "0.39", size: "50" }], last_trade_price: "0.39" }, { asset_id: "t1", bids: [{ price: "0.61", size: "10" }], asks: [{ price: "0.62", size: "10" }] }] };
     return { ok: false, status: 404, json: async () => ({}) };
   };
-  const s1 = await sampleXvenue(env, now);
+  const s1 = await sampleXvenue(env, now, { afterSample: async (legs, at) => { hookCalls.push({ legs, at }); return { events: 0 }; } });
   check("sample: pairs built, one live game, two rows, correct columns", s1.pairs === 1 && s1.live === 1 && s1.rows === 2 && rows[0].a[0] === Math.floor(now / 1000) && rows[0].a[3] === "Bills" && rows[0].a[4] === "live" && rows[0].a[6] === 0.37 && rows[0].a[7] === 0.39 && rows[0].a[10] === 0.38 && rows[0].a[11] === 0.39 && rows[0].a[13] === 0.03, JSON.stringify({ s1, row: rows[0] && rows[0].a }));
-  check("sample: Polymarket US quotes on the long leg and complemented on the other", s1.usQuoted === 1 && rows[0].a[14] === 0.38 && rows[0].a[15] === 0.3825 && rows[0].a[16] === 0.381 && rows[1].a[3] === "Rams" && rows[1].a[14] === 0.6175 && rows[1].a[15] === 0.62 && rows[1].a[16] === 0.619, JSON.stringify([rows[0].a.slice(14), rows[1].a.slice(14)]));
+  check("sample: Polymarket US top of book from /book on the long leg (best levels, shares shown) and complemented on the other (sizes swap)", s1.usQuoted === 1 && rows[0].a[14] === 0.38 && rows[0].a[15] === 0.3825 && rows[0].a[16] === null && rows[0].a[17] === 1200.5 && rows[0].a[18] === 800 && rows[1].a[3] === "Rams" && rows[1].a[14] === 0.6175 && rows[1].a[15] === 0.62 && rows[1].a[17] === 800 && rows[1].a[18] === 1200.5, JSON.stringify([rows[0].a.slice(14), rows[1].a.slice(14)]));
+  check("sample: afterSample hook receives the live legs with global + US quotes and sizes; its result lands in status.usLane", hookCalls.length === 1 && hookCalls[0].at === now && hookCalls[0].legs.length === 2 && hookCalls[0].legs[0].team === "Bills" && hookCalls[0].legs[0].p_bid === 0.38 && hookCalls[0].legs[0].us_ask === 0.3825 && hookCalls[0].legs[0].us_ask_qty === 800 && hookCalls[0].legs[0].p_token === "t0" && s1.usLane && s1.usLane.events === 0, JSON.stringify({ hookCalls: hookCalls.map(h => h.legs), usLane: s1.usLane }));
+  bookDown = true;
+  const sb = await sampleXvenue(env, now + 30e3, { afterSample: async () => { throw new Error("lane boom"); } });
+  check("sample: /book down -> /bbo fallback keeps bid/ask (no sizes, last filled); a throwing hook never fails the sample", sb.rows === 2 && rows[2].a[14] === 0.38 && rows[2].a[15] === 0.3825 && rows[2].a[16] === 0.381 && rows[2].a[17] === null && rows[2].a[18] === null && /lane boom/.test(sb.usLaneError || ""), JSON.stringify({ sb, row: rows[2] && rows[2].a.slice(14) }));
+  bookDown = false; rows.splice(2, 2);
   check("sample: stage marker reaches done", kv.has("xv_boot") && JSON.parse(kv.get("xv_boot")).stage === "done");
   check("sample: a Kalshi 429 is retried (Retry-After honoured), calls carry a User-Agent; Gamma asks for ending-soonest events", kalshiCalls >= 2 && /edgerunner-xvenue/.test(kalshiUa) && s1.diag.nfl.matched === 1 && /order=endDate&ascending=true&end_date_min=/.test(gammaUrl), JSON.stringify({ kalshiCalls, kalshiUa, gammaUrl, diag: s1.diag }));
   const callsAfterBuild = kalshiCalls;

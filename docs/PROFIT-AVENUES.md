@@ -271,6 +271,20 @@ by roughly the spread (NFL books average 1.8c) plus the taker fee.
    Note (Oct 15): Kalshi throttles unauthenticated calls from Cloudflare's
    shared egress, so the Kalshi columns stay empty until the operator's API
    key is pushed with `push-kalshi-key.yml` (`src/kalshi.js` signs the calls).
+   **Result (Oct 16-17, 48h windows):** the threshold was crossed on the
+   Polymarket US side. NHL: 243 moves of 3c+, the US quote still crossable
+   after its taker fee 21% of the time, 6.5c average edge (1.4c per move);
+   NBA 804 moves at 0.6c per move, CFB 493 at 0.9c. Kalshi and Polymarket US
+   never crossed each other. This is a lag signal, not an arbitrage (a US
+   trader cannot sell into global Polymarket), and a same-minute, once-a-
+   minute measurement with no size overstates what a bot captures. Built in
+   response: `src/us-lane.js`, a paper lane that logs a hypothetical taker
+   fill at every qualifying US quote (now with the shares shown at that
+   price) and marks it against global Polymarket 1/5/15/60 minutes later, at
+   the end of the game and at settlement (`GET /xvenue/uslane`). Decision
+   rule: after ~200 events, m15 and settle both positive after the entry
+   fee with a hit rate above 50% and a tradable shown size -> a Polymarket US
+   lane is worth building; the real-money flip is the operator's call.
 4. **Not worth building** (measured above): neg-risk arbitrage, strike
    monotonicity, cross-venue pregame arbitrage, settlement-lag sniping,
    liquidity-reward market making (Track A), faster whale copying.
