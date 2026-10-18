@@ -213,7 +213,9 @@ export async function settleUsLaneEvents(env, nowMs = Date.now(), fetchImpl = fe
       let price = null;
       if (nowS - t.first_ts > SETTLE_GIVE_UP_S) price = NO_DATA;
       else {
-        const res = await fetchImpl(`${GAMMA_API}/markets?clob_token_ids=${encodeURIComponent(t.p_token)}`, { headers: { Accept: 'application/json' } });
+        // Gamma's token lookup omits closed markets unless asked (`closed=true`), and
+        // a resolved game is exactly a closed market: an open one simply stays pending.
+        const res = await fetchImpl(`${GAMMA_API}/markets?closed=true&clob_token_ids=${encodeURIComponent(t.p_token)}`, { headers: { Accept: 'application/json' } });
         if (!res.ok) { errors++; continue; }
         const ms = await res.json();
         price = settlementFromGamma(Array.isArray(ms) ? ms[0] : null, t.p_token);
