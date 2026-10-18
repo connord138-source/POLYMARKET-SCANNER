@@ -103,8 +103,8 @@ const leg = (ts, p_bid, p_ask, us_bid, us_ask, extra = {}) => ({ ts, sport: "nhl
   const s0 = await settleUsLaneEvents(env, (T + 60 + 3600) * 1000, fetchMock);
   check("settle: not before 3h", s0.tokens === 0 && events[0].settle == null, JSON.stringify(s0));
   const s1 = await settleUsLaneEvents(env, (T + 60 + 4 * 3600) * 1000, fetchMock);
-  check("settle: one Gamma call by token, event settled at 1", s1.tokens === 1 && s1.settled === 1 && events[0].settle === 1 && /clob_token_ids=tok1/.test(gammaUrl), JSON.stringify({ s1, gammaUrl }));
-  const pendingFetch = async () => ({ ok: true, json: async () => [{ closed: false, clobTokenIds: JSON.stringify(["tok9"]), outcomePrices: JSON.stringify(["0.5"]) }] });
+  check("settle: one Gamma call by token asking for closed markets (the default listing hides resolved games), event settled at 1", s1.tokens === 1 && s1.settled === 1 && events[0].settle === 1 && /closed=true/.test(gammaUrl) && /clob_token_ids=tok1/.test(gammaUrl), JSON.stringify({ s1, gammaUrl }));
+  const pendingFetch = async () => ({ ok: true, json: async () => [] });   // an open game is absent from the closed listing
   events.push({ id: nextId++, ts: T - 11 * 86400, sport: "nba", game: "g2", team: "Lakers", p_token: "tok9", side: "buy", px: 0.5, qty: 10, fee: 0.017, edge_c: 2, m1: null, m5: null, m15: null, m60: null, final: NO_DATA, marked_at: null, settle: null });
   const s2 = await settleUsLaneEvents(env, (T + 60 + 4 * 3600) * 1000, pendingFetch);
   check("settle: an event unresolved after 10 days is voided (NO_DATA) without a Gamma call", s2.voided === 1 && events[1].settle === NO_DATA, JSON.stringify(s2));
