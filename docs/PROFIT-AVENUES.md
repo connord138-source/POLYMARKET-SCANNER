@@ -281,10 +281,16 @@ by roughly the spread (NFL books average 1.8c) plus the taker fee.
    response: `src/us-lane.js`, a paper lane that logs a hypothetical taker
    fill at every qualifying US quote (now with the shares shown at that
    price) and marks it against global Polymarket 1/5/15/60 minutes later, at
-   the end of the game and at settlement (`GET /xvenue/uslane`). Decision
-   rule: after ~200 events, m15 and settle both positive after the entry
-   fee with a hit rate above 50% and a tradable shown size -> a Polymarket US
-   lane is worth building; the real-money flip is the operator's call.
+   the end of the game and at settlement (`GET /xvenue/uslane`).
+   **Week 1 (Oct 17-19, 339 events, 67 games):** after the entry fee the
+   mark is +3.5c at 5 min (68% hit), +2.1c at 15 min, +1.6c at settlement,
+   but on events with 50+ shares shown settlement is +0.3c at a 53% hit:
+   the US book is wrong for minutes, then catches up. So the lane carries a
+   round-trip mark (`x5`/`x15`: closed on the US book, spread paid, exit fee
+   charged). Decision rule: after ~200 events, the round trip (or settle)
+   positive on the tradable subset at a >50% hit rate -> a Polymarket US
+   scalping lane is worth building; the real-money flip is the operator's
+   call. Not met as of Oct 19.
 4. **Not worth building** (measured above): neg-risk arbitrage, strike
    monotonicity, cross-venue pregame arbitrage, settlement-lag sniping,
    liquidity-reward market making (Track A), faster whale copying.

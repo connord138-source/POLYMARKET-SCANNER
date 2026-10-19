@@ -84,10 +84,14 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   minute cron marks events against global Polymarket's mid at +1/+5/+15/+60
   min and end of game, the 5-min cron settles them through Gamma
   (`cronStatus.usLane`). `GET /xvenue/uslane?hours=168` (snapshot key
-  `usLane`): marks are cents per share after the entry fee, exit costs not
-  charged. Decision rule: ~200 events with m15 and settle positive and the
-  shown size tradable before a real-money lane is proposed; that flip is the
-  operator's call. Places no orders.
+  `usLane`): m*/final/settle are cents per share after the entry fee with
+  exit costs not charged; `x5`/`x15` are the round trip closed on the US
+  book (spread paid, exit fee charged), i.e. what a scalping lane would book.
+  Week 1 (Oct 19): the stale quote is right for minutes, flat by settlement
+  on tradable size. Decision rule: ~200 events with the round trip (or
+  settle) positive on the tradable subset at a >50% hit rate before a
+  real-money lane is proposed; that flip is the operator's call. Places no
+  orders.
 - `src/crypto-fv.js` — crypto fair value: every Polymarket BTC/ETH/SOL price
   contract ("above $X on <date>" = European digital; "dip to"/"reach" =
   one-touch via reflection) priced from Coinbase realized vol (7d/30d/90d,
