@@ -276,7 +276,12 @@ export async function sampleXvenue(env, nowMs = Date.now(), hooks = {}) {
   const live = blob.pairs.filter(p => isLive(p, nowMs));
   await mark('quotes', { pairs: blob.pairs.length, live: live.length });
   const status = { at: new Date(nowMs).toISOString(), pairs: blob.pairs.length, live: live.length, rows: 0, kalshiAuth: kalshiAuthConfigured(env), diag: blob.diag };
-  if (!live.length) { try { await env.SIGNALS_CACHE.put(XV_KEYS.LAST, JSON.stringify(status), { expirationTtl: 86400 }); } catch (e) {} await mark('done', { rows: 0, live: 0 }); return status; }
+  if (!live.length) {
+    // Nothing to sample, but the lane still has marks to fill and backfills to run between games.
+    if (typeof hooks.afterSample === 'function') { try { status.usLane = await hooks.afterSample([], nowMs); } catch (e) { status.usLaneError = e.message.slice(0, 80); } }
+    try { await env.SIGNALS_CACHE.put(XV_KEYS.LAST, JSON.stringify(status), { expirationTtl: 86400 }); } catch (e) {}
+    await mark('done', { rows: 0, live: 0 }); return status;
+  }
   const legs = live.flatMap(p => p.legs.map((l, i) => ({ ...l, sport: p.sport, game: p.game, startMs: p.startMs, feeRate: p.feeRate, usSlug: p.usSlug || null, usLong: p.usLongIdx === i })));
   const kq = new Map();
   let kalshiCooldown = null; try { kalshiCooldown = await env.SIGNALS_CACHE.get(XV_KEYS.KALSHI_COOLDOWN); } catch (e) {}

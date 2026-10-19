@@ -87,8 +87,9 @@ const P = (q, outs, start, toks = ["t0", "t1"], extra = {}) => ({ question: q, o
   const callsAfterBuild = kalshiCalls;
   const s2 = await sampleXvenue(env, now + 60e3);
   check("sample: second minute reuses the cached pairs (no Kalshi series calls)", kalshiCalls === callsAfterBuild && s2.rows === 2 && rows.length === 4);
-  const s3 = await sampleXvenue(env, now + 6 * 3600e3);
-  check("sample: nothing live -> no rows, status still written", s3.live === 0 && s3.rows === 0 && rows.length === 4 && kv.has("xv_last"));
+  const idleHook = [];
+  const s3 = await sampleXvenue(env, now + 6 * 3600e3, { afterSample: async (legs, at) => { idleHook.push({ legs, at }); return { events: 0, marked: 3 }; } });
+  check("sample: nothing live -> no rows, status still written, and the hook still runs (marks fill between games)", s3.live === 0 && s3.rows === 0 && rows.length === 4 && kv.has("xv_last") && idleHook.length === 1 && idleHook[0].legs.length === 0 && s3.usLane && s3.usLane.marked === 3, JSON.stringify({ s3, idleHook }));
   env.DB.prepare = (sql) => ({ bind: () => ({ all: async () => (/GROUP BY sport/.test(sql)
     ? { results: [{ sport: "nfl", n: 2, k: 2, p: 2, us: 2 }] }
     : { results: [{ ts: 0, sport: "nfl", game: "g", team: "Bills", k_bid: 0.4, k_ask: 0.42, p_bid: 0.4, p_ask: 0.41, us_bid: 0.39, us_ask: 0.40 }, { ts: 60, sport: "nfl", game: "g", team: "Bills", k_bid: 0.4, k_ask: 0.42, p_bid: 0.45, p_ask: 0.46, us_bid: 0.39, us_ask: 0.40 }] }) }) });
