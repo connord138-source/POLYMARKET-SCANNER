@@ -532,6 +532,7 @@ const DEFAULT_CONFIG = {
   // book and track what a taker fill (ask + fee) and a resting bid (filled
   // only if the tape prints at/below it within the TTL, + rebate) would do.
   executorDryRun: true,           // src/executor.js: consume paper entries/exits against the live book, place nothing
+  executorVenue: 'polymarket-us', // where real orders go (owner's choice, Oct 24 2026); 'clob' = global book, reference only
   execShadow: true,
   execShadowTtlMin: 60,
   minAiScore: 40,                 // Minimum AI score to consider
@@ -1990,6 +1991,8 @@ export async function processSignals(env, signals) {
           originalTradeId: position.tradeId || null,
           positionId: position.id,
           shares: position.shares,
+          directionRaw: position.directionRaw || null,
+          usSlug: position.usSlug || null, usSide: position.usSide || null,   // close on the venue that holds it
         });
         position.pendingExit = true;
         position.pendingExitSince = new Date().toISOString();
@@ -2595,6 +2598,7 @@ export async function processSignals(env, signals) {
         })(),
         marketCategory: categorizeMarket(signal.marketTitle || signal.title || ''),
         direction: signal.direction,
+        directionRaw: signal.directionRaw || null,   // outcome label: the executor routes by team (src/polymarket-us.js)
         aiConfidence: evaluation.aiConfidence || null,
         aiComponents: evaluation.aiComponents || null,
         strongCombo: evaluation.strongCombo || null,
@@ -3521,6 +3525,8 @@ export async function handleExecConfirm(env, body) {
         whaleWalletWinRate: queueItem.whaleWalletWinRate ?? null,
         whaleEntryPrice: queueItem.whaleEntryPrice ?? queueItem.entryPrice ?? null,
         aiConfidence: queueItem.aiConfidence || null,
+        directionRaw: queueItem.directionRaw || null,
+        venue: body.venue || null, usSlug: body.usSlug || null, usSide: body.usSide || null,   // where the fill happened (executor)
         ourEntryPrice: actualEntryPrice,
         entrySlippage: queueItem.whaleEntryPrice != null
           ? Math.round(((actualEntryPrice - (queueItem.whaleEntryPrice * 100)) / (queueItem.whaleEntryPrice * 100)) * 1000) / 10

@@ -73,10 +73,24 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   live gates (min size, slippage cap, daily caps, loss limit) and records it
   (KV `executor_fills`). `GET /autotrader/executor` diffs round trips against
   the paper ledger (`dryMinusPaper`); `POST /autotrader/executor/halt` is the
-  kill switch (admin). No live adapter exists: with paperTradeMode off the
-  executor refuses to run. Snapshot key `executor`. Venue note: the global
-  Polymarket CLOB is not open to US persons; a live adapter needs the owner's
-  venue decision first (Polymarket US / Kalshi have their own APIs).
+  kill switch (admin). Snapshot key `executor`. Venue (owner's choice, Oct 24
+  2026): **Polymarket US** - every intent is routed league -> moneyline ->
+  long/short side (`src/polymarket-us.js`) and priced on that book with its
+  0.0695 x p(1-p) fee, `clobRef` keeps the global-CLOB fill for comparison,
+  unroutable intents (non-NFL/CFB/NBA/NHL/MLB, spreads/totals) are recorded
+  as such. Live path: only when `paperTradeMode` is false AND `PMUS_KEY_ID` /
+  `PMUS_SECRET_KEY` are set (push-polymarket-us-key.yml); it consumes the
+  live exec queue, sends a FOK limit (YES-price convention) or
+  close-position with synchronous execution, confirms fills through
+  `handleExecConfirm` (position carries `venue/usSlug/usSide`), reconciles an
+  ambiguous send against the account position and halts itself if that fails.
+- `src/polymarket-us.js` — Polymarket US client: Ed25519 signature over
+  `${tsMs}${METHOD}${pathname}` (no query/body) in X-PM-Signature, key id in
+  X-PM-Access-Key; gateway.polymarket.us (public: league events, market by
+  slug, book) vs api.polymarket.us (orders, positions, balances); routing
+  helpers (`leagueOf`, `teamOfIntent`, `matchUsEvent` via `teamMatch`),
+  `usLevels` (effective-price levels for long/short x buy/sell),
+  `buildUsOrder`, `fillFromExecutions`. 25 req/s per IP; 429 -> 1s retry.
 - `src/xvenue.js` — Kalshi + Polymarket US vs global Polymarket live-game
   sampler on the minute cron (`"* * * * *"` runs only this): matched game
   sides -> D1 `xvenue_quotes` (k_*, p_*, us_* columns); `GET /xvenue/report`

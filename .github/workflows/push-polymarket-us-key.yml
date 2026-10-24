@@ -1,0 +1,52 @@
+name: Push Polymarket US API Key
+
+# Gives the worker's executor (src/executor.js + src/polymarket-us.js) the
+# credentials to trade on Polymarket US. Until this is pushed AND the operator
+# flips paperTradeMode off, the executor stays a dry run and places nothing.
+#
+# One-time setup, all on the operator's side, nothing through chat:
+#   1. Polymarket US app -> create the account, complete identity verification,
+#      fund it (GO-LIVE.md: $100-200, an amount whose total loss is tuition).
+#   2. https://polymarket.us/developer -> sign in the same way as in the app ->
+#      create a key. Copy the Key ID and the Secret Key (shown once).
+#   3. GitHub repo -> Settings > Secrets and variables > Actions:
+#        PMUS_KEY_ID      = the Key ID
+#        PMUS_SECRET_KEY  = the Secret Key (base64 Ed25519 key, 32 or 64 bytes)
+#   4. Run this workflow (Actions > Push Polymarket US API Key > Run workflow).
+#
+# status/backend.json -> executor.account.configured turns true and shows the
+# account's buying power. Live orders still need paperTradeMode: false via the
+# apply-config workflow (GO-LIVE.md section 4).
+
+on:
+  workflow_dispatch:
+
+jobs:
+  push-key:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Push PMUS_KEY_ID and PMUS_SECRET_KEY repo secrets into the worker
+        env:
+          PMUS_KEY_ID: ${{ secrets.PMUS_KEY_ID }}
+          PMUS_SECRET_KEY: ${{ secrets.PMUS_SECRET_KEY }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$PMUS_KEY_ID" ]; then
+            echo "::error::PMUS_KEY_ID repo secret is not set. Add the Key ID from polymarket.us/developer under Settings > Secrets and variables > Actions, then re-run."
+            exit 1
+          fi
+          if [ -z "$PMUS_SECRET_KEY" ]; then
+            echo "::error::PMUS_SECRET_KEY repo secret is not set. Add the Secret Key shown once at polymarket.us/developer, then re-run."
+            exit 1
+          fi
+          LEN=$(printf '%s' "$PMUS_SECRET_KEY" | tr -d '[:space:]' | base64 -d 2>/dev/null | wc -c | tr -d ' ')
+          if [ "$LEN" != "32" ] && [ "$LEN" != "64" ]; then
+            echo "::error::PMUS_SECRET_KEY does not decode to a 32- or 64-byte Ed25519 key (got $LEN bytes). Paste the Secret Key exactly as shown."
+            exit 1
+          fi
+          printf '%s' "$PMUS_KEY_ID" | tr -d '[:space:]' | npx wrangler@4 secret put PMUS_KEY_ID
+          printf '%s' "$PMUS_SECRET_KEY" | tr -d '[:space:]' | npx wrangler@4 secret put PMUS_SECRET_KEY
+          echo "Polymarket US key pushed. The executor reads it on the next cron: status/backend.json -> executor.account.configured = true. Orders are placed only once paperTradeMode is false."

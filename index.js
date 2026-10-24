@@ -16,7 +16,7 @@ import {
   handleExecConfirm, manualClosePosition, emergencyStopAll,
   processSignals, getBotLearning, recalcPerformance, recordClosedTrade,
   computeExplorationGraduation, computeGoLiveMilestone, voidPhantomComplementExits, dedupeSettledHistory,
-  computeFavoritesExperiment
+  computeFavoritesExperiment, updateExecQueueItem
 } from "./src/autotrader.js";
 import { runForge, maybeRunForge, getForgeReport } from "./src/forge.js";
 import { logSignalWallets, backfillWalletLedger, topWallets } from "./src/wallet-ledger.js";
@@ -7081,7 +7081,8 @@ export default {
       // against the live CLOB book and record what would have been sent. Places nothing.
       try {
         const exCfg = await getAutotraderConfig(env);
-        cronStatus.executor = exCfg.executorDryRun === false ? { skipped: 'disabled' } : await runExecutor(env, { config: exCfg, dailyStats: await getDailyStats(env) });
+        cronStatus.executor = exCfg.executorDryRun === false ? { skipped: 'disabled' } : await runExecutor(env, { config: exCfg, dailyStats: await getDailyStats(env),
+          live: { getQueue: () => getExecQueue(env), updateItem: (id, u) => updateExecQueueItem(env, id, u), confirm: (body) => handleExecConfirm(env, body) } });
       } catch (e) { cronStatus.executor = { error: e.message }; }
       
       // PHASE 2: Update line movements for active signals
