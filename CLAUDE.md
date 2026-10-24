@@ -65,6 +65,18 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   within `execShadowTtlMin`; earns the rebate), settled on the real exit.
   KV `exec_ledger`; `GET /autotrader/execution`. The paper ledger itself pays
   no spread or fees — read go-live numbers against the taker ledger.
+- `src/executor.js` — trade executor, DRY RUN (Oct 24 2026, GO-LIVE section 3).
+  While `paperTradeMode` is on, every main-lane paper entry and exit is queued
+  as an intent (KV `executor_intents`); each 5-min cron consumes them against
+  the live CLOB book, builds the FOK order it would send (tick-rounded price,
+  shares), walks the book for the fill, charges the taker fee, evaluates the
+  live gates (min size, slippage cap, daily caps, loss limit) and records it
+  (KV `executor_fills`). `GET /autotrader/executor` diffs round trips against
+  the paper ledger (`dryMinusPaper`); `POST /autotrader/executor/halt` is the
+  kill switch (admin). No live adapter exists: with paperTradeMode off the
+  executor refuses to run. Snapshot key `executor`. Venue note: the global
+  Polymarket CLOB is not open to US persons; a live adapter needs the owner's
+  venue decision first (Polymarket US / Kalshi have their own APIs).
 - `src/xvenue.js` — Kalshi + Polymarket US vs global Polymarket live-game
   sampler on the minute cron (`"* * * * *"` runs only this): matched game
   sides -> D1 `xvenue_quotes` (k_*, p_*, us_* columns); `GET /xvenue/report`
