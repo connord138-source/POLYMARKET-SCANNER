@@ -28,6 +28,7 @@ import { collectBooks, MM_SCHEMA } from "./src/mm-collector.js";
 import { sampleXvenue, xvenueReport, XV_SCHEMA } from "./src/xvenue.js";
 import { US_LANE_SCHEMA, recordUsLaneEvents, markUsLaneEvents, settleUsLaneEvents, usLaneReport } from "./src/us-lane.js";
 import { getExecReport } from "./src/execution.js";
+import { runExecutor, getExecutorReport, setHalt } from "./src/executor.js";
 import { getCryptoFairValue, refreshCryptoFairValue, annotateCryptoFairValue } from "./src/crypto-fv.js";
 import { getUser, authConfigured } from "./src/auth.js";
 import { PLANS, planOf, hasPlan, limitsFor, policyFor, degradeFor } from "./src/tiers.js";
@@ -4946,6 +4947,15 @@ export default {
       if (path === "/autotrader/execution" && request.method === "GET") {
         return atJson(await getExecReport(env, await getTradeHistory(env, 1000), await getOpenPositions(env)));
       }
+      // Executor dry run (src/executor.js): intents, dry fills, round trips vs the paper ledger.
+      if (path === "/autotrader/executor" && request.method === "GET") {
+        return atJson(await getExecutorReport(env, await getTradeHistory(env, 1000), await getAutotraderConfig(env)));
+      }
+      // Kill switch (admin): the executor consumes nothing while halted.
+      if (path === "/autotrader/executor/halt" && request.method === "POST") {
+        let body = {}; try { body = await request.json(); } catch (e) {}
+        return atJson({ success: true, ...(await setHalt(env, body.halt !== false)) });
+      }
       // Crypto fair value: every BTC/ETH/SOL price contract priced from realized vol (KV-cached; ?refresh=1 is admin).
       if (path === "/crypto/fairvalue" && request.method === "GET") {
         const sheet = url.searchParams.get("refresh") === "1" ? await refreshCryptoFairValue(env) : await getCryptoFairValue(env);
@@ -7067,6 +7077,12 @@ export default {
       } catch (e) {
         cronStatus.autotrader = { error: e.message };
       }
+      // EXECUTOR (dry run while paperTradeMode): consume the intents the paper lane queued this cycle
+      // against the live CLOB book and record what would have been sent. Places nothing.
+      try {
+        const exCfg = await getAutotraderConfig(env);
+        cronStatus.executor = exCfg.executorDryRun === false ? { skipped: 'disabled' } : await runExecutor(env, { config: exCfg, dailyStats: await getDailyStats(env) });
+      } catch (e) { cronStatus.executor = { error: e.message }; }
       
       // PHASE 2: Update line movements for active signals
       console.log("Checking line movements...");
