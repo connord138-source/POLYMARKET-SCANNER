@@ -1,5 +1,5 @@
 // Executor dry run. Run with: node test/executor.test.mjs
-import { buildIntent, roundToTick, walkBook, dryFill, evaluateGates, summarizeExecutor, enqueueIntent, getIntents, runExecutor, setHalt, getExecutorReport, INTENT_TTL_MIN, MAX_ATTEMPTS, SLIPPAGE_CAP_C } from "../src/executor.js";
+import { buildIntent, roundToTick, walkBook, dryFill, dryFillUs, intentFromQueueItem, evaluateGates, summarizeExecutor, enqueueIntent, getIntents, runExecutor, setHalt, getHalt, getExecutorReport, INTENT_TTL_MIN, MAX_ATTEMPTS, SLIPPAGE_CAP_C } from "../src/executor.js";
 import { takerFee } from "../src/execution.js";
 let pass = 0, fail = 0;
 const check = (n, c, x) => { if (c) pass++; else { fail++; console.error("FAIL:", n, x ?? ""); } };
@@ -69,13 +69,13 @@ const T0 = "2026-10-24T18:00:00.000Z";
   const env = { SIGNALS_CACHE: { get: async (k) => { const v = kv.get(k); return v === undefined ? null : JSON.parse(v); }, put: async (k, v) => { kv.set(k, v); } } };
   let bookCalls = 0; let bookDown = false;
   const fetchMock = async (u) => { bookCalls++; if (bookDown) return { ok: false, status: 500, json: async () => ({}) }; return { ok: true, json: async () => ({ bids: [{ price: "0.39", size: "500" }], asks: [{ price: "0.41", size: "500" }] }) }; };
-  const cfg = { paperTradeMode: true, maxDailyTrades: 5, maxDailySpend: 50, dailyLossLimit: -15, maxPositionSize: 100 };
+  const cfg = { paperTradeMode: true, executorVenue: "clob", maxDailyTrades: 5, maxDailySpend: 50, dailyLossLimit: -15, maxPositionSize: 100 };
   const t0 = Date.parse(T0);
   check("enqueue: idempotent by id", (await enqueueIntent(env, buildIntent({ action: "BUY", position: pos, gamma, tokenId: "tokB", priceC: 40, nowIso: T0 }))) === true && (await enqueueIntent(env, buildIntent({ action: "BUY", position: pos, gamma, tokenId: "tokB", priceC: 40, nowIso: T0 }))) === false && (await getIntents(env)).length === 1);
   const r1 = await runExecutor(env, { config: cfg, dailyStats: { realizedPnL: 0 }, nowMs: t0 + 20e3, fetchImpl: fetchMock });
   check("run: the intent is consumed against the book, the day counters advance, the queue empties", r1.mode === "dry" && r1.consumed === 1 && r1.filled === 1 && r1.pending === 0 && r1.day.buys === 1 && r1.day.spendUsd === 10 && bookCalls === 1 && (await getIntents(env)).length === 0, JSON.stringify(r1));
   let rep = await getExecutorReport(env, [], cfg);
-  check("report: one dry fill with its order, dry run started", rep.mode === "dry" && rep.enabled && !rep.halted && rep.stats.buys === 1 && rep.recentFills[0].order.price === 0.41 && rep.dryRunSince === "2026-10-24T18:00:20.000Z" && /Nothing is placed/.test(rep.read), JSON.stringify(rep.stats));
+  check("report: one dry fill with its order, dry run started", rep.mode === "dry" && rep.enabled && !rep.halted && rep.stats.buys === 1 && rep.recentFills[0].order.price === 0.41 && rep.dryRunSince === "2026-10-24T18:00:20.000Z" && /Nothing is placed while dry/.test(rep.read), JSON.stringify(rep.stats));
   // sell closes the round trip: paper pnl 3.5 vs dry
   await enqueueIntent(env, buildIntent({ action: "SELL", position: { ...pos, shares: 24.39 }, gamma, tokenId: "tokB", priceC: 55, exitType: "take_profit", nowIso: new Date(t0 + 3600e3).toISOString() }));
   const r2 = await runExecutor(env, { config: cfg, dailyStats: { realizedPnL: 0 }, nowMs: t0 + 3600e3 + 10e3, fetchImpl: fetchMock });
@@ -106,9 +106,123 @@ const T0 = "2026-10-24T18:00:00.000Z";
   await setHalt(env, false);
   // live mode: refuses, touches nothing
   const r6 = await runExecutor(env, { config: { ...cfg, paperTradeMode: false }, nowMs: t0 + 7500e3, fetchImpl: fetchMock });
-  check("run: paperTradeMode off -> refuses (no live adapter), the intent is untouched", r6.mode === "live" && /not implemented/.test(r6.refused) && (await getIntents(env)).length === 1 && (await getExecutorReport(env, [], { ...cfg, paperTradeMode: false })).mode === "live", JSON.stringify(r6));
+  check("run: paperTradeMode off on the clob venue -> refuses (no live adapter there), the intent is untouched", r6.mode === "live" && /live placement exists only for polymarket-us/.test(r6.refused) && (await getIntents(env)).length === 1 && (await getExecutorReport(env, [], { ...cfg, paperTradeMode: false })).mode === "live", JSON.stringify(r6));
   const r7 = await runExecutor(env, { config: cfg, nowMs: t0 + 7500e3, fetchImpl: fetchMock });
   check("run: back in paper mode the queued intent is consumed", r7.filled === 1 && (await getIntents(env)).length === 0);
+}
+{
+  // ---- Polymarket US venue: dry run routes every intent to the US moneyline and prices it there ----
+  const kv = new Map();
+  const env = { SIGNALS_CACHE: { get: async (k) => { const v = kv.get(k); return v === undefined ? null : JSON.parse(v); }, put: async (k, v) => { kv.set(k, v); } } };
+  const seen = []; let usBids = [{ px: { value: "0.40" }, qty: "100" }], usOffers = [{ px: { value: "0.42" }, qty: "80" }];
+  const gw = async (u, opts) => {
+    const url = String(u); seen.push({ url, opts });
+    if (url.includes("/v2/leagues/nfl/events")) return { ok: true, json: async () => ({ events: [{ title: "BUF Bills vs. LA Rams", startDate: "2026-10-25T00:15:00Z", markets: [{ slug: "aec-nfl-buf-lar-2026-10-24", sportsMarketTypeV2: "SPORTS_MARKET_TYPE_MONEYLINE", marketSides: [{ description: "Rams", long: false, team: { name: "Los Angeles Rams" } }, { description: "Bills", long: true, team: { name: "Buffalo Bills" } }] }] }] }) };
+    if (url.includes("/v1/market/slug/aec-nfl-buf-lar-2026-10-24")) return { ok: true, json: async () => ({ market: { orderPriceMinTickSize: 0.01, minimumTradeQty: 1, feeCoefficient: 0.0695, status: "MARKET_STATUS_OPEN" } }) };
+    if (url.includes("/v1/markets/aec-nfl-buf-lar-2026-10-24/book")) return { ok: true, json: async () => ({ marketData: { bids: usBids, offers: usOffers } }) };
+    if (url.includes("clob.polymarket.com/book")) return { ok: true, json: async () => ({ bids: [{ price: "0.39", size: "500" }], asks: [{ price: "0.405", size: "500" }] }) };
+    return { ok: false, status: 404, json: async () => ({}) };
+  };
+  const cfg = { paperTradeMode: true, maxDailyTrades: 5, maxDailySpend: 50, dailyLossLimit: -15, maxPositionSize: 100 };
+  const T = "2026-10-24T22:00:00.000Z", t0 = Date.parse(T);
+  const nflPos = { id: "at_us1", marketSlug: "nfl-buf-lar-2026-10-24", marketTitle: "Bills vs. Rams", direction: "YES", directionRaw: "Bills", size: 10, shares: 25 };
+  await enqueueIntent(env, buildIntent({ action: "BUY", position: nflPos, gamma, tokenId: "tokB", priceC: 40, nowIso: T }));
+  await enqueueIntent(env, buildIntent({ action: "BUY", position: { ...nflPos, id: "at_us2", directionRaw: "Rams" }, gamma, tokenId: "tokR", priceC: 60, nowIso: T }));
+  await enqueueIntent(env, buildIntent({ action: "BUY", position: { id: "at_btc", marketSlug: "btc-updown-5m-1", marketTitle: "Bitcoin Up or Down", direction: "YES", size: 10 }, gamma, tokenId: "tokX", priceC: 50, nowIso: T }));
+  const r = await runExecutor(env, { config: cfg, dailyStats: {}, nowMs: t0 + 20e3, fetchImpl: gw });
+  const rep = await getExecutorReport(env, [], cfg);
+  const fB = rep.recentFills.find(f => f.positionId === "at_us1"), fR = rep.recentFills.find(f => f.positionId === "at_us2"), fX = rep.recentFills.find(f => f.positionId === "at_btc");
+  check("us dry: default venue is polymarket-us; two NFL intents routed, the crypto one unroutable", r.venue === "polymarket-us" && r.consumed === 3 && r.filled === 2 && r.failed === 1 && r.unroutable === 1 && rep.routing.routable === 2 && rep.routing.unroutable === 1 && fX.unroutable === true && /league not routable/.test(fX.reason), JSON.stringify({ r, routing: rep.routing }));
+  check("us dry: the Bills intent is the long side, lifts the 0.42 offer, pays the US fee, carries the FOK order and a clob reference", fB.venue === "polymarket-us" && fB.usSlug === "aec-nfl-buf-lar-2026-10-24" && fB.usSide === "long" && fB.execPriceC === 42 && fB.slippageC === 2 && fB.order.intent === "ORDER_INTENT_BUY_LONG" && fB.order.price.value === "0.42" && fB.order.quantity === 23 && Math.abs(fB.feePerShareC - 0.0695 * 0.42 * 0.58 * 100) < 0.01 && fB.clobRef && fB.clobRef.execPriceC === 40.5 && fB.spreadC === 2, JSON.stringify(fB));
+  check("us dry: the Rams intent is the short side: hits the 0.40 bid at an effective 0.60, YES price 0.40, BUY_SHORT", fR.usSide === "short" && fR.execPriceC === 60 && fR.slippageC === 0 && fR.order.intent === "ORDER_INTENT_BUY_SHORT" && fR.order.price.value === "0.40", JSON.stringify(fR));
+  check("us dry: nothing was sent to api.polymarket.us", seen.every(c => !String(c.url).includes("api.polymarket.us")));
+  // thin US book -> wouldReject
+  usOffers = [{ px: { value: "0.42" }, qty: "3" }];
+  await enqueueIntent(env, buildIntent({ action: "BUY", position: { ...nflPos, id: "at_us3" }, gamma, tokenId: "tokB", priceC: 40, nowIso: new Date(t0 + 60e3).toISOString() }));
+  await runExecutor(env, { config: cfg, dailyStats: {}, nowMs: t0 + 80e3, fetchImpl: gw });
+  const f3 = (await getExecutorReport(env, [], cfg)).recentFills.find(f => f.positionId === "at_us3");
+  check("us dry: a thin US book is recorded as would-reject (thin), still filled for the diff", f3.status === "filled" && f3.partial && f3.wouldReject && f3.wouldReject.length === 1 && /thin/.test(f3.wouldReject[0]), JSON.stringify(f3.wouldReject));
+  usOffers = [{ px: { value: "0.42" }, qty: "80" }];
+  // resolved-market exit on a pre-routed intent needs no book
+  await enqueueIntent(env, buildIntent({ action: "SELL", position: { ...nflPos, usSlug: "aec-nfl-buf-lar-2026-10-24", usSide: "long", shares: 23 }, tokenId: "tokB", priceC: 100, exitType: "market_resolved", nowIso: new Date(t0 + 120e3).toISOString() }));
+  const rr = await runExecutor(env, { config: cfg, dailyStats: {}, nowMs: t0 + 130e3, fetchImpl: gw });
+  check("us dry: a resolved market is redeemed, no routing or book needed", rr.filled === 1 && (await getExecutorReport(env, [], cfg)).recentFills[0].kind === "redeem");
+}
+{
+  // ---- live path on Polymarket US with a mocked venue: FOK fill, FOK miss, ambiguity -> halt, exit via close-position ----
+  const kv = new Map();
+  const env = { SIGNALS_CACHE: { get: async (k) => { const v = kv.get(k); return v === undefined ? null : JSON.parse(v); }, put: async (k, v) => { kv.set(k, v); } }, PMUS_KEY_ID: "key-1", PMUS_SECRET_KEY: Buffer.alloc(32, 9).toString("base64") };
+  const T = "2026-10-24T22:00:00.000Z", t0 = Date.parse(T);
+  let queue = []; const confirms = [], updates = [], api = [];
+  const live = { getQueue: async () => queue, updateItem: async (id, u) => { updates.push({ id, u }); const q = queue.find(x => x.id === id); if (q) Object.assign(q, u); }, confirm: async (b) => { confirms.push(b); queue = queue.filter(x => x.id !== b.id); } };
+  let orderResponse = { id: "ord-1", executions: [{ lastShares: 23, lastPx: { value: "0.42" }, commissionNotionalCollected: { value: "0.39" } }] };
+  let orderThrows = null, positionQty = 0, getOrderState = null;
+  const mock = async (u, opts) => {
+    const url = String(u);
+    if (url.includes("/v2/leagues/nfl/events")) return { ok: true, json: async () => ({ events: [{ title: "BUF Bills vs. LA Rams", startDate: "2026-10-25T00:15:00Z", markets: [{ slug: "aec-nfl-buf-lar-2026-10-24", sportsMarketTypeV2: "SPORTS_MARKET_TYPE_MONEYLINE", marketSides: [{ description: "Rams", long: false, team: { name: "Los Angeles Rams" } }, { description: "Bills", long: true, team: { name: "Buffalo Bills" } }] }] }] }) };
+    if (url.includes("/v1/market/slug/")) return { ok: true, json: async () => ({ market: { orderPriceMinTickSize: 0.01, minimumTradeQty: 1, feeCoefficient: 0.0695, status: "MARKET_STATUS_OPEN" } }) };
+    if (url.includes("/book")) return { ok: true, json: async () => ({ marketData: { bids: [{ px: { value: "0.40" }, qty: "100" }], offers: [{ px: { value: "0.42" }, qty: "80" }] } }) };
+    if (url.startsWith("https://api.polymarket.us")) {
+      api.push({ url, method: opts.method, headers: opts.headers, body: opts.body ? JSON.parse(opts.body) : null });
+      if (url.includes("/v1/portfolio/positions")) return { ok: true, status: 200, json: async () => ({ positions: positionQty ? { "aec-nfl-buf-lar-2026-10-24": { netPositionDecimal: String(positionQty) } } : {} }) };
+      if (url.endsWith("/v1/orders") || url.endsWith("/v1/order/close-position")) { if (orderThrows) throw orderThrows; return { ok: true, status: 200, json: async () => orderResponse }; }
+      if (url.includes("/v1/order/")) return { ok: true, status: 200, json: async () => ({ state: getOrderState, cumQuantity: 0 }) };
+      if (url.includes("/v1/account/balances")) return { ok: true, status: 200, json: async () => ({ balances: [{ currency: "USD", currentBalance: 150, buyingPower: 140 }] }) };
+    }
+    return { ok: false, status: 404, json: async () => ({}) };
+  };
+  const cfgLive = { paperTradeMode: false, maxDailyTrades: 5, maxDailySpend: 50, dailyLossLimit: -15, maxPositionSize: 100 };
+  const qBuy = () => ({ id: "trade_1", action: "BUY", status: "PENDING", marketSlug: "nfl-buf-lar-2026-10-24", marketTitle: "Bills vs. Rams", tokenId: "tokB", direction: "YES", directionRaw: "Bills", entryPrice: 0.40, size: 10, queuedAt: T, marketCategory: "sports" });
+  const it = intentFromQueueItem(qBuy());
+  check("live: queue item -> intent (cents, shares from size/price, labels)", it.id === "trade_1" && it.paperPriceC === 40 && it.shares === 25 && it.directionRaw === "Bills" && it.sizeUsd === 10 && it.status === "PENDING", JSON.stringify(it));
+  // refusals: no credentials / no hooks
+  const noKey = await runExecutor({ ...env, PMUS_SECRET_KEY: undefined }, { config: cfgLive, nowMs: t0, fetchImpl: mock, live });
+  const noHooks = await runExecutor(env, { config: cfgLive, nowMs: t0, fetchImpl: mock });
+  check("live: refuses without credentials or without the queue hooks", /not configured/.test(noKey.refused) && /hooks not supplied/.test(noHooks.refused));
+  // happy path
+  queue = [qBuy()];
+  const r1 = await runExecutor(env, { config: cfgLive, dailyStats: { realizedPnL: 0 }, nowMs: t0 + 10e3, fetchImpl: mock, live });
+  const post = api.find(c => c.url.endsWith("/v1/orders"));
+  check("live: FOK limit sent with signed headers; fill confirmed to the auto-trader with price, shares, order id and venue", r1.mode === "live" && r1.placed === 1 && r1.filled === 1 && post && post.method === "POST" && post.headers["X-PM-Access-Key"] === "key-1" && post.headers["X-PM-Signature"] && post.body.intent === "ORDER_INTENT_BUY_LONG" && post.body.price.value === "0.42" && post.body.quantity === 23 && post.body.tif === "TIME_IN_FORCE_FILL_OR_KILL" && updates.some(u => u.id === "trade_1" && u.u.status === "EXECUTING") && confirms.length === 1 && confirms[0].status === "FILLED" && confirms[0].filledPrice === 0.42 && confirms[0].filledShares === 23 && confirms[0].orderId === "ord-1" && confirms[0].venue === "polymarket-us" && confirms[0].usSlug === "aec-nfl-buf-lar-2026-10-24" && confirms[0].usSide === "long" && queue.length === 0, JSON.stringify({ r1, post: post && post.body, confirms }));
+  const rep1 = await getExecutorReport(env, [], cfgLive, { fetchImpl: mock });
+  check("live: report shows the live fill and the account", rep1.mode === "live" && rep1.live.placed === 1 && rep1.account.configured && rep1.account.buyingPower === 140 && rep1.recentFills[0].live === true && rep1.recentFills[0].orderId === "ord-1", JSON.stringify({ live: rep1.live, account: rep1.account }));
+  // FOK miss: no executions, order state canceled -> FAILED
+  orderResponse = { id: "ord-2", executions: [] }; getOrderState = "ORDER_STATE_CANCELED";
+  queue = [{ ...qBuy(), id: "trade_2", queuedAt: new Date(t0 + 60e3).toISOString() }];
+  const r2 = await runExecutor(env, { config: cfgLive, dailyStats: { realizedPnL: 0 }, nowMs: t0 + 70e3, fetchImpl: mock, live });
+  check("live: an unfilled FOK is confirmed FAILED, nothing halts", r2.failed === 1 && confirms[1].status === "FAILED" && /ORDER_STATE_CANCELED/.test(confirms[1].error) && !(await getHalt(env)).halted, JSON.stringify(confirms[1]));
+  // venue 4xx -> FAILED, no halt
+  const { PmusError } = await import("../src/polymarket-us.js"); orderThrows = new PmusError("polymarket.us 400 POST /v1/orders: Bad request", 400, {});
+  queue = [{ ...qBuy(), id: "trade_3", queuedAt: new Date(t0 + 120e3).toISOString() }];
+  const r3 = await runExecutor(env, { config: cfgLive, dailyStats: { realizedPnL: 0 }, nowMs: t0 + 130e3, fetchImpl: mock, live });
+  check("live: a clean venue rejection is confirmed FAILED without halting", r3.failed === 1 && /venue rejected/.test(confirms[2].error) && !(await getHalt(env)).halted, JSON.stringify(confirms[2]));
+  // ambiguous send: network error, position unchanged -> FAILED + halted
+  orderThrows = new Error("fetch failed: socket hang up");
+  queue = [{ ...qBuy(), id: "trade_4", queuedAt: new Date(t0 + 180e3).toISOString() }];
+  const r4 = await runExecutor(env, { config: cfgLive, dailyStats: { realizedPnL: 0 }, nowMs: t0 + 190e3, fetchImpl: mock, live });
+  check("live: an ambiguous send with no position change halts the executor and fails the item", r4.halted === true && confirms[3].status === "FAILED" && /ambiguous placement/.test(confirms[3].error) && (await getHalt(env)).halted, JSON.stringify({ r4, c: confirms[3] }));
+  const r5 = await runExecutor(env, { config: cfgLive, nowMs: t0 + 200e3, fetchImpl: mock, live });
+  check("live: while halted nothing is consumed", r5.halted === true && r5.consumed === 0);
+  await setHalt(env, false);
+  // ambiguous send but the position moved -> reconciled as FILLED at the dry price
+  positionQty = 0;
+  const mockMoving = async (u, opts) => { const url = String(u); if (url.includes("/v1/portfolio/positions")) { const q = positionQty; positionQty = 23; return { ok: true, status: 200, json: async () => ({ positions: q ? { "aec-nfl-buf-lar-2026-10-24": { netPositionDecimal: String(q) } } : {} }) }; } return mock(u, opts); };
+  queue = [{ ...qBuy(), id: "trade_5", queuedAt: new Date(t0 + 240e3).toISOString() }];
+  const r6 = await runExecutor(env, { config: cfgLive, dailyStats: { realizedPnL: 0 }, nowMs: t0 + 250e3, fetchImpl: mockMoving, live });
+  const c5 = confirms.find(c => c.id === "trade_5");
+  check("live: an ambiguous send whose position moved is reconciled and confirmed FILLED", r6.filled === 1 && c5.status === "FILLED" && c5.orderId === "reconciled" && c5.filledShares === 23 && !(await getHalt(env)).halted, JSON.stringify(c5));
+  // gates block for real in live mode
+  orderThrows = null; orderResponse = { id: "ord-6", executions: [{ lastShares: 23, lastPx: { value: "0.42" } }] };
+  queue = [{ ...qBuy(), id: "trade_6", size: 500, queuedAt: new Date(t0 + 300e3).toISOString() }];
+  const r7 = await runExecutor(env, { config: cfgLive, dailyStats: { realizedPnL: 0 }, nowMs: t0 + 310e3, fetchImpl: mock, live });
+  check("live: a risk gate blocks the order and fails the item", r7.failed === 1 && /blocked by risk gates/.test(confirms.find(c => c.id === "trade_6").error) && !api.some(c => c.url.endsWith("/v1/orders") && c.body && c.body.quantity > 100));
+  // exit: SELL queue item on a short position -> close-position, effective price = 1 - avgPx
+  orderResponse = { id: "ord-7", executions: [{ lastShares: 20, lastPx: { value: "0.35" }, commissionNotionalCollected: { value: "0.3" } }] };
+  queue = [{ id: "exit_1", action: "SELL", status: "PENDING", marketSlug: "nfl-buf-lar-2026-10-24", marketTitle: "Bills vs. Rams", tokenId: "tokR", positionId: "at_live_1", shares: 20, size: 12, exitPrice: 0.66, exitType: "take_profit", exitReason: "tp", usSlug: "aec-nfl-buf-lar-2026-10-24", usSide: "short", directionRaw: "Rams", queuedAt: new Date(t0 + 360e3).toISOString() }];
+  const r8 = await runExecutor(env, { config: cfgLive, dailyStats: { realizedPnL: 0 }, nowMs: t0 + 370e3, fetchImpl: mock, live });
+  const close = api.filter(c => c.url.endsWith("/v1/order/close-position")).pop();
+  const c8 = confirms.find(c => c.id === "exit_1");
+  check("live: an exit closes the position on the venue; a short's proceeds are 1 - YES price; exit type passed through", r8.placed === 1 && close && close.body.marketSlug === "aec-nfl-buf-lar-2026-10-24" && close.body.synchronousExecution === true && c8.status === "FILLED" && Math.abs(c8.filledPrice - 0.65) < 1e-9 && c8.filledShares === 20 && c8.exitType === "take_profit", JSON.stringify({ close: close && close.body, c8 }));
 }
 console.log(`executor: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

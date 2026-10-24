@@ -21,13 +21,16 @@ call after reading the full-size ledger.
 
 ## 2. Owner setup (manual — cannot be done by the bot)
 
-- [ ] Polymarket account with a dedicated wallet — never a personal main
-      wallet. Fund with USDC on Polygon; starting bankroll **$100–200 max**
-      (an amount whose total loss is acceptable tuition).
-- [ ] Wallet private key / Polymarket API credentials pushed as **repo
-      secrets**, delivered to the worker via a `wrangler secret put`
-      workflow (same pattern as `push-anthropic-key.yml`). Credentials are
-      never pasted in chat, code, or config files.
+- [ ] **Polymarket US** account (the venue the owner chose on Oct 24 2026; the
+      global Polymarket CLOB is not open to US persons). Create it in the
+      Polymarket US app, complete identity verification, fund it with a
+      starting bankroll of **$100–200 max** (an amount whose total loss is
+      acceptable tuition). Use an account dedicated to the bot.
+- [ ] API key created at polymarket.us/developer (Key ID + Secret Key, shown
+      once) and pushed as **repo secrets** `PMUS_KEY_ID` / `PMUS_SECRET_KEY`
+      via `.github/workflows/push-polymarket-us-key.yml`. Credentials are
+      never pasted in chat, code, or config files. The snapshot's
+      `executor.account.configured` confirms the worker has them.
 
 ## 3. Trade executor (engineering — does not exist yet)
 
@@ -35,18 +38,24 @@ The worker only maintains an execution queue (`/autotrader/exec-queue`);
 nothing currently consumes it. Before live trading:
 
 - [x] Build the executor (Oct 24 2026, `src/executor.js`): consumes intents,
-      builds the exact FOK order (tick-rounded price, shares), walks the live
-      book for the fill, charges the fee, evaluates every live gate, records
-      the result, and fails closed (stale intents, no book, no token id). The
-      live adapter (signing and sending the order) is deliberately absent:
-      the global Polymarket CLOB is not open to US persons, so the venue for
-      real orders (Polymarket US / Kalshi) is the owner's decision and comes
-      with its own API work. `POST /autotrader/executor/halt` is the kill
-      switch.
+      routes each to the Polymarket US moneyline (`src/polymarket-us.js`),
+      builds the exact FOK limit (YES-price convention, tick-rounded,
+      contracts), walks the live book for the fill, charges the venue fee,
+      evaluates every live gate, records the result, and fails closed (stale
+      intents, no book, unroutable market). `POST /autotrader/executor/halt`
+      is the kill switch.
+- [x] Live adapter built (Oct 24 2026, same PR): inert until paperTradeMode
+      is false AND the Polymarket US key is pushed. Then it consumes the live
+      exec queue, places the FOK limit (entries) or close-position (exits)
+      with synchronous execution, confirms fills to the auto-trader, and on
+      any ambiguity after a send reconciles against the account position or
+      halts itself. Trades with no Polymarket US market (non-NFL/CFB/NBA/NHL/
+      MLB, spreads/totals) are skipped, never routed elsewhere.
 - [ ] Dry-run it against the queue in paper mode for ≥ 1 week (started Oct 24
       2026; `GET /autotrader/executor`, snapshot key `executor`): place no
-      orders, log what it *would* have done, diff against paper fills
-      (`roundTrips.dryMinusPaper`).
+      orders, log what it *would* have done on Polymarket US, diff against
+      paper fills (`roundTrips.dryMinusPaper`), and read `routing.unroutable`:
+      the share of the bot's entries that have no Polymarket US market at all.
 
 ## 4. First-live configuration (applied via apply-config workflow)
 
