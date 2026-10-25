@@ -148,6 +148,14 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   wrangler var `AUTH_GATE` ("off" until the sign-in frontend is live); admin
   token bypasses it, and the snapshot job sends ADMIN_TOKEN. Secrets via
   `.github/workflows/push-billing-keys.yml`; price ids in wrangler.toml.
+  The Stripe account is SpecScan LLC, shared with the owner's other product
+  (owner's choice, Oct 25 2026): the five EdgeRunner prices live there, the
+  EdgeRunner products carry statement descriptor EDGERUNNER.VIP, every
+  Checkout session and subscription is tagged `metadata.app=edgerunner` and
+  the webhook ignores untagged objects (`isOurs`, so SpecScan sales never
+  mint entitlements or burn founding seats), and `STRIPE_PORTAL_CONFIG` is
+  EdgeRunner's own Customer Portal configuration. SpecScan's webhook sees
+  EdgeRunner events too but matches no profile row, which is harmless.
 - `src/odds.js` — The Odds API client (KV-cached; `ODDS_API_KEY` secret).
 - `src/gamma.js` — Gamma API settlement (`findGammaMarket` handles
   closed markets + multi-market moneyline preference).

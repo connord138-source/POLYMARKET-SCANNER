@@ -63,18 +63,28 @@ check("policy: scan degrades for free, crew orders need pro, api needs desk, hea
   const annual = entitlementFromSubscription(env, { ...sub, items: { data: [{ price: { id: "p_desk_y", unit_amount: 39900, recurring: { interval: "year" } } }] } });
   check("entitlement: annual desk -> 33.25/month", annual.plan === "desk" && annual.amountMonthly === 33.25 && annual.founding === false);
   // checkout.session.completed fetches the subscription
+  let lastBody = "";
   globalThis.fetch = async (url, opts) => {
     const u = String(url);
     if (u.endsWith("/subscriptions/sub_1")) return { ok: true, json: async () => sub };
-    if (u.endsWith("/checkout/sessions")) { const body = String(opts.body); return { ok: true, json: async () => ({ id: "cs_1", url: "https://checkout.stripe.com/cs_1", _body: body }) }; }
-    if (u.endsWith("/billing_portal/sessions")) return { ok: true, json: async () => ({ url: "https://billing.stripe.com/p_1" }) };
+    if (u.endsWith("/checkout/sessions")) { lastBody = decodeURIComponent(String(opts.body)); return { ok: true, json: async () => ({ id: "cs_1", url: "https://checkout.stripe.com/cs_1" }) }; }
+    if (u.endsWith("/billing_portal/sessions")) { lastBody = decodeURIComponent(String(opts.body)); return { ok: true, json: async () => ({ url: "https://billing.stripe.com/p_1" }) }; }
     return { ok: false, status: 404, json: async () => ({ error: { message: "nope" } }) };
   };
-  const r1 = await handleStripeEvent(env, { id: "evt_a", type: "checkout.session.completed", data: { object: { client_reference_id: "u1", customer: "cus_1", subscription: "sub_1", metadata: { plan: "pro" } } } });
+  const r1 = await handleStripeEvent(env, { id: "evt_a", type: "checkout.session.completed", data: { object: { client_reference_id: "u1", customer: "cus_1", subscription: "sub_1", metadata: { app: "edgerunner", plan: "pro" } } } });
   const e1 = await getEntitlement(env, "u1");
   check("checkout completed -> pro entitlement from the subscription, customer mapped, founding seat counted", r1.handled && r1.plan === "pro" && e1.plan === "pro" && e1.founding === true && kv.get("stripe_cust:cus_1") === "u1" && kv.get("founding_seats") === "1", JSON.stringify({ r1, e1 }));
   const dup = await handleStripeEvent(env, { id: "evt_a", type: "checkout.session.completed", data: { object: { client_reference_id: "u1" } } });
   check("duplicate event ignored", dup.duplicate === true && kv.get("founding_seats") === "1");
+  // Shared Stripe account: the other product's checkouts carry a client_reference_id but no app tag,
+  // its subscriptions carry no metadata at all, and its customers are not in our map.
+  const f1 = await handleStripeEvent(env, { id: "evt_f1", type: "checkout.session.completed", data: { object: { mode: "subscription", client_reference_id: "spec_user_1", customer: "cus_spec", subscription: "sub_spec", metadata: {} } } });
+  const f2 = await handleStripeEvent(env, { id: "evt_f2", type: "checkout.session.completed", data: { object: { mode: "payment", client_reference_id: "spec_user_2", customer: "cus_spec2", payment_intent: "pi_1", metadata: { type: "pervin", vin: "1HGCM82633A004352" } } } });
+  const f3 = await handleStripeEvent(env, { id: "evt_f3", type: "customer.subscription.updated", data: { object: { ...sub, id: "sub_spec", customer: "cus_spec", metadata: { userId: "spec_user_1" }, items: { data: [{ price: { id: "price_other_product", unit_amount: 1999, recurring: { interval: "month" } } }] } } } });
+  const f4 = await handleStripeEvent(env, { id: "evt_f4", type: "invoice.payment_failed", data: { object: { customer: "cus_spec" } } });
+  check("foreign checkout / one-time payment / subscription / invoice ignored: no entitlement, no customer map, founding seats untouched", f1.ignored === "foreign" && !f1.handled && f2.ignored === "foreign" && f3.ignored === "foreign" && f4.ignored === "foreign" && (await getEntitlement(env, "spec_user_1")) === null && (await getEntitlement(env, "spec_user_2")) === null && kv.get("stripe_cust:cus_spec") === undefined && kv.get("founding_seats") === "1", JSON.stringify({ f1, f2, f3, f4 }));
+  const own = await handleStripeEvent(env, { id: "evt_own", type: "customer.subscription.updated", data: { object: { ...sub, id: "sub_own", customer: "cus_own", metadata: { app: "edgerunner", userId: "u3", plan: "desk" }, items: { data: [{ price: { id: "p_desk_m", unit_amount: 4900, recurring: { interval: "month" } } }] } } } });
+  check("own tagged subscription handled for a not-yet-mapped customer", own.handled && own.userId === "u3" && (await getEntitlement(env, "u3")).plan === "desk" && kv.get("stripe_cust:cus_own") === "u3", JSON.stringify(own));
   const r2 = await handleStripeEvent(env, { id: "evt_b", type: "customer.subscription.updated", data: { object: { ...sub, metadata: {}, items: { data: [{ price: { id: "p_desk_m", unit_amount: 4900, recurring: { interval: "month" } } }] } } } });
   check("subscription updated (user via customer map) -> desk", r2.handled && r2.userId === "u1" && (await getEntitlement(env, "u1")).plan === "desk");
   await handleStripeEvent(env, { id: "evt_c", type: "invoice.payment_failed", data: { object: { customer: "cus_1" } } });
@@ -82,11 +92,13 @@ check("policy: scan degrades for free, crew orders need pro, api needs desk, hea
   await handleStripeEvent(env, { id: "evt_d", type: "customer.subscription.deleted", data: { object: { ...sub, status: "canceled" } } });
   check("subscription deleted -> free", (await getEntitlement(env, "u1")).plan === "free" && planOf(await getEntitlement(env, "u1"), now) === "free");
   const co = await createCheckoutSession(env, { user: { id: "u9", email: "x@y.z" }, plan: "pro", interval: "monthly", founding: true, successUrl: "https://edgerunner.vip/Account?ok=1", cancelUrl: "https://edgerunner.vip/Pro" });
-  check("checkout session: founding price, client_reference_id, email", co.url === "https://checkout.stripe.com/cs_1");
+  check("checkout session: founding price, client_reference_id, email, app tag on session + subscription", co.url === "https://checkout.stripe.com/cs_1" && lastBody.includes("line_items[0][price]=p_found") && lastBody.includes("client_reference_id=u9") && lastBody.includes("customer_email=x@y.z") && lastBody.includes("metadata[app]=edgerunner") && lastBody.includes("subscription_data[metadata][app]=edgerunner"), lastBody);
   let threw = false; try { await createCheckoutSession(env, { user: { id: "u9" }, plan: "free", interval: "monthly", successUrl: "a", cancelUrl: "b" }); } catch (e) { threw = /unknown plan/.test(e.message); }
   check("checkout session: free plan rejected", threw);
   const portal = await createPortalSession(env, { user: { id: "u1" }, returnUrl: "https://edgerunner.vip/Account" });
-  check("portal session for a customer", portal.url.startsWith("https://billing.stripe.com/"));
+  check("portal session for a customer (no configuration var -> account default)", portal.url.startsWith("https://billing.stripe.com/") && !lastBody.includes("configuration="), lastBody);
+  await createPortalSession({ ...env, STRIPE_PORTAL_CONFIG: "bpc_er" }, { user: { id: "u1" }, returnUrl: "https://edgerunner.vip/Account" });
+  check("portal session uses EdgeRunner's own configuration when set", lastBody.includes("configuration=bpc_er") && lastBody.includes("customer=cus_1"), lastBody);
   threw = false; try { await createPortalSession(env, { user: { id: "nobody" }, returnUrl: "x" }); } catch (e) { threw = /no billing account/.test(e.message); }
   check("portal without a customer -> error", threw);
   const g = await grantPlan(env, "u7", "pro", 14);
