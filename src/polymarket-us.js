@@ -16,8 +16,30 @@ export const PMUS_GATEWAY = 'https://gateway.polymarket.us';
 export const PMUS_FEE = 0.0695;
 export const PMUS_KEYS = { EVENTS: 'pmus_events', MARKET: 'pmus_market' };
 export const EVENTS_TTL_S = 600, MARKET_TTL_S = 1800;
-// global Polymarket slug prefix / category word -> Polymarket US league slug
-export const LEAGUES = { nfl: 'nfl', cfb: 'cfb', ncaaf: 'cfb', nba: 'nba', nhl: 'nhl', mlb: 'mlb' };
+// global Polymarket slug prefix -> Polymarket US league slug(s), tried in order (Oct 25 2026: tennis,
+// soccer, UFC/boxing and esports added on the owner's word). The US big four + CFB keep the
+// city/nickname matcher in xvenue.js; every other sport matches on normalized names (nameScore).
+export const LEAGUES = {
+  nfl: ['nfl'], cfb: ['cfb'], ncaaf: ['cfb'], nba: ['nba'], nhl: ['nhl'], mlb: ['mlb'],
+  wnba: ['wnba'], cbb: ['cbb'], khl: ['khl'], euroleague: ['eurolg'], bknbl: ['nbl'], bkkbl: ['kbl'],
+  // tennis: challengers and qualifying share the tour league on the US side; ITF splits by gender (see leaguesOf)
+  atp: ['atp', 'atpcq'], wta: ['wta'], itf: ['itfm', 'itfw'],
+  // combat sports
+  ufc: ['ufc', 'dwcs'], mma: ['ufc', 'pfl', 'one'], boxing: ['boxing'],
+  // esports: match winner only (game/map winners and handicaps are sub-markets, see marketKind)
+  lol: ['lol'], cs2: ['cs2'], csgo: ['cs2'], dota2: ['dota2'], val: ['valorant'], valorant: ['valorant'], cod: ['cod'], rl: ['rl'], ow: ['ow'], r6: ['r6'],
+  // soccer: "Will X win" is the long side of X's own full-time market (the draw is a separate market)
+  epl: ['epl'], lal: ['lal'], ucl: ['ucl'], uel: ['uel'], uecl: ['uecl'], sea: ['sea'], bun: ['bun'], bun2: ['bun2'], bl2: ['bun2'], fl1: ['lg1'], fl2: ['lig2'],
+  mls: ['mls'], ere: ['ere'], por: ['ligpor'], lib: ['lib'], sud: ['sud'], bra: ['bra'], bra2: ['brb'], mex: ['lmx'], elc: ['eflch'], efl1: ['efl1'], efl2: ['efl2'],
+  arg: ['lpa', 'arg2'], tur: ['tsl'], spl: ['spl'], kor: ['kl1'], jap: ['j1', 'j2'], ja2: ['j2', 'j1'], swe: ['alsv'], swe2: ['swe2'], scop: ['scp'], acle: ['acle'],
+  es2: ['lal2'], itsb: ['srb'], col1: ['lco'], chi1: ['pdc'], per1: ['pl1'], fin1: ['vkl'], bel1: ['bel1'], gre1: ['grsl'], nor: ['els'], pol: ['ekst'], sui: ['swsl'], chi: ['csl'], idn1: ['idnsl'],
+};
+const ALIAS_LEAGUES = new Set(['nfl', 'cfb', 'nba', 'nhl', 'mlb']);
+const TITLE_LEAGUES = [
+  [/\bnfl\b/, ['nfl']], [/\bnba\b/, ['nba']], [/\bnhl\b/, ['nhl']], [/\bmlb\b/, ['mlb']], [/college football|\bcfb\b|\bncaaf\b/, ['cfb']], [/\bwnba\b/, ['wnba']],
+  [/^lol:|league of legends/, ['lol']], [/^(counter-strike|cs2|csgo):/, ['cs2']], [/^dota 2:/, ['dota2']], [/^valorant:/, ['valorant']], [/^(call of duty|cod):/, ['cod']],
+  [/^ufc\b/, ['ufc', 'dwcs']], [/^boxing\b/, ['boxing']], [/\bkhl\b/, ['khl']],
+];
 
 const r2 = (x) => Math.round(x * 100) / 100;
 const r4 = (x) => Math.round(x * 10000) / 10000;
@@ -66,24 +88,37 @@ export async function pmusRequest(env, method, path, { query = null, body = null
 }
 
 // ---- market mapping: a global-Polymarket intent -> a Polymarket US moneyline + side ----
-export function leagueOf(intent) {
-  const slug = String(intent.marketSlug || '').toLowerCase();
-  const m = slug.match(/^(nfl|nba|nhl|mlb|cfb|ncaaf)-/);
-  if (m) return LEAGUES[m[1]];
-  const text = `${intent.marketCategory || ''} ${intent.marketTitle || ''}`.toLowerCase();
-  if (/\bnfl\b/.test(text)) return 'nfl';
-  if (/\bnba\b/.test(text)) return 'nba';
-  if (/\bnhl\b/.test(text)) return 'nhl';
-  if (/\bmlb\b/.test(text)) return 'mlb';
-  if (/college football|\bcfb\b|\bncaaf\b/.test(text)) return 'cfb';
-  return null;
+export const slugPrefix = (intent) => { const m = String((intent && intent.marketSlug) || '').toLowerCase().match(/^([a-z0-9]+)-/); return m ? m[1] : null; };
+// Ordered list of Polymarket US leagues to search for this intent ([] = not routable).
+export function leaguesOf(intent) {
+  const p = slugPrefix(intent);
+  if (p && LEAGUES[p]) { if (p === 'itf' && /^W\d/i.test(String(intent.marketTitle || '').trim())) return ['itfw', 'itfm']; return LEAGUES[p]; }
+  const text = `${intent.marketCategory || ''} ${intent.marketTitle || ''}`.toLowerCase().trim();
+  for (const [re, ls] of TITLE_LEAGUES) if (re.test(text)) return ls;
+  return [];
 }
+export function leagueOf(intent) { return leaguesOf(intent)[0] || null; }
+// What the global market is. Only a match/game winner ("moneyline") can be mirrored on the US book.
+export function marketKind(intent) {
+  const slug = String(intent.marketSlug || '').toLowerCase(), title = String(intent.marketTitle || '');
+  if (/\bwill\b.*\band\b.*\bwill\b/i.test(title)) return 'combo';
+  if (/-(total|spread|handicap|game-handicap|map-handicap)(-|$)/.test(slug) || /(\bo\/u\b|over\/under|\bspread\b|\bhandicap\b|\btotals?\b)/i.test(title)) return 'spread/total';
+  if (/-(game|map|set)\d+(-|$)/.test(slug) || /\b(game|map|set) \d+\b/i.test(title) || /\b(first blood|first kill|1st half|first half|rounds?)\b/i.test(title)) return 'sub-market';
+  return 'moneyline';
+}
+// "A vs B" (with a tournament/league prefix and a series/qualifier suffix tolerated) or "Will X win".
 export function teamsOfTitle(title) {
-  const t = String(title || '').replace(/\s*\(.*?\)\s*$/, '').trim();
-  let m = t.match(/^(.+?)\s+vs\.?\s+(.+?)(?::.*)?$/i);
-  if (m) return [m[1].trim(), m[2].trim()];
-  m = t.match(/^Will (.+?) win\b/i);
-  if (m) return [m[1].trim()];
+  const t0 = String(title || '').trim();
+  const m = t0.match(/^(.*?)\s+vs\.?\s+(.*)$/i);
+  if (m) {
+    let a = m[1], b = m[2];
+    const ci = a.lastIndexOf(': '); if (ci >= 0) a = a.slice(ci + 2);
+    b = b.split(/\s+-\s+|:\s|\s*\(|\?/)[0];
+    a = a.replace(/\s*\(.*?\)\s*/g, ' ').replace(/\s+/g, ' ').trim(); b = b.trim();
+    if (a && b) return [a, b];
+  }
+  const w = t0.replace(/\s*\(.*?\)\s*$/, '').match(/^Will (.+?) win\b/i);
+  if (w) return [w[1].trim()];
   return [];
 }
 // Which team the intent is long. directionRaw is the outcome label the bot
@@ -96,32 +131,77 @@ export function teamOfIntent(intent) {
   const teams = teamsOfTitle(intent.marketTitle);
   const dir = String(intent.direction || 'YES').toUpperCase();
   if (teams.length === 1) return dir === 'YES' ? teams[0] : null;
-  if (teams.length === 2) { if (dir === 'YES') return null; return null; }
   return null;
 }
+// The leg to mirror: { team, no }. NO on "Will X win" is X's other side (short on X's own soccer
+// market; the opponent's long side on a two-sided moneyline). null when the team cannot be told.
+export function legOfIntent(intent) {
+  const raw = String(intent.directionRaw || '').trim(), dir0 = String(intent.direction || '').trim();
+  if (raw && !/^(yes|no)$/i.test(raw)) return { team: raw, no: false };
+  if (dir0 && !/^(yes|no)$/i.test(dir0)) return { team: dir0, no: false };
+  const teams = teamsOfTitle(intent.marketTitle);
+  if (teams.length !== 1) return null;
+  return { team: teams[0], no: /^no$/i.test(raw) || (!raw && /^no$/i.test(dir0)) };
+}
+// ---- name matching for sports without a city/nickname table ----
+const NAME_STOP = new Set(['fc', 'cf', 'afc', 'sc', 'ac', 'cd', 'ca', 'rc', 'rcd', 'ud', 'sd', 'sv', 'bsc', 'vfb', 'vfl', 'fk', 'sk', 'bk', 'if', 'cp', 'ss', 'ssc', 'fsv', 'spvgg', 'tsg', 'club', 'de', 'del', 'da', 'do', 'di', 'la', 'le', 'el', 'los', 'las', 'the', 'esports', 'esport', 'gaming', 'team']);
+export function normName(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, ' ').trim(); }
+export function nameTokens(s) { return normName(s).split(' ').filter(w => w && !NAME_STOP.has(w)); }
+// 2 = the same name (after normalization / stop words), 1 = every significant token of the shorter
+// name is in the longer one (initials may prefix-match), 0 = different. Exact beats subset when choosing.
+export function nameScore(a, b) {
+  const na = normName(a), nb = normName(b);
+  if (!na || !nb) return 0;
+  if (na === nb) return 2;
+  const ta = nameTokens(a), tb = nameTokens(b);
+  if (!ta.length || !tb.length) return 0;
+  if (ta.join(' ') === tb.join(' ')) return 2;
+  const [short, long] = ta.length <= tb.length ? [ta, tb] : [tb, ta];
+  const sig = (w) => w.length >= 3 || /\d/.test(w);
+  if (!short.some(sig)) return 0;
+  return short.every(w => (sig(w) ? long.includes(w) : long.some(x => x.startsWith(w)))) ? 1 : 0;
+}
+export const nameMatch = (a, b) => nameScore(a, b) > 0;
+const sideScore = (league, side, name) => (ALIAS_LEAGUES.has(league) ? (teamMatch(league, side.team, name) || (side.alt && teamMatch(league, side.alt, name)) ? 2 : 0) : Math.max(nameScore(side.team, name), nameScore(side.alt, name)));
+const sameName = (league, a, b) => (ALIAS_LEAGUES.has(league) ? teamMatch(league, a, b) : nameScore(a, b) > 0);
+const sideOf = (s) => ({ team: (s.team && s.team.name) || s.description || '', alt: s.description || '', long: !!s.long });
+// Events -> matchable rows. A two-sided moneyline keeps its long/short sides; a soccer match (one
+// Yes/No market per team plus the draw) becomes one row whose sides each carry their own market slug.
 export function slimEvents(data) {
   const out = [];
   for (const e of (data && data.events) || []) {
     if (!e || e.closed || e.ended) continue;
-    const ml = (e.markets || []).find(m => m && (m.sportsMarketTypeV2 === 'SPORTS_MARKET_TYPE_MONEYLINE' || /moneyline|winner/i.test(m.sportsMarketType || '')) && Array.isArray(m.marketSides) && m.marketSides.length === 2);
-    if (!ml || !ml.slug) continue;
-    out.push({ slug: ml.slug, startMs: Date.parse(e.startDate || e.startTime || ''), title: e.title || '', sides: ml.marketSides.map(s => ({ team: (s.team && s.team.name) || s.description || '', long: !!s.long })) });
+    const startMs = Date.parse(e.startDate || e.startTime || '');
+    const markets = e.markets || [];
+    const ml = markets.find(m => m && m.slug && Array.isArray(m.marketSides) && m.marketSides.length === 2 && (m.sportsMarketTypeV2 === 'SPORTS_MARKET_TYPE_MONEYLINE' || (!m.sportsMarketTypeV2 && /moneyline|winner/i.test(m.sportsMarketType || ''))));
+    if (ml) { out.push({ slug: ml.slug, startMs, title: e.title || '', sides: ml.marketSides.map(sideOf) }); continue; }
+    const teamMarkets = markets.filter(m => m && m.slug && m.sportsMarketTypeV2 === 'SPORTS_MARKET_TYPE_DRAWABLE_OUTCOME' && Array.isArray(m.marketSides) && m.marketSides.some(x => x && x.team && x.team.name));
+    if (teamMarkets.length >= 2) {
+      const sides = teamMarkets.slice(0, 2).map(m => ({ ...sideOf(m.marketSides.find(x => x && x.team && x.team.name)), long: true, slug: m.slug }));
+      out.push({ slug: teamMarkets[0].slug.replace(/-[^-]+$/, ''), drawable: true, startMs, title: e.title || '', sides });
+    }
   }
   return out;
 }
-export function matchUsEvent(league, events, team, opponent = null, nowMs = Date.now()) {
+// want = 'long' (the team wins) or 'no' (the team does not win). Exact name matches beat subset
+// matches, then the nearest start inside now-6h .. now+36h.
+export function matchUsEvent(league, events, team, opponent = null, nowMs = Date.now(), want = 'long') {
   let best = null;
   for (const ev of events || []) {
     if (!Number.isFinite(ev.startMs) || ev.startMs < nowMs - 6 * 3600e3 || ev.startMs > nowMs + 36 * 3600e3) continue;
-    const idx = ev.sides.findIndex(s => teamMatch(league, s.team, team));
+    let idx = -1, score = 0;
+    ev.sides.forEach((s, i) => { const sc = sideScore(league, s, team); if (sc > score) { score = sc; idx = i; } });
     if (idx < 0) continue;
-    const other = ev.sides[1 - idx];
-    if (opponent && !teamMatch(league, other.team, opponent)) continue;
+    const other = ev.sides[1 - idx] || null;
+    if (opponent && !(other && sideScore(league, other, opponent))) continue;
     const d = Math.abs(ev.startMs - nowMs);
-    if (!best || d < best.d) best = { d, slug: ev.slug, side: ev.sides[idx].long ? 'long' : 'short', startMs: ev.startMs, team: ev.sides[idx].team, opponent: other.team };
+    if (best && (score < best.score || (score === best.score && d >= best.d))) continue;
+    const base = ev.drawable ? 'long' : (ev.sides[idx].long ? 'long' : 'short');
+    const side = want === 'no' ? (base === 'long' ? 'short' : 'long') : base;
+    best = { score, d, slug: ev.drawable ? ev.sides[idx].slug : ev.slug, side, startMs: ev.startMs, team: ev.sides[idx].team, opponent: other ? other.team : null, drawable: !!ev.drawable };
   }
   if (!best) return null;
-  const { d, ...rest } = best; return rest;
+  const { d, score, ...rest } = best; return rest;
 }
 async function kvJson(env, key) { try { return await env.SIGNALS_CACHE.get(key, { type: 'json' }); } catch (e) { return null; } }
 async function kvPut(env, key, v, ttl) { try { await env.SIGNALS_CACHE.put(key, JSON.stringify(v), { expirationTtl: ttl }); } catch (e) {} }
@@ -129,7 +209,7 @@ export async function fetchLeagueEvents(env, league, { fetchImpl = fetch, nowMs 
   const key = `${PMUS_KEYS.EVENTS}_${league}`;
   const cached = await kvJson(env, key);
   if (cached && nowMs - (cached.at || 0) < EVENTS_TTL_S * 1000) return cached.events;
-  const res = await fetchImpl(`${PMUS_GATEWAY}/v2/leagues/${encodeURIComponent(league)}/events?limit=100`);
+  const res = await fetchImpl(`${PMUS_GATEWAY}/v2/leagues/${encodeURIComponent(league)}/events?limit=250`);
   if (!res.ok) throw new PmusError(`polymarket.us gateway ${res.status} (league ${league})`, res.status);
   const events = slimEvents(await res.json());
   await kvPut(env, key, { at: nowMs, events }, EVENTS_TTL_S);
@@ -146,22 +226,31 @@ export async function fetchUsMarket(env, slug, { fetchImpl = fetch, nowMs = Date
   await kvPut(env, key, { at: nowMs, market }, MARKET_TTL_S);
   return market;
 }
-// The whole route: league -> events -> team match -> market details. Never throws; returns {ok:false, reason}.
+// The whole route: kind -> leagues -> events -> name match -> market details. Never throws; returns {ok:false, reason}.
 export async function resolveUsMarket(env, intent, deps = {}) {
   try {
     if (intent.usSlug && intent.usSide) { const market = await fetchUsMarket(env, intent.usSlug, deps); return { ok: true, slug: intent.usSlug, side: intent.usSide, ...market }; }
-    const league = leagueOf(intent);
-    if (!league) return { ok: false, reason: 'league not routable (not NFL/CFB/NBA/NHL/MLB)' };
-    const team = teamOfIntent(intent);
-    if (!team) return { ok: false, reason: 'cannot tell which team the intent is long' };
+    const kind = marketKind(intent);
+    if (kind !== 'moneyline') return { ok: false, reason: `not a moneyline market (${kind})` };
+    const leagues = leaguesOf(intent);
+    if (!leagues.length) return { ok: false, reason: `league not routable (${slugPrefix(intent) || 'no slug prefix'}: no Polymarket US league mapped)` };
+    const leg = legOfIntent(intent);
+    if (!leg) return { ok: false, reason: 'cannot tell which team the intent is long' };
     const teams = teamsOfTitle(intent.marketTitle);
-    const opponent = teams.length === 2 ? (teamMatch(league, teams[0], team) ? teams[1] : teams[0]) : null;
-    const events = await fetchLeagueEvents(env, league, deps);
-    const hit = matchUsEvent(league, events, team, opponent, deps.nowMs || Date.now());
-    if (!hit) return { ok: false, reason: `no Polymarket US ${league.toUpperCase()} moneyline for ${team}${opponent ? ` vs ${opponent}` : ''} within the window` };
+    const opponent = teams.length === 2 ? (sameName(leagues[0], teams[0], leg.team) ? teams[1] : teams[0]) : null;
+    const nowMs = deps.nowMs || Date.now();
+    let hit = null; const errs = [];
+    for (const league of leagues) {
+      let events;
+      try { events = await fetchLeagueEvents(env, league, deps); } catch (e) { errs.push(String(e.message).slice(0, 80)); continue; }
+      hit = matchUsEvent(league, events, leg.team, opponent, nowMs, leg.no ? 'no' : 'long');
+      if (hit) { hit.league = league; break; }
+    }
+    if (!hit && errs.length === leagues.length) return { ok: false, reason: `routing error: ${errs[0]}` };
+    if (!hit) return { ok: false, reason: `no Polymarket US ${leagues.map(l => l.toUpperCase()).join('/')} moneyline for ${leg.team}${opponent ? ` vs ${opponent}` : ''} within the window` };
     const market = await fetchUsMarket(env, hit.slug, deps);
     if (market.status && market.status !== 'MARKET_STATUS_OPEN') return { ok: false, reason: `US market ${hit.slug} is ${market.status}` };
-    return { ok: true, slug: hit.slug, side: hit.side, team: hit.team, opponent: hit.opponent, startMs: hit.startMs, ...market };
+    return { ok: true, slug: hit.slug, side: hit.side, team: hit.team, opponent: hit.opponent, startMs: hit.startMs, league: hit.league, drawable: hit.drawable, ...market };
   } catch (e) { return { ok: false, reason: `routing error: ${String(e.message).slice(0, 100)}` }; }
 }
 

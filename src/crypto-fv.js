@@ -22,7 +22,12 @@ const COINBASE = 'https://api.exchange.coinbase.com';
 const KRAKEN = 'https://api.kraken.com/0/public';
 const GAMMA = 'https://gamma-api.polymarket.com';
 
-export const FV_KEYS = { CACHE: 'crypto_fv' };
+export const FV_KEYS = { CACHE: 'crypto_fv', ASSETS: 'crypto_fv_assets' };   // ASSETS = last good stats per asset
+// Kraken/Coinbase throttle the candle endpoints a few times a day (429 since Oct 16 2026). A
+// throttled asset keeps its last good vols (<= VOLS_STALE_MAX_MS old) with a fresh ticker spot and is
+// flagged stale: 'vols'; if the tickers are down too, the last good spot is reused while it is younger
+// than SPOT_STALE_MAX_MS (stale: 'all'); beyond that the asset drops out of the refresh as before.
+export const VOLS_STALE_MAX_MS = 48 * 3600e3, SPOT_STALE_MAX_MS = 2 * 3600e3;
 export const FV_TTL_S = 600;               // KV TTL; cron refreshes every 5 min
 export const FV_MAX_ROWS = 200;
 export const ASSETS = {
@@ -149,6 +154,12 @@ async function statsFromKraken(a) {
   try { const t = await krakenJson(`/Ticker?pair=${a.kraken}`); spot = Number(t && t.c && t.c[0]) || spot; } catch (e) {}
   return { source: 'kraken', spot, hourly, daily };
 }
+// Spot only, from the light ticker endpoints (tried when the candle endpoints are throttled).
+async function spotOnly(a) {
+  try { const t = await krakenJson(`/Ticker?pair=${a.kraken}`); const px = Number(t && t.c && t.c[0]); if (px > 0) return { spot: px, source: 'kraken' }; } catch (e) {}
+  try { const t = await coinbaseJson(`/products/${a.product}/ticker`); const px = Number(t && t.price); if (px > 0) return { spot: px, source: 'coinbase' }; } catch (e) {}
+  return null;
+}
 async function statsFromCoinbase(a, nowMs) {
   const hourly = await fetchCandles(a.product, 3600, 24 * 30, nowMs);
   await sleep(300);
@@ -223,10 +234,22 @@ export function summarize(rows) {
 
 export async function refreshCryptoFairValue(env, nowMs = Date.now()) {
   const assets = {}; const errors = {};
+  let lastGood = {}; try { lastGood = (await env.SIGNALS_CACHE.get(FV_KEYS.ASSETS, { type: 'json' })) || {}; } catch (e) { lastGood = {}; }
   for (const sym of Object.keys(ASSETS)) {
-    try { assets[sym] = await fetchAssetStats(sym, nowMs); } catch (e) { errors[sym] = e.message.slice(0, 120); }
+    try { assets[sym] = await fetchAssetStats(sym, nowMs); lastGood[sym] = { ...assets[sym], at: new Date(nowMs).toISOString() }; }
+    catch (e) {
+      errors[sym] = e.message.slice(0, 120);
+      const prev = lastGood[sym]; const age = prev && prev.at ? nowMs - Date.parse(prev.at) : Infinity;
+      if (age <= VOLS_STALE_MAX_MS) {
+        const { at, ...kept } = prev;
+        const sp = await spotOnly(ASSETS[sym]);
+        if (sp) assets[sym] = { ...kept, spot: sp.spot, source: sp.source, stale: 'vols', volsAsOf: at };
+        else if (age <= SPOT_STALE_MAX_MS) assets[sym] = { ...kept, stale: 'all', volsAsOf: at };
+      }
+    }
     await sleep(300);   // three assets, two venues: never a burst
   }
+  try { await env.SIGNALS_CACHE.put(FV_KEYS.ASSETS, JSON.stringify(lastGood), { expirationTtl: 7 * 86400 }); } catch (e) {}
   let markets = [];
   try { markets = await gammaCryptoMarkets(3); } catch (e) { errors.gamma = e.message.slice(0, 80); }
   const rows = priceMarkets(markets, assets, nowMs);

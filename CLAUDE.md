@@ -77,8 +77,8 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   2026): **Polymarket US** - every intent is routed league -> moneyline ->
   long/short side (`src/polymarket-us.js`) and priced on that book with its
   0.0695 x p(1-p) fee, `clobRef` keeps the global-CLOB fill for comparison,
-  unroutable intents (non-NFL/CFB/NBA/NHL/MLB, spreads/totals) are recorded
-  as such. Live path: only when `paperTradeMode` is false AND `PMUS_KEY_ID` /
+  unroutable intents (unmapped league, spreads/totals/handicaps, game or map
+  winners, combos) are recorded with the reason. Live path: only when `paperTradeMode` is false AND `PMUS_KEY_ID` /
   `PMUS_SECRET_KEY` are set (push-polymarket-us-key.yml); it consumes the
   live exec queue, sends a FOK limit (YES-price convention) or
   close-position with synchronous execution, confirms fills through
@@ -88,7 +88,14 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   `${tsMs}${METHOD}${pathname}` (no query/body) in X-PM-Signature, key id in
   X-PM-Access-Key; gateway.polymarket.us (public: league events, market by
   slug, book) vs api.polymarket.us (orders, positions, balances); routing
-  helpers (`leagueOf`, `teamOfIntent`, `matchUsEvent` via `teamMatch`),
+  (`LEAGUES`: global slug prefix -> US league list, Oct 25 2026 covers the
+  US big four + CFB/WNBA/CBB, tennis atp/wta/itf, UFC/boxing, esports
+  lol/cs2/dota2/valorant/cod, ~45 soccer leagues; `marketKind` keeps
+  totals/spreads/handicaps/game winners out; `legOfIntent` turns NO on
+  "Will X win" into X's other side; big-four names go through xvenue's
+  `teamMatch`, everything else through `nameScore` (normalized tokens,
+  exact beats subset); soccer is one Yes/No market per team, so
+  `slimEvents` rows carry a slug per side (`drawable`)),
   `usLevels` (effective-price levels for long/short x buy/sell),
   `buildUsOrder`, `fillFromExecutions`. 25 req/s per IP; 429 -> 1s retry.
 - `src/xvenue.js` — Kalshi + Polymarket US vs global Polymarket live-game
@@ -124,7 +131,10 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   30d is the model sigma). KV `crypto_fv`, refreshed at the top of each cron;
   `GET /crypto/fairvalue` (snapshot key `cryptoFv`); scan signals on those
   markets carry `cryptoFv` (modelSide vs paid for the whale's side). The
-  frontend Crypto Lab re-prices client-side (src/lib/cryptoFv.js). Calibration
+  frontend Crypto Lab re-prices client-side (src/lib/cryptoFv.js). Kraken and
+  Coinbase throttle the candle endpoints a few times a day: a throttled asset
+  reuses its last good vols (KV `crypto_fv_assets`, up to 48h) with a fresh
+  ticker spot and is flagged `stale` instead of dropping out. Calibration
   Oct 2026: median |gap| 1.4c on liquid BTC contracts; far-dated tails trade
   7-12c above the lognormal — a tail gap is a model warning, not an edge.
 - `src/kalshi.js` — signed Kalshi API client (Ed25519 or RSA-PSS over
