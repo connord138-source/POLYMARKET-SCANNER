@@ -11,6 +11,16 @@ import { PLANS, planOf } from './tiers.js';
 const STRIPE_API = 'https://api.stripe.com/v1';
 export const BILLING_KEYS = { ent: (uid) => `ent:${uid}`, cust: (cid) => `stripe_cust:${cid}`, evt: (id) => `stripe_evt:${id}` };
 
+// The Stripe account is shared with another product (SpecScan, owner's choice
+// Oct 2026), and webhooks are account-wide. Every Checkout session and
+// subscription this worker creates carries metadata.app = APP_TAG, and the
+// webhook only acts on objects that carry it (or on customers it already
+// mapped), so the other product's sales never mint entitlements or burn
+// founding seats here. STRIPE_PORTAL_CONFIG (wrangler var) is EdgeRunner's own
+// Customer Portal configuration, so the plan switcher lists only our plans.
+export const APP_TAG = 'edgerunner';
+export const isOurs = (md) => !!(md && md.app === APP_TAG);
+
 export const billingConfigured = (env) => !!(env && env.STRIPE_SECRET_KEY);
 
 // Which price id serves (plan, interval); founding Pro monthly when the seat
@@ -74,8 +84,8 @@ export async function createCheckoutSession(env, { user, plan, interval, success
     mode: 'subscription',
     line_items: [{ price: priceId, quantity: 1 }],
     client_reference_id: user.id,
-    metadata: { userId: user.id, plan, interval },
-    subscription_data: { metadata: { userId: user.id, plan, interval } },
+    metadata: { app: APP_TAG, userId: user.id, plan, interval },
+    subscription_data: { metadata: { app: APP_TAG, userId: user.id, plan, interval } },
     allow_promotion_codes: true,
     success_url: successUrl, cancel_url: cancelUrl,
   };
@@ -87,7 +97,9 @@ export async function createCheckoutSession(env, { user, plan, interval, success
 export async function createPortalSession(env, { user, returnUrl }) {
   const ent = await getEntitlement(env, user.id);
   if (!ent || !ent.stripeCustomerId) throw new Error('no billing account yet');
-  const s = await stripeRequest(env, '/billing_portal/sessions', { customer: ent.stripeCustomerId, return_url: returnUrl });
+  const params = { customer: ent.stripeCustomerId, return_url: returnUrl };
+  if (env.STRIPE_PORTAL_CONFIG) params.configuration = env.STRIPE_PORTAL_CONFIG;
+  const s = await stripeRequest(env, '/billing_portal/sessions', params);
   return { url: s.url };
 }
 
@@ -136,6 +148,7 @@ export async function handleStripeEvent(env, event) {
   const obj = event.data && event.data.object;
   if (!obj) return out;
   if (event.type === 'checkout.session.completed') {
+    if (!isOurs(obj.metadata)) return { ...out, ignored: 'foreign' };
     const userId = obj.client_reference_id || (obj.metadata && obj.metadata.userId);
     const customer = typeof obj.customer === 'string' ? obj.customer : obj.customer && obj.customer.id;
     if (!userId) return out;
@@ -150,8 +163,8 @@ export async function handleStripeEvent(env, event) {
     Object.assign(out, { handled: true, userId, plan: ent.plan });
   } else if (event.type.startsWith('customer.subscription.')) {
     const customer = typeof obj.customer === 'string' ? obj.customer : obj.customer && obj.customer.id;
-    const userId = (obj.metadata && obj.metadata.userId) || (customer && await userIdForCustomer(env, customer));
-    if (!userId) return out;
+    const userId = (isOurs(obj.metadata) && obj.metadata.userId) || (customer && await userIdForCustomer(env, customer));
+    if (!userId) return { ...out, ignored: 'foreign' };
     const prev = await getEntitlement(env, userId);
     const ent = event.type === 'customer.subscription.deleted' ? { ...entitlementFromSubscription(env, obj, prev), plan: 'free', status: 'canceled' } : entitlementFromSubscription(env, obj, prev);
     await setEntitlement(env, userId, { ...(prev || {}), ...ent });
@@ -159,7 +172,7 @@ export async function handleStripeEvent(env, event) {
   } else if (event.type === 'invoice.payment_failed') {
     const customer = typeof obj.customer === 'string' ? obj.customer : obj.customer && obj.customer.id;
     const userId = customer && await userIdForCustomer(env, customer);
-    if (!userId) return out;
+    if (!userId) return { ...out, ignored: 'foreign' };
     const prev = await getEntitlement(env, userId);
     if (prev) { await setEntitlement(env, userId, { ...prev, status: 'past_due' }); Object.assign(out, { handled: true, userId, plan: prev.plan }); }
   }
