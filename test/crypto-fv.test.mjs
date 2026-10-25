@@ -54,16 +54,17 @@ check("Phi", near(Phi(0), 0.5) && near(Phi(1.96), 0.975, 2e-4) && near(Phi(-3), 
   const kv = new Map();
   const env = { SIGNALS_CACHE: { get: async (k) => (kv.has(k) ? JSON.parse(kv.get(k)) : null), put: async (k, v) => { kv.set(k, v); } } };
   const now = Date.parse("2026-10-15T20:00:00Z");
-  let candleCalls = 0, krakenCalls = 0, krakenOk = false;
+  let candleCalls = 0, krakenCalls = 0, krakenOk = false, candlesDown = false, tickerDown = false;
   globalThis.fetch = async (url) => {
     const u = String(url);
     if (u.includes("/candles?")) {
       candleCalls++;
+      if (candlesDown) return { ok: false, status: 429, json: async () => ({}) };
       const g = Number(u.match(/granularity=(\d+)/)[1]); const start = Date.parse(u.match(/start=([^&]+)/)[1]); const end = Date.parse(u.match(/end=([^&]+)/)[1]);
       const rows = []; for (let t = end - g * 1000; t >= start && rows.length < 300; t -= g * 1000) { const i = Math.floor(t / (g * 1000)); const c = 80000 + 2000 * Math.sin(i / 7); rows.push([Math.floor(t / 1000), c - 50, c + 50, c, c, 10]); }
       return { ok: true, json: async () => rows };
     }
-    if (u.includes("/ticker")) return { ok: true, json: async () => ({ price: "82000.5" }) };
+    if (u.includes("/ticker")) return tickerDown ? { ok: false, status: 429, json: async () => ({}) } : { ok: true, json: async () => ({ price: "82000.5" }) };
     if (u.includes("api.kraken.com")) { krakenCalls++; return krakenOk ? { ok: true, json: async () => { const iv = Number((u.match(/interval=(\d+)/) || [])[1] || 0); if (u.includes("/Ticker")) return { error: [], result: { XXBTZUSD: { c: ["82100.0", "1"] } } }; const n = 720; const rows = []; for (let i = 0; i < n; i++) { const c = 80000 + 2000 * Math.sin(i / 7); rows.push([1700000000 + i * iv * 60, c, c, c, String(c), c, 1, 1]); } return { error: [], result: { XXBTZUSD: rows, last: 1 } }; } } : { ok: false, status: 429, json: async () => ({}) }; }
     if (u.includes("gamma-api")) return { ok: true, json: async () => (u.includes("offset=0") ? [{ slug: "ev", markets: [{ question: "Will the price of Bitcoin be above $84,000 on October 16?", slug: "btc-84k-oct16", endDate: "2026-10-16T00:00:00Z", active: true, closed: false, outcomePrices: '["0.137","0.863"]', clobTokenIds: '["t1","t2"]', volume24hr: 73000, bestBid: 0.13, bestAsk: 0.14 }, { question: "Will ETH be above $2,500 on October 16?", slug: "eth", endDate: "2026-10-16T00:00:00Z", active: true, closed: false, outcomePrices: '["0.5","0.5"]', volume24hr: 10 }] }] : []) };
     return { ok: false, status: 404, json: async () => ({}) };
@@ -79,6 +80,16 @@ check("Phi", near(Phi(0), 0.5) && near(Phi(1.96), 0.975, 2e-4) && near(Phi(-3), 
   krakenOk = true; candleCalls = 0;
   const viaKraken = await refreshCryptoFairValue(env, now + 7200e3);
   check("refresh (Kraken up): one OHLC call per horizon, 720 hourly bars, Kraken ticker spot, Coinbase untouched", viaKraken.assets.BTC.source === "kraken" && viaKraken.assets.BTC.spot === 82100 && viaKraken.assets.BTC.bars.hourly === 720 && viaKraken.assets.BTC.bars.daily === 90 && viaKraken.assets.BTC.vols.h30 > 0 && candleCalls === 0, JSON.stringify(viaKraken.assets.BTC));
+  check("last good stats per asset kept in KV", kv.has("crypto_fv_assets") && JSON.parse(kv.get("crypto_fv_assets")).BTC.at === viaKraken.at && JSON.parse(kv.get("crypto_fv_assets")).BTC.sigma === viaKraken.assets.BTC.sigma);
+  // throttled refresh: candles 429 on both venues -> last good vols reused with a fresh Coinbase ticker spot, flagged stale
+  candlesDown = true; krakenOk = false;
+  const t3 = now + 3 * 3600e3;
+  const throttled = await refreshCryptoFairValue(env, t3);
+  check("refresh (candles 429 everywhere): last good vols reused with a fresh ticker spot, flagged stale, contracts still priced, error still recorded", throttled.assets.BTC && throttled.assets.BTC.stale === "vols" && throttled.assets.BTC.spot === 82000.5 && throttled.assets.BTC.source === "coinbase" && throttled.assets.BTC.sigma === viaKraken.assets.BTC.sigma && throttled.assets.BTC.volsAsOf === viaKraken.at && throttled.assets.BTC.at === undefined && throttled.summary.contracts === 2 && /429|Too many/.test(throttled.errors.BTC) && JSON.parse(kv.get("crypto_fv_assets")).BTC.at === viaKraken.at, JSON.stringify({ a: throttled.assets.BTC, e: throttled.errors, s: throttled.summary }));
+  tickerDown = true;
+  const soon = await refreshCryptoFairValue(env, t3 + 30 * 60e3);
+  const late = await refreshCryptoFairValue(env, t3 + 3 * 3600e3);
+  check("refresh (everything 429): an asset under 2h old is served stale=all with its last spot, an older one drops out", soon.assets.BTC && soon.assets.BTC.stale === "all" && soon.assets.BTC.spot === viaKraken.assets.BTC.spot && !late.assets.BTC && late.errors.BTC, JSON.stringify({ soon: soon.assets.BTC, late: Object.keys(late.assets) }));
 }
 console.log(`${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
