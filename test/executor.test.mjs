@@ -48,6 +48,7 @@ const T0 = "2026-10-24T18:00:00.000Z";
   check("gates: clear day passes", evaluateGates(buy, { config: cfg, dailyStats: { realizedPnL: 0 }, day: { buys: 0, spendUsd: 0 } }).blocked === false);
   const g = evaluateGates(buy, { config: cfg, dailyStats: { realizedPnL: -15 }, day: { buys: 5, spendUsd: 45 } });
   check("gates: trade cap, spend cap and loss limit all reported", g.blocked && g.reasons.length === 3 && /maxDailyTrades/.test(g.reasons[0]) && /maxDailySpend/.test(g.reasons[1]) && /dailyLossLimit/.test(g.reasons[2]), JSON.stringify(g));
+  check("gates: the loss limit is a magnitude (+100 or -150 both mean stop at -limit); a small losing day passes, -limit blocks", evaluateGates(buy, { config: { dailyLossLimit: 100 }, dailyStats: { realizedPnL: -5 }, day: {} }).blocked === false && evaluateGates(buy, { config: { dailyLossLimit: 100 }, dailyStats: { realizedPnL: -100 }, day: {} }).reasons[0] === "dailyLossLimit -100 hit (-100)" && evaluateGates(buy, { config: { dailyLossLimit: -15 }, dailyStats: { realizedPnL: -20 }, day: {} }).blocked === true && evaluateGates(buy, { config: { dailyLossLimit: -15 }, dailyStats: { realizedPnL: 45 }, day: {} }).blocked === false);
   check("gates: a sell is not capped; a missing token blocks", evaluateGates({ ...buy, action: "SELL" }, { config: cfg, day: { buys: 9 } }).blocked === false && evaluateGates({ ...buy, tokenId: null }, { config: cfg }).reasons[0] === "no token id");
 }
 {
