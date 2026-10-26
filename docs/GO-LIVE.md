@@ -49,8 +49,9 @@ nothing currently consumes it. Before live trading:
       exec queue, places the FOK limit (entries) or close-position (exits)
       with synchronous execution, confirms fills to the auto-trader, and on
       any ambiguity after a send reconciles against the account position or
-      halts itself. Trades with no Polymarket US market (non-NFL/CFB/NBA/NHL/
-      MLB, spreads/totals) are skipped, never routed elsewhere.
+      halts itself. Trades with no Polymarket US market (a league outside the
+      map in `src/polymarket-us.js`, spreads/totals/handicaps, game or map
+      winners) are skipped, never routed elsewhere.
 - [ ] Dry-run it against the queue in paper mode for ≥ 1 week (started Oct 24
       2026; `GET /autotrader/executor`, snapshot key `executor`): place no
       orders, log what it *would* have done on Polymarket US, diff against

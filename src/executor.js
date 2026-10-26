@@ -118,7 +118,8 @@ export function evaluateGates(intent, { config = {}, dailyStats = {}, day = {} }
   if (intent.action === 'BUY') {
     if (config.maxDailyTrades != null && (day.buys || 0) >= config.maxDailyTrades) reasons.push(`maxDailyTrades ${config.maxDailyTrades} reached`);
     if (config.maxDailySpend != null && (day.spendUsd || 0) + intent.sizeUsd > config.maxDailySpend) reasons.push(`maxDailySpend ${config.maxDailySpend} would be exceeded`);
-    if (config.dailyLossLimit != null && typeof dailyStats.realizedPnL === 'number' && dailyStats.realizedPnL <= config.dailyLossLimit) reasons.push(`dailyLossLimit ${config.dailyLossLimit} hit (${dailyStats.realizedPnL})`);
+    // dailyLossLimit is a magnitude in the config (100, or -150 in the defaults): the day stops once realized P&L is at or below -|limit|, same as the auto-trader's own gate.
+    if (config.dailyLossLimit != null && Number(config.dailyLossLimit) !== 0 && typeof dailyStats.realizedPnL === 'number' && dailyStats.realizedPnL <= -Math.abs(Number(config.dailyLossLimit))) reasons.push(`dailyLossLimit -${Math.abs(Number(config.dailyLossLimit))} hit (${dailyStats.realizedPnL})`);
     if (config.maxPositionSize != null && intent.sizeUsd > config.maxPositionSize) reasons.push(`size ${intent.sizeUsd} > maxPositionSize ${config.maxPositionSize}`);
   }
   if (!intent.tokenId) reasons.push('no token id');
