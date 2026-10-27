@@ -1,6 +1,6 @@
 // Forge lane: promoted rules paper-trade matching signals; demotion; parity.
 // Run with: node test/forge-lane.test.mjs
-import { processSignals, forgeRuleLedger } from "../src/autotrader.js";
+import { processSignals, forgeRuleLedger, evaluateSignal, laneOpenCount, laneOpenCap, DEFAULT_CONFIG } from "../src/autotrader.js";
 import { bucketSignal, matchesFilter } from "../src/forge.js";
 
 let pass = 0, fail = 0;
@@ -121,6 +121,25 @@ const posOf = (env) => JSON.parse(env.store.autotrader_positions || "[]");
   const env = makeEnv({ forge_report: JSON.stringify({ promoted: [] }) });
   const r = await processSignals(env, [sig()]);
   check("7: none promoted", posOf(env).length === 0 && r.forgeLane.skips["no promoted strategies"] === 1, JSON.stringify(r.forgeLane));
+}
+
+// 8. Open-position caps are per lane: Forge holds do not block the main lane; Forge has its own cap
+{
+  const fpos = (n, src = "forge") => Array.from({ length: n }, (_, i) => ({ id: `${src}${i}`, strategySource: src === "main" ? undefined : src, marketSlug: `x-${src}-${i}`, marketTitle: `X ${i}`, tokenId: `tx${i}`, direction: "Yes", entryPrice: 50, size: 5, shares: 10, holdToResolution: true, openedAt: new Date().toISOString() }));
+  const cfg = { ...DEFAULT_CONFIG, enabled: true, paperTradeMode: true, maxOpenPositions: 15, maxDailyTrades: 30, maxDailySpend: 300, dailyLossLimit: 100, useLearningData: false };
+  const day = { tradesOpened: 0, totalSpent: 0, realizedPnL: 0 };
+  const mainSig = sig({ hasWinningWallet: true });
+  const withForge = evaluateSignal(mainSig, cfg, day, fpos(15), null, null);
+  const withMain = evaluateSignal(mainSig, cfg, day, fpos(15, "main"), null, null);
+  check("8: 15 forge holds do not count against the main lane; 15 main-lane holds do", !/Max open positions/.test(withForge.reason || "") && /Max open positions reached \(15 main-lane\)/.test(withMain.reason || ""), JSON.stringify({ withForge, withMain }));
+  check("8: lane counts and caps", laneOpenCount(fpos(3).concat(fpos(2, "main")), "forge") === 3 && laneOpenCount(fpos(3).concat(fpos(2, "main")), "main") === 2 && laneOpenCap(cfg, "forge") === 10 && laneOpenCap({ ...cfg, forgeMaxOpen: 4 }, "forge") === 4 && laneOpenCap(cfg, "crew_hunt") === 10 && laneOpenCap(cfg, "main") === 15);
+  livePx = "0.71";
+  const env = makeEnv({ autotrader_positions: JSON.stringify(fpos(2)) }, { forgeMaxOpen: 2 });
+  const r = await processSignals(env, [sig()]);
+  check("8: forge at its own cap skips 'max open'", posOf(env).length === 2 && r.forgeLane && r.forgeLane.skips["max open"] === 1, JSON.stringify(r.forgeLane));
+  const env2 = makeEnv({ autotrader_positions: JSON.stringify(fpos(2)) }, { forgeMaxOpen: 3 });
+  await processSignals(env2, [sig()]);
+  check("8: forge under its cap still enters", posOf(env2).length === 3 && posOf(env2).some(p => p.strategySource === "forge" && p.marketSlug === SLUG), JSON.stringify(posOf(env2).map(p => p.marketSlug)));
 }
 
 console.log(`# ${pass} passed, ${fail} failed`);
