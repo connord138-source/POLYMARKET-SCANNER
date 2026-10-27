@@ -581,6 +581,7 @@ const DEFAULT_CONFIG = {
   crewHuntEntries: true,
   crewBetSize: 5,          // APPROVE size; a split (TRIM) vote bets half
   crewMaxPerDay: 6,
+  crewMaxOpen: 10,                // Crew lane's own open-position cap
   crewMinEdge: 3,          // pts of devigged-consensus edge at the ask
   // Forge lane: paper-trade signals matching strategies the Strategy Forge
   // PROMOTED (walk-forward + slippage + significance). Auto-demotes a rule
@@ -589,6 +590,7 @@ const DEFAULT_CONFIG = {
   forgeSize: 5,
   forgeMaxPerDay: 5,
   forgeMaxPerCycle: 2,
+  forgeMaxOpen: 10,               // Forge lane's own open-position cap (its holds run to resolution)
   forgeDemoteMinN: 20,
   vegasEdgeMinEdge: 10,
   // v21.3.0 EXPLORATION FLOOR. Even with the 14d rolling edge window
@@ -1252,6 +1254,18 @@ function getAutotraderCategory(signal) {
 // ============================================================
 // SIGNAL EVALUATION (should we trade this signal?)
 // ============================================================
+// Open-position caps are per lane (Oct 27 2026): the main lane counts only its own positions
+// against maxOpenPositions; Forge, Crew and the Vegas lane count their own against their own cap.
+// Before this the cap was shared, and the Forge lane's long-dated holds (resolving in Dec) had taken
+// 14 of 15 slots, so the main lane (the go-live evidence, the executor's intents) skipped 354
+// candidates in one day for "Max open positions".
+const laneOf = (p) => (p && p.strategySource) || 'main';
+const laneOpenCount = (positions, lane = 'main') => (positions || []).filter(p => laneOf(p) === lane).length;
+function laneOpenCap(config, lane = 'main') {
+  if (lane === 'forge') return config.forgeMaxOpen ?? 10;
+  if (lane === 'crew_hunt') return config.crewMaxOpen ?? (config.maxOpenPositions || 0);
+  return config.maxOpenPositions || 0;
+}
 function evaluateSignal(signal, config, dailyStats, openPositions, perf, explorationGrad) {
   const reasons = [];
 
@@ -1273,8 +1287,8 @@ function evaluateSignal(signal, config, dailyStats, openPositions, perf, explora
       return { shouldTrade: false, reason: `Daily loss limit hit ($${dailyStats.realizedPnL} <= $${lossThreshold})` };
     }
   }
-  if (config.maxOpenPositions > 0 && openPositions.length >= config.maxOpenPositions) {
-    return { shouldTrade: false, reason: `Max open positions reached (${config.maxOpenPositions})` };
+  if (config.maxOpenPositions > 0 && laneOpenCount(openPositions, 'main') >= config.maxOpenPositions) {
+    return { shouldTrade: false, reason: `Max open positions reached (${config.maxOpenPositions} main-lane)` };
   }
 
   // Portfolio risk check
@@ -2733,7 +2747,7 @@ async function enterForgeStrategies(env, config, dailyStats, stillOpen, results,
     if (config.maxDailyTrades > 0 && dailyStats.tradesOpened >= config.maxDailyTrades) { skip('daily trade cap'); break; }
     const size = Math.min(config.forgeSize ?? 5, config.maxPositionSize || 30);
     if (config.maxDailySpend > 0 && dailyStats.totalSpent + size > config.maxDailySpend) { skip('daily spend cap'); break; }
-    if (config.maxOpenPositions > 0 && stillOpen.length >= config.maxOpenPositions) { skip('max open'); break; }
+    if (laneOpenCap(config, 'forge') > 0 && laneOpenCount(stillOpen, 'forge') >= laneOpenCap(config, 'forge')) { skip('max open'); break; }
 
     // Honest fill at OUR side's live price; the forge assumed whale + slip.
     let gamma = null;
@@ -2838,7 +2852,7 @@ async function enterVegasEdgeOpportunities(env, config, dailyStats, stillOpen, r
     if (config.maxDailyTrades > 0 && dailyStats.tradesOpened >= config.maxDailyTrades) break;
     const size = Math.min(config.fixedSize || 10, config.maxPositionSize || 30);
     if (config.maxDailySpend > 0 && dailyStats.totalSpent + size > config.maxDailySpend) break;
-    if (config.maxOpenPositions > 0 && stillOpen.length >= config.maxOpenPositions) break;
+    if (config.maxOpenPositions > 0 && laneOpenCount(stillOpen, 'vegas_edge') >= config.maxOpenPositions) break;
 
     // HONEST FILL: live Gamma price for this team's outcome. No confident
     // outcome match => no trade — never fill at the scanner's cached price.
@@ -2952,7 +2966,7 @@ async function enterCrewPicks(env, config, dailyStats, stillOpen, results) {
     const size = Math.round((pick.verdict === 'TRIM' ? base * 0.5 : base) * 100) / 100;
     if (config.maxDailyTrades > 0 && dailyStats.tradesOpened >= config.maxDailyTrades) { skip('daily trade cap'); remaining.push(pick); continue; }
     if (config.maxDailySpend > 0 && dailyStats.totalSpent + size > config.maxDailySpend) { skip('daily spend cap'); remaining.push(pick); continue; }
-    if (config.maxOpenPositions > 0 && stillOpen.length >= config.maxOpenPositions) { skip('max open positions'); remaining.push(pick); continue; }
+    if (laneOpenCap(config, 'crew_hunt') > 0 && laneOpenCount(stillOpen, 'crew_hunt') >= laneOpenCap(config, 'crew_hunt')) { skip('max open positions'); remaining.push(pick); continue; }
 
     // Honest fill: the edge must survive the live ask, not the hunt's snapshot.
     const q = await fetchMoneylineQuote(pick.marketSlug, pick.outcomeIndex);
@@ -3659,6 +3673,9 @@ export {
   computeFavoritesExperiment,
   computeGoLiveMilestone,
   evaluateSignal,
+  laneOf,
+  laneOpenCount,
+  laneOpenCap,
   isComplementPhantom,
   resolveExitPrice,
   voidPhantomComplementExits,

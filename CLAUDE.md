@@ -42,6 +42,10 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   mildly negative — a capped quota of half-size entries keeps the ledger
   learning even while the 14d rolling edge window (`EDGE_WINDOW_DAYS`,
   `edge_profile_v2`) reads cold, so a recovering band can requalify.
+  Open-position caps are per lane (Oct 27 2026, `laneOpenCount`): the main
+  lane counts only its own positions against `maxOpenPositions`; Forge has
+  `forgeMaxOpen` (10) and Crew `crewMaxOpen` (10). The cap used to be shared
+  and Forge's long-dated holds starved the main lane.
 - `src/at-learning.js` — confidence scoring (`calculateConfidence`),
   factor stats, combos, pattern discovery.
 - `src/crew.js` — Agent Crew orders (chat box on the Agent Crew page):
