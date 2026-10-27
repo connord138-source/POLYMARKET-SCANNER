@@ -283,15 +283,46 @@ export function roundYesPrice(yes, tick, action, side) {
 }
 export function roundQty(q, minQty) { const step = Number(minQty) > 0 ? Number(minQty) : 1; return Math.floor(q / step + 1e-9) * step; }
 const decimalsOf = (tick) => Math.max(0, Math.min(6, Math.round(-Math.log10(Number(tick) || 0.01))));
-export function buildUsOrder({ slug, action, side, effectivePrice, tick, quantity, minQty }) {
+// A limit order in YES terms. Default = marketable FOK with synchronous execution (the taker
+// path). tif 'TIME_IN_FORCE_GOOD_TILL_DATE' + goodTillTime + postOnly = a resting maker order that
+// the venue itself expires (participateDontInitiate: rejected instead of crossing).
+export function buildUsOrder({ slug, action, side, effectivePrice, tick, quantity, minQty, tif = 'TIME_IN_FORCE_FILL_OR_KILL', goodTillTime = null, postOnly = false, synchronous = true, maxBlockTime = '5' }) {
   const yes = roundYesPrice(yesPriceFor(side, effectivePrice), tick, action, side);
-  return { marketSlug: slug, intent: orderIntent(action, side), type: 'ORDER_TYPE_LIMIT', price: { value: yes.toFixed(decimalsOf(tick)), currency: 'USD' }, quantity: r4(roundQty(quantity, minQty)), tif: 'TIME_IN_FORCE_FILL_OR_KILL', manualOrderIndicator: 'MANUAL_ORDER_INDICATOR_AUTOMATIC', synchronousExecution: true, maxBlockTime: '5' };
+  const o = { marketSlug: slug, intent: orderIntent(action, side), type: 'ORDER_TYPE_LIMIT', price: { value: yes.toFixed(decimalsOf(tick)), currency: 'USD' }, quantity: r4(roundQty(quantity, minQty)), tif, manualOrderIndicator: 'MANUAL_ORDER_INDICATOR_AUTOMATIC', synchronousExecution: !!synchronous };
+  if (synchronous) o.maxBlockTime = String(maxBlockTime);
+  if (goodTillTime) o.goodTillTime = goodTillTime;
+  if (postOnly) o.participateDontInitiate = true;
+  return o;
 }
+// The level a resting BUY joins: long rests at the best YES bid (cost = bid); short rests at the
+// best YES offer (cost = 1 - offer). null when that side of the book is empty.
+export function restingLevel(book, side) {
+  if (side === 'long') { const bids = (book && book.bids) || []; if (!bids.length) return null; const yes = Math.max(...bids.map(l => l.price)); return { yes: r4(yes), cost: r4(yes), shown: bids.filter(l => l.price === yes).reduce((a, l) => a + l.size, 0) }; }
+  const offers = (book && book.offers) || []; if (!offers.length) return null; const yes = Math.min(...offers.map(l => l.price)); return { yes: r4(yes), cost: r4(1 - yes), shown: offers.filter(l => l.price === yes).reduce((a, l) => a + l.size, 0) };
+}
+// Maker rebate per contract: Polymarket US pays it only from maker tier 2 ($10M+ monthly maker
+// volume; fee schedule of Oct 19 2026), so the default coefficient is 0.
+export const usMakerRebatePerContract = (effectivePrice, coef = 0) => (Number(coef) > 0 ? Number(coef) * effectivePrice * (1 - effectivePrice) : 0);
 export const usFeePerContract = (effectivePrice, coef = PMUS_FEE) => coef * effectivePrice * (1 - effectivePrice);
+// Top of book + tape summary from the public bbo: last trade price and the cumulative shares
+// traded, which together tell a dry resting order whether a print happened at its level.
+export async function fetchUsBbo(slug, { fetchImpl = fetch } = {}) {
+  const res = await fetchImpl(`${PMUS_GATEWAY}/v1/markets/${encodeURIComponent(slug)}/bbo`);
+  if (!res.ok) throw new PmusError(`polymarket.us gateway ${res.status} (bbo ${slug})`, res.status);
+  const md = ((await res.json()) || {}).marketData || {};
+  const num = (v) => { const x = Number(v && v.value != null ? v.value : v); return Number.isFinite(x) && x > 0 ? x : null; };
+  return { bid: num(md.bestBid), ask: num(md.bestAsk), last: num(md.lastTradePx), sharesTraded: md.sharesTraded != null && Number.isFinite(Number(md.sharesTraded)) ? Number(md.sharesTraded) : null, state: md.state || null };
+}
 
 // ---- trading calls ----
 export const placeUsOrder = (env, order, deps) => pmusRequest(env, 'POST', '/v1/orders', { ...deps, body: order });
 export const getUsOrder = (env, id, deps) => pmusRequest(env, 'GET', `/v1/order/${encodeURIComponent(id)}`, deps);
+export const cancelUsOrder = (env, id, slug, deps) => pmusRequest(env, 'POST', `/v1/order/${encodeURIComponent(id)}/cancel`, { ...deps, body: { marketSlug: slug } });
+export async function getUsOpenOrders(env, slug, deps) {
+  const data = await pmusRequest(env, 'GET', '/v1/orders/open', { ...deps, query: slug ? { market: slug } : null });
+  const list = (data && (data.orders || data.openOrders)) || (Array.isArray(data) ? data : []);
+  return slug ? list.filter(o => !o.marketSlug || o.marketSlug === slug) : list;
+}
 export const closeUsPosition = (env, slug, deps) => pmusRequest(env, 'POST', '/v1/order/close-position', { ...deps, body: { marketSlug: slug, manualOrderIndicator: 'MANUAL_ORDER_INDICATOR_AUTOMATIC', synchronousExecution: true, maxBlockTime: '5' } });
 export async function usPositionQty(env, slug, deps) {
   const data = await pmusRequest(env, 'GET', '/v1/portfolio/positions', { ...deps, query: { market: slug, limit: 5 } });
