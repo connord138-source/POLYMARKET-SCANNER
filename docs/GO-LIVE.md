@@ -52,6 +52,11 @@ nothing currently consumes it. Before live trading:
       halts itself. Trades with no Polymarket US market (a league outside the
       map in `src/polymarket-us.js`, spreads/totals/handicaps, game or map
       winners) are skipped, never routed elsewhere.
+- [x] Maker mode (Oct 27 2026): entries rest post-only at the best level with a
+      20-minute good-till-date and fall back to a taker FOK; the shadow ledger's
+      50-trade read (maker beat taker by ~$10 on the filled 52%) asked for it.
+      The dry run now measures resting fills, misses and the taker alternative
+      side by side (`executor.maker`, `roundTrips.makerMinusTakerOnFilled`).
 - [ ] Dry-run it against the queue in paper mode for ≥ 1 week (started Oct 24
       2026; `GET /autotrader/executor`, snapshot key `executor`): place no
       orders, log what it *would* have done on Polymarket US, diff against

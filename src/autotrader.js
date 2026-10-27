@@ -533,6 +533,10 @@ const DEFAULT_CONFIG = {
   // only if the tape prints at/below it within the TTL, + rebate) would do.
   executorDryRun: true,           // src/executor.js: consume paper entries/exits against the live book, place nothing
   executorVenue: 'polymarket-us', // where real orders go (owner's choice, Oct 24 2026); 'clob' = global book, reference only
+  executorOrderMode: 'maker',     // entries rest post-only at the best level (Oct 27 2026); 'taker' = cross with a FOK
+  executorMakerTtlMin: 20,        // how long an entry rests before the fallback
+  executorMakerFallback: 'taker', // at the TTL: 'taker' crosses with a FOK under the live rules, 'skip' misses the trade
+  executorMakerRebateCoef: 0,     // Polymarket US maker rebate coefficient (0 below $10M monthly maker volume)
   execShadow: true,
   execShadowTtlMin: 60,
   minAiScore: 40,                 // Minimum AI score to consider
@@ -728,9 +732,9 @@ export async function getExecQueue(env) {
 async function addToExecQueue(env, trade) {
   const queue = await getExecQueue(env);
 
-  // Dedup: don't add if same tokenId + action is already PENDING
+  // Dedup: don't add if same tokenId + action is already PENDING (or resting on the venue)
   const isDupe = queue.some(q =>
-    q.status === 'PENDING' &&
+    (q.status === 'PENDING' || q.status === 'RESTING') &&
     q.action === trade.action &&
     (
       (q.tokenId && q.tokenId === trade.tokenId) ||
@@ -746,7 +750,7 @@ async function addToExecQueue(env, trade) {
   queue.push({
     ...trade,
     queuedAt: new Date().toISOString(),
-    status: 'PENDING',  // PENDING → EXECUTING → FILLED / FAILED
+    status: 'PENDING',  // PENDING → EXECUTING (→ RESTING, a maker order on the venue) → FILLED / FAILED
   });
   await env.SIGNALS_CACHE.put(AT_KEYS.EXEC_QUEUE, JSON.stringify(queue));
 }
@@ -770,7 +774,7 @@ export async function removeFromExecQueue(env, tradeId) {
 
 export async function clearCompletedFromQueue(env) {
   const queue = await getExecQueue(env);
-  const active = queue.filter(t => t.status === 'PENDING' || t.status === 'EXECUTING');
+  const active = queue.filter(t => t.status === 'PENDING' || t.status === 'EXECUTING' || t.status === 'RESTING');
   await env.SIGNALS_CACHE.put(AT_KEYS.EXEC_QUEUE, JSON.stringify(active));
 }
 
@@ -1748,7 +1752,7 @@ export async function processSignals(env, signals) {
   for (const position of openPositions) {
     if (position.pendingExit) {
       const hasPendingSell = currentExecQueue.some(q =>
-        (q.status === 'PENDING' || q.status === 'EXECUTING') &&
+        (q.status === 'PENDING' || q.status === 'EXECUTING' || q.status === 'RESTING') &&
         q.action === 'SELL' &&
         (q.positionId === position.id || q.tokenId === position.tokenId)
       );
@@ -1981,7 +1985,7 @@ export async function processSignals(env, signals) {
         // Check if exit is already queued
         const execQueueExit = await getExecQueue(env);
         const alreadyQueuedExit = execQueueExit.some(q =>
-          q.status === 'PENDING' &&
+          (q.status === 'PENDING' || q.status === 'RESTING') &&
           q.tokenId === position.tokenId &&
           q.action === 'SELL'
         );
@@ -2523,7 +2527,7 @@ export async function processSignals(env, signals) {
       const execQueue = await getExecQueue(env);
       // Block duplicate: check if a BUY is already pending in exec queue
       const pendingBuy = execQueue.find(q =>
-        q.status === 'PENDING' && q.action === 'BUY' &&
+        (q.status === 'PENDING' || q.status === 'RESTING') && q.action === 'BUY' &&
         (q.marketSlug === signal.marketSlug || q.tokenId === (signal.tokenId || signal.token_id))
       );
       if (pendingBuy) {
@@ -2534,7 +2538,7 @@ export async function processSignals(env, signals) {
       }
 
       const alreadyQueued = execQueue.some(q =>
-        q.status === 'PENDING' &&
+        (q.status === 'PENDING' || q.status === 'RESTING') &&
         (
           (q.tokenId && q.tokenId === (signal.tokenId || signal.token_id)) ||
           (q.marketSlug && q.marketSlug === signal.marketSlug)

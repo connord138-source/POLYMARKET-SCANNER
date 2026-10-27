@@ -88,6 +88,20 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   close-position with synchronous execution, confirms fills through
   `handleExecConfirm` (position carries `venue/usSlug/usSide`), reconciles an
   ambiguous send against the account position and halts itself if that fails.
+  Maker mode (Oct 27 2026, `executorOrderMode: 'maker'`, built after the
+  shadow ledger's 60 settled trades read maker > taker by $10 at a 52% fill
+  rate): a BUY entry rests post-only at the best level on our side of the US
+  book (good-till-date = `executorMakerTtlMin`, 20) instead of crossing;
+  dry fills it when the market trades through the level or a print lands
+  there (public `/bbo`: best bid/ask, last trade, shares traded), and at the
+  TTL falls back to a taker FOK (`executorMakerFallback`, or 'skip'); the
+  FOK it would have sent at placement is kept as `takerRef`, so the report's
+  `maker.savedVsTakerUsd` / `roundTrips.makerMinusTakerOnFilled` are the
+  maker edge on filled trades and `maker.missed` the entries that never
+  filled. Live: the GTD post-only order rests on the venue (queue status
+  RESTING, polled each cron, canceled at the TTL, cancel failures halt).
+  Exits stay taker. Polymarket US pays no maker rebate below $10M monthly
+  maker volume (fee schedule Oct 19 2026), so `executorMakerRebateCoef` is 0.
 - `src/polymarket-us.js` — Polymarket US client: Ed25519 signature over
   `${tsMs}${METHOD}${pathname}` (no query/body) in X-PM-Signature, key id in
   X-PM-Access-Key; gateway.polymarket.us (public: league events, market by

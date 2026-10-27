@@ -19,8 +19,19 @@
 // FOK limit (or close-position for exits) with synchronous execution,
 // confirms the fill back to the auto-trader, and on any ambiguity after a
 // send it reconciles against the account's positions and halts itself.
+// Maker mode (Oct 27 2026, owner's "build the maker mode" after the shadow
+// ledger's 60 settled trades read maker > taker by $10 at a 52% fill rate):
+// a BUY entry rests at the best level on our side of the Polymarket US book
+// (post-only, good-till-date = our TTL) instead of crossing with a FOK. Dry:
+// the resting order is filled when the market trades through its level or a
+// print lands at it (public bbo: best bid/ask, last trade, shares traded);
+// at the TTL it falls back to a taker fill (or is skipped) so the diff keeps
+// both answers, and the taker fill it would have taken at placement is kept
+// as takerRef. Live: GTD post-only order on the venue, polled each cron,
+// canceled at the TTL, remainder taken as a taker when that is the fallback.
+// Exits stay taker: the exit engine decided them, they must go through.
 import { bestOfBook, feeSched, takerFee } from './execution.js';
-import { pmusConfigured, resolveUsMarket, fetchUsBook, usLevels, buildUsOrder, usFeePerContract, placeUsOrder, getUsOrder, closeUsPosition, usPositionQty, usBalances, fillFromExecutions, fillFromOrder, PmusError } from './polymarket-us.js';
+import { pmusConfigured, resolveUsMarket, fetchUsBook, fetchUsBbo, restingLevel, usLevels, buildUsOrder, usFeePerContract, usMakerRebatePerContract, placeUsOrder, getUsOrder, cancelUsOrder, getUsOpenOrders, closeUsPosition, usPositionQty, usBalances, fillFromExecutions, fillFromOrder, PmusError } from './polymarket-us.js';
 
 const CLOB_API = 'https://clob.polymarket.com';
 export const EXECUTOR_KEYS = { INTENTS: 'executor_intents', FILLS: 'executor_fills', HALT: 'executor_halt', LAST: 'executor_last', DAY: 'executor_day' };
@@ -30,6 +41,13 @@ export const DEFAULT_MIN_SIZE = 5;    // CLOB minimum order size (shares) when G
 export const SLIPPAGE_CAP_C = 5;      // live rule: refuse a fill worse than this vs the paper price
 export const FILLS_KEEP = 500;
 export const MAX_PER_RUN = 10;
+export const MAKER_TTL_MIN = 20;      // a resting entry waits this long before the fallback
+export const makerConfig = (config = {}) => ({
+  mode: config.executorOrderMode === 'taker' ? 'taker' : 'maker',
+  ttlMin: Number(config.executorMakerTtlMin) > 0 ? Number(config.executorMakerTtlMin) : MAKER_TTL_MIN,
+  fallback: config.executorMakerFallback === 'skip' ? 'skip' : 'taker',
+  rebateCoef: Number(config.executorMakerRebateCoef) > 0 ? Number(config.executorMakerRebateCoef) : 0,
+});
 
 const r2 = (x) => Math.round(x * 100) / 100;
 const r4 = (x) => Math.round(x * 10000) / 10000;
@@ -141,17 +159,35 @@ export function summarizeExecutor(fills, history = []) {
     partialRate: buys.length ? r2(buys.filter(f => f.partial).length / buys.length) : null, wouldRejectRate: buys.length ? r2(buys.filter(f => f.wouldReject).length / buys.length) : null, wouldBlockRate: buys.length ? r2(buys.filter(f => f.wouldBlock).length / buys.length) : null,
     feesUsd: r2((fills || []).reduce((a, f) => a + (f.feeUsd || 0), 0)),
   };
+  // maker mode: resting entries that filled vs expired/canceled vs taken as a taker at the TTL; savings vs the FOK the taker path would have sent at placement
+  const makerBuys = buys.filter(f => f.maker);
+  const makerMissed = (fills || []).filter(f => f.maker && f.status === 'failed' && (f.makerStatus === 'expired' || f.makerStatus === 'canceled'));
+  const fallbacks = (fills || []).filter(f => f.makerStatus === 'expired_taker' && f.status === 'filled');
+  const withRef = makerBuys.filter(f => f.takerRef && typeof f.takerRef.execPriceC === 'number');
+  const tried = makerBuys.length + makerMissed.length + fallbacks.length;
+  const maker = {
+    tried, filled: makerBuys.length, missed: makerMissed.length, fallbackTaker: fallbacks.length, fillRate: tried ? r2(makerBuys.length / tried) : null,
+    avgFillMin: avg(makerBuys.map(f => f.makerFillMin).filter(x => typeof x === 'number')), avgSlippageC: avg(makerBuys.map(f => f.slippageC)),
+    avgSavedVsTakerC: withRef.length ? r2(avg(withRef.map(f => f.takerRef.execPriceC - f.execPriceC))) : null,
+    savedVsTakerUsd: withRef.length ? r2(withRef.reduce((a, f) => a + ((f.takerRef.execPriceC - f.execPriceC) / 100) * (f.filledShares || 0) + ((f.takerRef.feeUsd || 0) - (f.feeUsd || 0)), 0)) : null,
+    fallbackAvgSlippageC: avg(fallbacks.map(f => f.slippageC)),
+  };
   const roundTrips = [];
   for (const [pid, e] of byPos) {
     if (!e.buy || !e.sell || e.buy.status !== 'filled' || e.sell.status !== 'filled') continue;
     const sh = Math.min(e.buy.filledShares, e.sell.filledShares);
     const dryPnl = r2((e.sell.execPriceC - e.buy.execPriceC) / 100 * sh - (e.buy.feeUsd || 0) - (e.sell.feeUsd || 0));
     const t = hist.get(pid);
-    roundTrips.push({ positionId: pid, market: e.buy.marketTitle, exitType: e.sell.exitType, buyC: e.buy.execPriceC, sellC: e.sell.execPriceC, shares: r2(sh), dryPnl, paperPnl: t && typeof t.pnl === 'number' ? r2(t.pnl) : null, closedAt: e.sell.filledAt });
+    const ref = e.buy.takerRef && typeof e.buy.takerRef.execPriceC === 'number' ? e.buy.takerRef : null;
+    const takerAltPnl = ref ? r2((e.sell.execPriceC - ref.execPriceC) / 100 * sh - (ref.feeUsd || 0) - (e.sell.feeUsd || 0)) : null;
+    roundTrips.push({ positionId: pid, market: e.buy.marketTitle, exitType: e.sell.exitType, buyC: e.buy.execPriceC, sellC: e.sell.execPriceC, shares: r2(sh), dryPnl, paperPnl: t && typeof t.pnl === 'number' ? r2(t.pnl) : null, maker: !!e.buy.maker, makerStatus: e.buy.makerStatus || (e.buy.maker ? 'filled' : null), takerAltPnl, closedAt: e.sell.filledAt });
   }
   const withPaper = roundTrips.filter(r => r.paperPnl != null);
   const rt = { n: roundTrips.length, dryPnl: r2(roundTrips.reduce((a, r) => a + r.dryPnl, 0)), paperPnl: withPaper.length ? r2(withPaper.reduce((a, r) => a + r.paperPnl, 0)) : null, dryMinusPaper: withPaper.length ? r2(withPaper.reduce((a, r) => a + (r.dryPnl - r.paperPnl), 0)) : null, wins: roundTrips.filter(r => r.dryPnl > 0).length };
-  return { stats, roundTrips: rt, recentRoundTrips: roundTrips.slice(-20).reverse() };
+  const withAlt = roundTrips.filter(r => r.takerAltPnl != null && r.maker);
+  rt.makerRoundTrips = withAlt.length;
+  rt.makerMinusTakerOnFilled = withAlt.length ? r2(withAlt.reduce((a, r) => a + (r.dryPnl - r.takerAltPnl), 0)) : null;
+  return { stats, maker, roundTrips: rt, recentRoundTrips: roundTrips.slice(-20).reverse() };
 }
 
 async function kvJson(env, key, dflt) { try { return (await env.SIGNALS_CACHE.get(key, { type: 'json' })) ?? dflt; } catch (e) { return dflt; } }
@@ -206,8 +242,108 @@ export function intentFromQueueItem(q) {
     usSlug: q.usSlug || null, usSide: q.usSide || null,
     sizeUsd: r2(sizeUsd), shares: r4(isBuy ? (px > 0 ? sizeUsd / px : 0) : Number(q.shares) || 0), paperPriceC: r2(px * 100),
     feeSchedule: null, exitType: q.exitType || null, exitReason: q.exitReason || null, graduatedEntry: false, isExploration: false,
-    queuedAt: q.queuedAt || new Date().toISOString(), status: q.status || 'PENDING', attempts: q.attempts || 0,
+    queuedAt: q.queuedAt || new Date().toISOString(), status: q.status || 'PENDING', attempts: q.attempts || 0, resting: q.resting || null,
   };
+}
+
+// ---- maker mode ----
+// Pure: the resting order for a BUY intent, joining the best level on our side; takerRef = the FOK
+// fill the taker path would have taken at the same moment, kept for the diff.
+export function dryRestUs(intent, route, book, nowIso, mk = makerConfig()) {
+  const lvl = restingLevel(book, route.side);
+  if (!lvl) return null;
+  const order = buildUsOrder({ slug: route.slug, action: 'BUY', side: route.side, effectivePrice: lvl.cost, tick: route.tick, quantity: intent.sizeUsd / lvl.cost, minQty: route.minQty, tif: 'TIME_IN_FORCE_GOOD_TILL_DATE', goodTillTime: new Date(Date.parse(nowIso) + mk.ttlMin * 60e3).toISOString(), postOnly: true, synchronous: false });
+  const taker = dryFillUs(intent, route, book, nowIso);
+  const wouldReject = order.quantity < (route.minQty || 1) || order.quantity <= 0 ? [`below min size (${order.quantity} < ${route.minQty} contracts)`] : null;
+  return {
+    status: 'resting', placedAt: nowIso, ttlMin: mk.ttlMin, fallback: mk.fallback, restYes: lvl.yes, restCost: lvl.cost, shownAtLevel: r2(lvl.shown), quantity: order.quantity, order,
+    slippageC: r2(lvl.cost * 100 - intent.paperPriceC), wouldReject, wouldBlock: null, sharesTradedAt: null, checks: 0,
+    takerRef: taker.status === 'filled' ? { execPriceC: taker.execPriceC, feeUsd: taker.feeUsd, slippageC: taker.slippageC, filledShares: taker.filledShares, wouldReject: taker.wouldReject, spreadC: taker.spreadC } : null,
+    route: { slug: route.slug, side: route.side, tick: route.tick, minQty: route.minQty, feeCoef: route.feeCoef },
+  };
+}
+// Pure: did a dry resting order fill? (a) the market traded through its level: best ask at or
+// below our YES bid (long) / best bid at or above our YES offer (short); or (b) shares traded
+// since the last check with the last print at or through the level. Else expired past the TTL.
+export function makerFillCheck(rest, side, bbo, nowMs = Date.now()) {
+  const expired = nowMs - Date.parse(rest.placedAt) > rest.ttlMin * 60e3;
+  if (!bbo) return { filled: false, expired, why: 'no bbo' };
+  const atOrThrough = (px) => (side === 'long' ? px <= rest.restYes + 1e-9 : px >= rest.restYes - 1e-9);
+  const through = side === 'long' ? (bbo.ask != null && atOrThrough(bbo.ask)) : (bbo.bid != null && atOrThrough(bbo.bid));
+  const printed = rest.sharesTradedAt != null && bbo.sharesTraded != null && bbo.sharesTraded > rest.sharesTradedAt + 1e-9 && bbo.last != null && atOrThrough(bbo.last);
+  if (through || printed) return { filled: true, expired, why: through ? 'market traded through the level' : 'print at the level' };
+  return { filled: false, expired, why: null };
+}
+const restedMin = (rest, nowIso) => Math.max(0, Math.round((Date.parse(nowIso) - Date.parse(rest.placedAt)) / 60e3));
+const makerExtra = (rest, status) => ({ venue: 'polymarket-us', usSlug: rest.route && rest.route.slug, usSide: rest.route && rest.route.side, maker: true, makerStatus: status, restCostC: r2(rest.restCost * 100), restQuantity: rest.quantity, placedAt: rest.placedAt, takerRef: rest.takerRef, wouldBlock: rest.wouldBlock || null });
+// Pure: the fill record of a resting order that filled (dry or live) at its resting cost.
+export function makerFillRecord(intent, rest, nowIso, mk = makerConfig(), { why = null, shares = null, effectivePx = null, feeUsd = null, live = false, orderId = null } = {}) {
+  const cost = effectivePx != null ? effectivePx : rest.restCost;
+  const qty = shares != null ? shares : rest.quantity;
+  const rebate = usMakerRebatePerContract(cost, mk.rebateCoef);
+  return {
+    id: intent.id, action: 'BUY', positionId: intent.positionId, marketSlug: intent.marketSlug, marketTitle: intent.marketTitle, tokenId: intent.tokenId, queuedAt: intent.queuedAt, filledAt: nowIso,
+    latencyS: Math.max(0, Math.round((Date.parse(nowIso) - Date.parse(intent.queuedAt)) / 1000)), sizeUsd: intent.sizeUsd, paperPriceC: intent.paperPriceC, exitType: null, graduatedEntry: !!intent.graduatedEntry, isExploration: !!intent.isExploration,
+    ...makerExtra(rest, 'filled'), status: 'filled', kind: 'buy', live: !!live, orderId, makerWhy: why, makerFillMin: restedMin(rest, nowIso),
+    execPriceC: r2(cost * 100), bestPriceC: r2(cost * 100), shares: r4(qty), filledShares: r4(qty), filledUsd: r2(qty * cost), feePerShareC: r2(-rebate * 100), feeUsd: feeUsd != null ? r2(feeUsd) : r2(-rebate * qty),
+    slippageC: r2(cost * 100 - intent.paperPriceC), partial: shares != null && shares < rest.quantity - 1e-6, levelsUsed: 1, spreadC: rest.takerRef ? rest.takerRef.spreadC : null, wouldReject: rest.wouldReject, order: rest.order,
+  };
+}
+async function liveMakerFill(it, rest, f, { live, nowIso, mk }) {
+  await live.confirm({ id: it.id, status: 'FILLED', filledPrice: f.effectivePx, filledShares: f.shares, orderId: rest.orderId, venue: 'polymarket-us', usSlug: rest.route.slug, usSide: rest.route.side, exitType: it.exitType, exitReason: it.exitReason });
+  return makerFillRecord(it, rest, nowIso, mk, { why: f.state === 'ORDER_STATE_FILLED' ? 'venue filled' : `venue ${f.state} with ${f.shares} filled`, shares: f.shares, effectivePx: f.effectivePx, feeUsd: f.feeUsd, live: true, orderId: rest.orderId });
+}
+async function takerFallbackLive(env, it, route, rest, { live, fetchImpl, nowIso, why }) {
+  let book = null; try { book = await fetchUsBook(route.slug, { fetchImpl }); } catch (e) { book = null; }
+  if (!book) { const reason = `${why}; no Polymarket US book for the taker fallback`; await live.confirm({ id: it.id, status: 'FAILED', error: reason }); return { rec: failRec(it, reason, nowIso, { ...makerExtra(rest, 'expired'), live: true }) }; }
+  const dry = dryFillUs(it, route, book, nowIso);
+  dry.wouldBlock = rest.wouldBlock || null; dry.makerStatus = 'expired_taker'; dry.makerRestedMin = restedMin(rest, nowIso); dry.makerWhy = why; dry.takerRef = rest.takerRef;
+  return { rec: await placeLive(env, it, route, dry, { live, fetchImpl, nowIso }) };
+}
+// Live: place the resting order; keep = it rests (queue item RESTING with the venue order id).
+async function placeLiveMaker(env, it, route, rest, { live, fetchImpl, nowIso, mk }) {
+  const fail = async (reason) => { await live.confirm({ id: it.id, status: 'FAILED', error: reason }); return { rec: failRec(it, reason, nowIso, { ...makerExtra(rest, 'failed'), live: true }) }; };
+  if (rest.wouldBlock) return fail(`blocked by risk gates: ${rest.wouldBlock.join('; ')}`);
+  if (rest.wouldReject) return fail(`rejected by live rules: ${rest.wouldReject.join('; ')}`);
+  await live.updateItem(it.id, { status: 'EXECUTING', executingAt: nowIso, usSlug: route.slug, usSide: route.side });
+  let res = null;
+  try { res = await placeUsOrder(env, rest.order, { fetchImpl }); }
+  catch (e) {
+    // a post-only order that would cross is refused: the offer came down to our level, take it as a taker under the same rules
+    if (e instanceof PmusError && e.status >= 400 && e.status < 500) return takerFallbackLive(env, it, route, rest, { live, fetchImpl, nowIso, why: `resting order refused (${String(e.message).slice(0, 80)})` });
+    let mine = null;
+    try { const open = await getUsOpenOrders(env, route.slug, { fetchImpl }); mine = open.find(o => Math.abs(Number(o.quantity) - rest.quantity) < 1e-6 && (!o.price || !o.price.value || Math.abs(Number(o.price.value) - Number(rest.order.price.value)) < 1e-9)) || null; } catch (e2) { mine = null; }
+    if (!mine) { await setHalt(env, true); await live.confirm({ id: it.id, status: 'FAILED', error: `ambiguous resting placement: ${String(e.message).slice(0, 100)} - executor halted` }); return { rec: failRec(it, `ambiguous resting placement, executor halted: ${String(e.message).slice(0, 100)}`, nowIso, { ...makerExtra(rest, 'failed'), live: true, halted: true }) }; }
+    res = mine;
+  }
+  const fill = fillFromExecutions(res && res.executions, route.side);
+  if (fill && fill.shares > 0) return { rec: await liveMakerFill(it, { ...rest, orderId: res.id }, { ...fill, state: 'ORDER_STATE_FILLED' }, { live, nowIso, mk }) };
+  if (res && res.state === 'ORDER_STATE_REJECTED') return takerFallbackLive(env, it, route, rest, { live, fetchImpl, nowIso, why: 'resting order rejected by the venue' });
+  if (!res || !res.id) return fail('no order id returned for the resting order');
+  await live.updateItem(it.id, { status: 'RESTING', resting: { ...rest, orderId: res.id }, usSlug: route.slug, usSide: route.side });
+  return { keep: true };
+}
+// Live: one poll of a resting order. keep = still resting; else rec is the final record.
+async function pollLiveMaker(env, it, route, rest, { live, fetchImpl, nowIso, mk, expired }) {
+  let o = null;
+  try { o = await getUsOrder(env, rest.orderId, { fetchImpl }); } catch (e) { return { keep: true }; }   // transient: poll again next run
+  let f = fillFromOrder(o, route.side) || { state: o && o.state, shares: 0 };
+  if (f.state === 'ORDER_STATE_FILLED' && f.shares > 0) return { rec: await liveMakerFill(it, rest, f, { live, nowIso, mk }) };
+  const TERMINAL = new Set(['ORDER_STATE_CANCELED', 'ORDER_STATE_REJECTED', 'ORDER_STATE_EXPIRED', 'ORDER_STATE_FILLED']);
+  if (!TERMINAL.has(f.state) && !expired) return { keep: true };
+  if (!TERMINAL.has(f.state)) {
+    const haltOn = async (why) => { await setHalt(env, true); await live.confirm({ id: it.id, status: 'FAILED', error: `${why} - executor halted` }); return { rec: failRec(it, `${why}, executor halted`, nowIso, { ...makerExtra(rest, 'failed'), live: true, halted: true, orderId: rest.orderId }) }; };
+    try { await cancelUsOrder(env, rest.orderId, route.slug, { fetchImpl }); }
+    catch (e) { if (!(e instanceof PmusError && e.status >= 400 && e.status < 500)) return haltOn(`cancel of resting order ${rest.orderId} failed: ${String(e.message).slice(0, 80)}`); }
+    try { o = await getUsOrder(env, rest.orderId, { fetchImpl }); f = fillFromOrder(o, route.side) || { state: o && o.state, shares: 0 }; } catch (e) { return haltOn(`resting order ${rest.orderId} state unknown after cancel`); }
+    if (!TERMINAL.has(f.state) && !(f.state === 'ORDER_STATE_PENDING_CANCEL')) return haltOn(`resting order ${rest.orderId} still ${f.state} after cancel`);
+    if (f.state === 'ORDER_STATE_PENDING_CANCEL' && !(f.shares > 0)) return { keep: true };   // cancel in flight: read it next run
+  }
+  if (f.shares > 0) return { rec: await liveMakerFill(it, rest, f, { live, nowIso, mk }) };
+  const why = `resting order ${f.state || 'unfilled'} after ${restedMin(rest, nowIso)} min`;
+  if (rest.fallback === 'taker') return takerFallbackLive(env, it, route, rest, { live, fetchImpl, nowIso, why });
+  await live.confirm({ id: it.id, status: 'FAILED', error: `maker expired: ${why}` });
+  return { rec: failRec(it, `maker expired: ${why}`, nowIso, { ...makerExtra(rest, 'expired'), live: true, orderId: rest.orderId }) };
 }
 
 const failRec = (it, reason, nowIso, extra = {}) => ({ id: it.id, action: it.action, positionId: it.positionId, marketTitle: it.marketTitle, status: 'failed', reason, queuedAt: it.queuedAt, filledAt: nowIso, ...extra });
@@ -255,10 +391,12 @@ async function placeLive(env, it, route, dry, { live, fetchImpl, nowIso }) {
 // intents on the chosen venue, places nothing). Live only when paperTradeMode
 // is off, the venue is Polymarket US, its key is configured and the live
 // queue hooks are supplied; anything else refuses. Halted = consumes nothing.
+// Resting maker entries are polled first, then new intents are consumed.
 export async function runExecutor(env, { config = {}, dailyStats = {}, nowMs = Date.now(), fetchImpl = fetch, maxPerRun = MAX_PER_RUN, live = null } = {}) {
   const nowIso = new Date(nowMs).toISOString();
   const venue = config.executorVenue || 'polymarket-us';
   const mode = config.paperTradeMode === false ? 'live' : 'dry';
+  const mk = makerConfig(config);
   const refuse = async (why) => { const st = { at: nowIso, mode, venue, refused: why }; await kvPut(env, EXECUTOR_KEYS.LAST, st); return st; };
   if (mode === 'live') {
     if (venue !== 'polymarket-us') return refuse(`live placement exists only for polymarket-us (executorVenue is ${venue}); placed nothing`);
@@ -267,19 +405,50 @@ export async function runExecutor(env, { config = {}, dailyStats = {}, nowMs = D
   }
   const halt = await getHalt(env);
   if (halt && halt.halted) { const st = { at: nowIso, mode, venue, halted: true, haltedAt: halt.at, consumed: 0 }; await kvPut(env, EXECUTOR_KEYS.LAST, st); return st; }
-  const source = mode === 'live' ? (await live.getQueue()).filter(q => q.status === 'PENDING').map(intentFromQueueItem) : await getIntents(env);
+  const source = mode === 'live' ? (await live.getQueue()).filter(q => q.status === 'PENDING' || q.status === 'RESTING').map(intentFromQueueItem) : await getIntents(env);
   const dayKey = `${EXECUTOR_KEYS.DAY}_${dayOf(nowMs)}`;
   const day = await kvJson(env, dayKey, { buys: 0, sells: 0, spendUsd: 0 });
   const fills = await kvJson(env, EXECUTOR_KEYS.FILLS, []);
-  const remaining = []; let consumed = 0, filled = 0, failed = 0, retried = 0, unroutable = 0, placed = 0;
+  const remaining = []; let consumed = 0, filled = 0, failed = 0, retried = 0, unroutable = 0, placed = 0, resting = 0, makerFilled = 0, makerExpired = 0;
+  let stop = false;
+  const record = async (it, rec) => { fills.push(rec); if (rec.status === 'filled') { filled++; if (it.action === 'BUY') { day.buys++; day.spendUsd = r2(day.spendUsd + (rec.filledUsd || 0)); } else day.sells++; if (rec.live) placed++; if (rec.maker) makerFilled++; } else { failed++; if (rec.maker && (rec.makerStatus === 'expired' || rec.makerStatus === 'canceled')) makerExpired++; } if (rec.halted) stop = true; };
+  const canceled = new Set();
+  // 1) resting maker entries
   for (const it of source) {
-    if (it.status !== 'PENDING' || consumed >= maxPerRun) { if (mode === 'dry') remaining.push(it); continue; }
+    if (stop) { if (mode === 'dry') remaining.push(it); continue; }
+    if (it.status !== 'RESTING' || !it.resting) continue;
+    const rest = it.resting; const route = { ok: true, ...rest.route };
+    const expired = nowMs - Date.parse(rest.placedAt) > rest.ttlMin * 60e3;
+    if (mode === 'dry') {
+      // the paper position exited before the resting order filled: cancel it, the round trip never existed
+      if (source.some(x => x.action === 'SELL' && x.status === 'PENDING' && x.positionId === it.positionId)) { canceled.add(it.positionId); await record(it, failRec(it, `maker canceled: position exited after ${restedMin(rest, nowIso)} min with no fill`, nowIso, makerExtra(rest, 'canceled'))); continue; }
+      let bbo = null; try { bbo = await fetchUsBbo(route.slug, { fetchImpl }); } catch (e) { bbo = null; }
+      rest.checks = (rest.checks || 0) + 1;
+      const chk = makerFillCheck(rest, route.side, bbo, nowMs);
+      if (chk.filled) { await record(it, makerFillRecord(it, rest, nowIso, mk, { why: chk.why })); continue; }
+      if (bbo && bbo.sharesTraded != null) rest.sharesTradedAt = bbo.sharesTraded;
+      if (!chk.expired) { remaining.push(it); resting++; continue; }
+      if (rest.fallback === 'taker') {
+        let book = null; try { book = await fetchUsBook(route.slug, { fetchImpl }); } catch (e) { book = null; }
+        if (book) { const rec = dryFillUs(it, route, book, nowIso); rec.wouldBlock = rest.wouldBlock || null; rec.makerStatus = 'expired_taker'; rec.makerRestedMin = restedMin(rest, nowIso); rec.takerRef = rest.takerRef; await record(it, rec); continue; }
+      }
+      await record(it, failRec(it, `maker expired: no fill in ${rest.ttlMin} min`, nowIso, makerExtra(rest, 'expired')));
+      continue;
+    }
+    const res = await pollLiveMaker(env, it, route, rest, { live, fetchImpl, nowIso, mk, expired });
+    if (res.keep) { resting++; continue; }
+    await record(it, res.rec);
+  }
+  // 2) new intents
+  for (const it of source) {
+    if (it.status === 'RESTING') continue;
+    if (stop || it.status !== 'PENDING' || consumed >= maxPerRun) { if (mode === 'dry') remaining.push(it); continue; }
     consumed++;
-    const record = async (rec) => { fills.push(rec); if (rec.status === 'filled') { filled++; if (it.action === 'BUY') { day.buys++; day.spendUsd = r2(day.spendUsd + (rec.filledUsd || 0)); } else day.sells++; } else failed++; };
+    if (it.action === 'SELL' && canceled.has(it.positionId)) { await record(it, failRec(it, 'no maker fill to exit: the resting buy was canceled', nowIso, { venue, maker: true, makerStatus: 'no_position' })); continue; }
     if (nowMs - Date.parse(it.queuedAt) > INTENT_TTL_MIN * 60e3) {
       const reason = `stale: queued ${Math.round((nowMs - Date.parse(it.queuedAt)) / 60e3)} min ago`;
       if (mode === 'live') await live.confirm({ id: it.id, status: 'FAILED', error: reason });
-      await record(failRec(it, reason, nowIso)); continue;
+      await record(it, failRec(it, reason, nowIso)); continue;
     }
     const gates = evaluateGates(it, { config, dailyStats, day });
     let rec = null;
@@ -289,43 +458,54 @@ export async function runExecutor(env, { config = {}, dailyStats = {}, nowMs = D
         unroutable++;
         const reason = `no Polymarket US market: ${route.reason}`;
         if (mode === 'live') await live.confirm({ id: it.id, status: 'FAILED', error: reason });
-        await record(failRec(it, reason, nowIso, { venue: 'polymarket-us', unroutable: true })); continue;
+        await record(it, failRec(it, reason, nowIso, { venue: 'polymarket-us', unroutable: true })); continue;
       }
       let book = null;
       if (!(it.action === 'SELL' && it.exitType === 'market_resolved')) {
         try { book = await fetchUsBook(route.slug, { fetchImpl }); } catch (e) { book = null; }
         if (!book) {
           it.attempts = (it.attempts || 0) + 1;
-          if (it.attempts >= MAX_ATTEMPTS) { const reason = `no Polymarket US book after ${it.attempts} attempts`; if (mode === 'live') await live.confirm({ id: it.id, status: 'FAILED', error: reason }); await record(failRec(it, reason, nowIso, { venue: 'polymarket-us' })); }
+          if (it.attempts >= MAX_ATTEMPTS) { const reason = `no Polymarket US book after ${it.attempts} attempts`; if (mode === 'live') await live.confirm({ id: it.id, status: 'FAILED', error: reason }); await record(it, failRec(it, reason, nowIso, { venue: 'polymarket-us' })); }
           else { if (mode === 'dry') remaining.push(it); else await live.updateItem(it.id, { attempts: it.attempts }); retried++; }
           continue;
         }
       }
-      rec = dryFillUs(it, route, book, nowIso);
-      rec.wouldBlock = gates.blocked ? gates.reasons : null;
-      // reference: what the same intent would have filled at on the global CLOB (dry only, best effort)
-      if (mode === 'dry' && it.tokenId && rec.status === 'filled' && rec.kind !== 'redeem') {
-        const cb = await clobBook(it.tokenId, fetchImpl);
-        if (cb) { const c = dryFill(it, cb, nowIso); if (c.status === 'filled') rec.clobRef = { execPriceC: c.execPriceC, slippageC: c.slippageC, feeUsd: c.feeUsd, spreadC: c.spreadC }; }
+      const rest = it.action === 'BUY' && mk.mode === 'maker' ? dryRestUs(it, route, book, nowIso, mk) : null;
+      if (rest) {
+        rest.wouldBlock = gates.blocked ? gates.reasons : null;
+        let bbo = null; try { bbo = await fetchUsBbo(route.slug, { fetchImpl }); } catch (e) { bbo = null; }
+        if (bbo && bbo.sharesTraded != null) rest.sharesTradedAt = bbo.sharesTraded;
+        if (mode === 'dry') { it.status = 'RESTING'; it.resting = rest; remaining.push(it); resting++; continue; }
+        const res = await placeLiveMaker(env, it, route, rest, { live, fetchImpl, nowIso, mk });
+        if (res.keep) { resting++; continue; }
+        rec = res.rec;
+      } else {
+        rec = dryFillUs(it, route, book, nowIso);
+        rec.wouldBlock = gates.blocked ? gates.reasons : null;
+        // reference: what the same intent would have filled at on the global CLOB (dry only, best effort)
+        if (mode === 'dry' && it.tokenId && rec.status === 'filled' && rec.kind !== 'redeem') {
+          const cb = await clobBook(it.tokenId, fetchImpl);
+          if (cb) { const c = dryFill(it, cb, nowIso); if (c.status === 'filled') rec.clobRef = { execPriceC: c.execPriceC, slippageC: c.slippageC, feeUsd: c.feeUsd, spreadC: c.spreadC }; }
+        }
+        if (mode === 'live') rec = await placeLive(env, it, route, rec, { live, fetchImpl, nowIso });
       }
-      if (mode === 'live') { rec = await placeLive(env, it, route, rec, { live, fetchImpl, nowIso }); if (rec.live && rec.status === 'filled') placed++; }
     } else {
       // venue 'clob': the original dry run on the global book (reference only; never live)
       let book = null;
       if (!(it.action === 'SELL' && it.exitType === 'market_resolved')) {
-        if (!it.tokenId) { await record(failRec(it, 'no token id', nowIso)); continue; }
+        if (!it.tokenId) { await record(it, failRec(it, 'no token id', nowIso)); continue; }
         book = await clobBook(it.tokenId, fetchImpl);
-        if (!book) { it.attempts = (it.attempts || 0) + 1; if (it.attempts >= MAX_ATTEMPTS) await record(failRec(it, `no book after ${it.attempts} attempts`, nowIso)); else { remaining.push(it); retried++; } continue; }
+        if (!book) { it.attempts = (it.attempts || 0) + 1; if (it.attempts >= MAX_ATTEMPTS) await record(it, failRec(it, `no book after ${it.attempts} attempts`, nowIso)); else { remaining.push(it); retried++; } continue; }
       }
       rec = dryFill(it, book, nowIso); rec.venue = 'clob'; rec.wouldBlock = gates.blocked ? gates.reasons : null;
     }
-    await record(rec);
-    if (rec.halted) break;   // a live ambiguity halted the executor: stop consuming this run
+    await record(it, rec);
   }
   if (mode === 'dry') await kvPut(env, EXECUTOR_KEYS.INTENTS, remaining, 7 * 86400);
   await kvPut(env, EXECUTOR_KEYS.FILLS, fills.slice(-FILLS_KEEP), 90 * 86400);
   await kvPut(env, dayKey, day, 3 * 86400);
-  const st = { at: nowIso, mode, venue, halted: !!(await getHalt(env)).halted, pending: mode === 'dry' ? remaining.filter(i => i.status === 'PENDING').length : (await live.getQueue()).filter(q => q.status === 'PENDING').length, consumed, filled, failed, retried, unroutable, placed, day };
+  const liveQueue = mode === 'live' ? await live.getQueue() : null;
+  const st = { at: nowIso, mode, venue, orderMode: mk.mode, halted: !!(await getHalt(env)).halted, pending: mode === 'dry' ? remaining.filter(i => i.status === 'PENDING').length : liveQueue.filter(q => q.status === 'PENDING').length, resting: mode === 'dry' ? remaining.filter(i => i.status === 'RESTING').length : liveQueue.filter(q => q.status === 'RESTING').length, consumed, filled, failed, retried, unroutable, placed, makerFilled, makerExpired, day };
   await kvPut(env, EXECUTOR_KEYS.LAST, st);
   return st;
 }
@@ -347,11 +527,13 @@ export async function getExecutorReport(env, history = [], config = {}, { fetchI
   if (account.configured) { try { account = { ...account, ...(await usBalances(env, { fetchImpl })) }; } catch (e) { account.error = String(e.message).slice(0, 100); } }
   return {
     success: true, mode: config.paperTradeMode === false ? 'live' : 'dry', venue, enabled: config.executorDryRun !== false, halted: !!(halt && halt.halted), last, account,
+    orderMode: makerConfig(config).mode, makerConfig: makerConfig(config),
+    resting: intents.filter(i => i.status === 'RESTING' && i.resting).map(i => ({ id: i.id, market: i.marketTitle, usSlug: i.resting.route && i.resting.route.slug, side: i.resting.route && i.resting.route.side, restCostC: r2(i.resting.restCost * 100), paperPriceC: i.paperPriceC, quantity: i.resting.quantity, placedAt: i.resting.placedAt, ttlMin: i.resting.ttlMin, checks: i.resting.checks || 0, takerRefC: i.resting.takerRef ? i.resting.takerRef.execPriceC : null })),
     dryRunSince: first, dryRunDays: first ? r2((Date.now() - Date.parse(first)) / 86400e3) : 0,
     pending: intents.filter(i => i.status === 'PENDING').map(i => ({ id: i.id, action: i.action, market: i.marketTitle, queuedAt: i.queuedAt, attempts: i.attempts })),
     routing: { routable: fills.filter(f => f.venue === 'polymarket-us' && !f.unroutable).length, unroutable: unroutable.length, reasons, usVsClobSlippageC: withRef.length ? { n: withRef.length, us: avg(withRef.map(f => f.slippageC)), clob: avg(withRef.map(f => f.clobRef.slippageC)) } : null },
     live: { placed: fills.filter(f => f.live && f.status === 'filled').length, failed: fills.filter(f => f.live && f.status === 'failed').length },
     ...sum, recentFills: fills.slice(-20).reverse(),
-    read: `Venue: ${venue}. Dry run while paperTradeMode is on: every paper entry/exit of the main lane is queued as an intent and consumed on the next 5-minute cron; each is routed to the Polymarket US moneyline (league -> game -> long/short side) and priced on that book with its 0.0695 x p(1-p) fee; clobRef is the same intent on the global CLOB for comparison. Nothing is placed while dry. order = the FOK limit the executor would send (YES-price convention, tick-rounded, contracts). execPriceC = volume-weighted effective price for the paper size; slippageC = cents worse than the paper price; wouldReject = live rules that would refuse it (min size, slippage cap ${SLIPPAGE_CAP_C}c, thin book); wouldBlock = the daily risk gates. routing.unroutable = intents with no Polymarket US market (the live path skips those trades). roundTrips diff buy+sell (both fees) against the paper ledger; dryMinusPaper is how much paper overstates. Live: only with paperTradeMode off and PMUS_KEY_ID/PMUS_SECRET_KEY set; consumes the live exec queue, FOK limit or close-position with synchronous execution, confirms fills to the auto-trader, reconciles ambiguous sends against the account position and halts itself if that fails. POST /autotrader/executor/halt is the kill switch.`,
+    read: `Venue: ${venue}. Dry run while paperTradeMode is on: every paper entry/exit of the main lane is queued as an intent and consumed on the next 5-minute cron; each is routed to the Polymarket US moneyline (league -> game -> long/short side) and priced on that book with its 0.0695 x p(1-p) fee; clobRef is the same intent on the global CLOB for comparison. Nothing is placed while dry. order = the FOK limit the executor would send (YES-price convention, tick-rounded, contracts). execPriceC = volume-weighted effective price for the paper size; slippageC = cents worse than the paper price; wouldReject = live rules that would refuse it (min size, slippage cap ${SLIPPAGE_CAP_C}c, thin book); wouldBlock = the daily risk gates. routing.unroutable = intents with no Polymarket US market (the live path skips those trades). roundTrips diff buy+sell (both fees) against the paper ledger; dryMinusPaper is how much paper overstates. Maker mode (orderMode): a BUY rests post-only at the best level on our side (good-till-date = the TTL) instead of crossing; dry fills it when the market trades through the level or a print lands there, and at the TTL takes the taker fill (fallback) or skips; takerRef on a maker fill is the FOK it would have sent at placement, so maker.savedVsTakerUsd and roundTrips.makerMinusTakerOnFilled are the maker edge on the trades that filled; maker.missed are entries that never filled. Exits stay taker. Live: only with paperTradeMode off and PMUS_KEY_ID/PMUS_SECRET_KEY set; consumes the live exec queue, FOK limit or close-position with synchronous execution, confirms fills to the auto-trader, reconciles ambiguous sends against the account position and halts itself if that fails. POST /autotrader/executor/halt is the kill switch.`,
   };
 }

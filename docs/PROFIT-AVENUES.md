@@ -226,7 +226,9 @@ by roughly the spread (NFL books average 1.8c) plus the taker fee.
 
 1. **Be the maker (execution).** Polymarket's sports fee schedule is
    `rate 0.03 × p(1−p)`, taker-only, with a 15% maker rebate; Polymarket US
-   pays makers a `0.0125 × p(1−p)` rebate; Kalshi charges 0 maker fee on most
+   pays no maker rebate below $10M of monthly maker volume (fee schedule of
+   Oct 19 2026; tiers above that earn 0.0035-0.0104 × p(1−p)), so for us a
+   maker fill is simply fee-free; Kalshi charges 0 maker fee on most
    series. On the last 30 paper trades ($151 staked, −$9.29), a 2c better entry
    is worth +$6.58 — the same order as the loss. Built: `src/execution.js`, a
    shadow ledger on every paper entry: it stores the live bid/ask and fee
@@ -239,6 +241,11 @@ by roughly the spread (NFL books average 1.8c) plus the taker fee.
    ~50%, switch the live-path order type to resting limit orders; if
    `taker` is far below `paper`, the paper ledger is overstating the bot and
    the go-live milestone must be re-read on the taker ledger.
+   **Result (Oct 27, 60 settled shadows):** fill rate 52%, maker beat taker
+   by $10.44 on the filled subset, paper +$76 vs taker +$21 overall. Built in
+   response: the executor's maker mode (`executorOrderMode`, src/executor.js),
+   resting post-only entries with a 20-minute TTL and a taker fallback, dry
+   and live.
 2. **Kalshi in-game lag (the only legal real-money venue question).** Kalshi
    is US-legal to trade through its own API (Developer Agreement v1.1 allows
    a member's own trading). Pregame, Kalshi tracks Polymarket to within 1c.
