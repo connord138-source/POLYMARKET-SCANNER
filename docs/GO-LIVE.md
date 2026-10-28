@@ -1,6 +1,6 @@
 # Go-Live Checklist — real-money trading
 
-Status: **NOT AUTHORIZED — milestone met Oct 20 2026; executor dry run started Oct 24 2026; owner decision pending.**
+Status: **NOT AUTHORIZED — milestone met Oct 20 2026; executor dry run started Oct 24 2026; owner setup (section 2) complete Oct 28 2026; owner decision pending.**
 The bot stays in paper mode until every box below is checked, in order.
 
 ## 1. The evidence bar (automatic — tracked live)
@@ -21,21 +21,23 @@ call after reading the full-size ledger.
 
 ## 2. Owner setup (manual — cannot be done by the bot)
 
-- [ ] **Polymarket US** account (the venue the owner chose on Oct 24 2026; the
+- [x] **Polymarket US** account (Oct 28 2026: funded, $61.72 balance / $55.00
+      buying power read by the worker) (the venue the owner chose on Oct 24 2026; the
       global Polymarket CLOB is not open to US persons). Create it in the
       Polymarket US app, complete identity verification, fund it with a
       starting bankroll of **$100–200 max** (an amount whose total loss is
       acceptable tuition). Use an account dedicated to the bot.
-- [ ] API key created at polymarket.us/developer (Key ID + Secret Key, shown
+- [x] API key created at polymarket.us/developer (Oct 28 2026; the snapshot
+      reads `executor.account.configured: true`) (Key ID + Secret Key, shown
       once) and pushed as **repo secrets** `PMUS_KEY_ID` / `PMUS_SECRET_KEY`
       via `.github/workflows/push-polymarket-us-key.yml`. Credentials are
       never pasted in chat, code, or config files. The snapshot's
       `executor.account.configured` confirms the worker has them.
 
-## 3. Trade executor (engineering — does not exist yet)
+## 3. Trade executor (engineering)
 
-The worker only maintains an execution queue (`/autotrader/exec-queue`);
-nothing currently consumes it. Before live trading:
+Built Oct 24 2026 (`src/executor.js`); the dry run consumes the paper lane's
+intents every cron. Before live trading:
 
 - [x] Build the executor (Oct 24 2026, `src/executor.js`): consumes intents,
       routes each to the Polymarket US moneyline (`src/polymarket-us.js`),
