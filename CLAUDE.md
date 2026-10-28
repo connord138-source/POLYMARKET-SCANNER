@@ -4,6 +4,10 @@ Cloudflare Worker backend for edgerunner.vip: Polymarket whale-signal scanner,
 paper auto-trader, AI learning system, and Vegas-odds edge detector.
 Cron runs every 5 minutes. Frontend lives in the separate
 `connord138-source/edgerunner-frontend` repo (Vite/React, Cloudflare Pages).
+Frontend words (Oct 28 2026): `src/lib/pageGuide.js` there holds every
+page's sidebar label, title, purpose and "How to read this page" bullets
+plus the glossary; `Home` (Today) is the member front door and `Help` (How
+it works) the public explainer. Change the words there, not in the pages.
 
 ## Backend visibility for Claude sessions (READ THIS FIRST)
 
