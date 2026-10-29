@@ -4231,7 +4231,8 @@ function fadeSideOf(sig) {
   if (ci > 0 && !/\bvs\b/i.test(title.slice(0, ci))) title = title.slice(ci + 1).trim();
   const m = title.match(/^(.+?)\s+vs\.?\s+(.+?)(?::|\s+-|$)/i);
   if (m && d) {
-    const a = m[1].trim(), b = m[2].trim();
+    const clean = (x) => x.replace(/\s*\([^)]*\)\s*$/, "").trim();
+    const a = clean(m[1]), b = clean(m[2]);
     if (a.toLowerCase().includes(d.toLowerCase()) || d.toLowerCase().includes(a.toLowerCase())) return b;
     if (b.toLowerCase().includes(d.toLowerCase()) || d.toLowerCase().includes(b.toLowerCase())) return a;
   }
@@ -6937,9 +6938,13 @@ export default {
           let worst = [];
           try { worst = await topWallets(env, 60, LEDGER_MIN_N, { worst: true }); } catch (e) { console.error("fade ledger read failed:", e.message); }
           const fadeRows = new Map(worst.filter(r => r.excess <= -5).map(r => [String(r.wallet).toLowerCase(), r]));
+          // A card needs a real stake by the losing wallet itself (its size is
+          // known from the signal's top trades); the first live pull returned
+          // 560 "candidates" from one wallet's $15 and $60 trades.
+          const MIN_FADE_USD = 500;
           const fades = [];
           for (const sig of cached) {
-            const hits = walletsFromSignal(sig).filter(w => fadeRows.has(w.wallet)).map(w => ({ ...w, row: fadeRows.get(w.wallet) })).sort((a, b) => a.row.excess - b.row.excess);
+            const hits = walletsFromSignal(sig).filter(w => fadeRows.has(w.wallet) && w.usd >= MIN_FADE_USD).map(w => ({ ...w, row: fadeRows.get(w.wallet) })).sort((a, b) => a.row.excess - b.row.excess);
             const kvFade = sig.fadeAlert && sig.fadeAlert.isFade ? sig.fadeAlert : null;
             if (!hits.length && !kvFade) continue;
             const hit = hits[0] || null;
@@ -6956,8 +6961,24 @@ export default {
               fadeWallets: hits.length, score: sig.score ?? null
             });
           }
-          fades.sort((a, b) => ((a.skill ? a.skill.excess : 0) - (b.skill ? b.skill.excess : 0)) || ((b.betAmount || 0) - (a.betAmount || 0)));
-          return atJson({ success: true, totalFades: fades.length, fadeWallets: fadeRows.size, minN: LEDGER_MIN_N, fades: fades.slice(0, 30) });
+          // One card per market side (the biggest stake), worst wallet first,
+          // at most three cards per wallet so one account cannot fill the page.
+          const byKey = new Map();
+          for (const f of fades) {
+            const k = `${f.marketSlug}|${f.originalDirection}`;
+            const prev = byKey.get(k);
+            if (!prev || (f.betAmount || 0) > (prev.betAmount || 0)) byKey.set(k, f);
+          }
+          const list = [...byKey.values()].sort((a, b) => ((a.skill ? a.skill.excess : 0) - (b.skill ? b.skill.excess : 0)) || ((b.betAmount || 0) - (a.betAmount || 0)));
+          const perWallet = new Map();
+          const out = [];
+          for (const f of list) {
+            const c = perWallet.get(f.wallet) || 0;
+            if (c >= 3) continue;
+            perWallet.set(f.wallet, c + 1);
+            out.push(f);
+          }
+          return atJson({ success: true, totalFades: list.length, fadeWallets: fadeRows.size, minUsd: MIN_FADE_USD, minN: LEDGER_MIN_N, fades: out.slice(0, 30) });
         } catch (e) {
           return atJson({ success: false, error: e.message }, 500);
         }
@@ -8373,7 +8394,11 @@ async function refreshOnChainSkill(env, perRun = 6) {
   const addrs = [...new Set([...best, ...worst].map(r => String(r.wallet).toLowerCase()))];
   const index = await env.SIGNALS_CACHE.get("wallet_onchain_index", { type: "json" }) || {};
   const now = Date.now();
-  const due = addrs.filter(a => !index[a] || now - Date.parse(index[a]) > ONCHAIN_MAX_AGE_MS);
+  // Index entries: v2 = { at, v: 2 } (record carries the venue's book); a
+  // bare timestamp is a record from before the book existed, due now.
+  const entAt = (e) => (e && typeof e === "object" ? e.at : e);
+  const entV = (e) => (e && typeof e === "object" ? e.v || 1 : 1);
+  const due = addrs.filter(a => !index[a] || entV(index[a]) < 2 || now - Date.parse(entAt(index[a])) > ONCHAIN_MAX_AGE_MS);
   let refreshed = 0, failed = 0;
   for (const a of due.slice(0, perRun)) {
     try {
@@ -8385,11 +8410,11 @@ async function refreshOnChainSkill(env, perRun = 6) {
         openPositions: sm.openPositions, unknownCount: sm.unknownCount, window: sm.window, windowDays: sm.windowDays,
         official: sm.official ? { lifetime: sm.official.lifetime, pnl30d: sm.official.pnl30d, pnl7d: sm.official.pnl7d, ageDays: sm.official.ageDays, since: sm.official.since, volume: sm.official.volume, record: sm.official.record, deadLegs: sm.official.deadLegs } : null
       }), { expirationTtl: 72 * 60 * 60 });
-      index[a] = new Date().toISOString();
+      index[a] = { at: new Date().toISOString(), v: 2 };
       refreshed++;
     } catch (e) { failed++; }
   }
-  for (const k of Object.keys(index)) if (!addrs.includes(k) && now - Date.parse(index[k]) > 7 * ONCHAIN_MAX_AGE_MS) delete index[k];
+  for (const k of Object.keys(index)) if (!addrs.includes(k) && now - Date.parse(entAt(index[k])) > 7 * ONCHAIN_MAX_AGE_MS) delete index[k];
   await env.SIGNALS_CACHE.put("wallet_onchain_index", JSON.stringify(index), { expirationTtl: 30 * 24 * 60 * 60 });
   return { wallets: addrs.length, due: due.length, refreshed, failed };
 }
