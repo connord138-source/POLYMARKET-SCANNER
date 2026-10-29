@@ -24,7 +24,7 @@ import { runForge, maybeRunForge, getForgeReport } from "./src/forge.js";
 import { logSignalWallets, backfillWalletLedger, topWallets } from "./src/wallet-ledger.js";
 import { trackSpeed, updateSpeed, speedReport } from "./src/speed.js";
 import { buildAgentHub } from "./src/agent-hub.js";
-import { handleCrewOrder, runCrewHunt, getCrewState, saveBrowserDkBoard } from "./src/crew.js";
+import { handleCrewOrder, runCrewHunt, getCrewState, saveBrowserDkBoard, answerPendingCrewChat } from "./src/crew.js";
 import { settleDkPicks } from "./src/dk-picks.js";
 import { collectBooks, MM_SCHEMA } from "./src/mm-collector.js";
 import { sampleXvenue, xvenueReport, XV_SCHEMA } from "./src/xvenue.js";
@@ -3880,7 +3880,7 @@ async function annotateVenues(env, sport, games) {
         const q = await usGameQuote(env, hit.league, hit);
         const away = q && q.teamA, home = q && q.teamB;
         g.polymarketUs = {
-          moneyline: { home: home ? { price: home.price, slug: home.slug, bid: home.bid, ask: home.ask } : null, away: away ? { price: away.price, slug: away.slug, bid: away.bid, ask: away.ask } : null },
+          moneyline: { home: home ? { price: home.price, cost: home.cost, slug: home.slug, bid: home.bid, ask: home.ask } : null, away: away ? { price: away.price, cost: away.cost, slug: away.slug, bid: away.bid, ask: away.ask } : null },
           url: hit.url, league: hit.league, eventSlug: hit.eventSlug, lastUpdate: nowIso
         };
         g.hasPolymarketUs = !!(home || away);
@@ -3942,6 +3942,36 @@ function shapeEdgeDetection(sport, cmp) {
 // hunts edges continuously instead of only when someone opens the page.
 // ============================================================
 var EDGE_ALERT_MIN = 4;   // net devigged points to log as an opportunity
+
+// A Polymarket US opportunity for one side of a compared game, or null. Booked at what a
+// taker pays on the US book right now (the ask for the long side, 1 - bid for the short
+// side; the mid if the book is one-sided), pregame only, same edge band and line-age rules
+// as the global lane. polySlug carries the global event when it exists, for settlement.
+function usEdgeFor(sport, g, side) {
+  const pm = g.polymarketUs && g.polymarketUs.moneyline ? g.polymarketUs.moneyline[side] : null;
+  const vegProb = g.vegas && g.vegas.moneyline ? (g.vegas.moneyline[side] || {}).prob : null;
+  if (!pm || !pm.price || vegProb === null || vegProb === undefined) return null;
+  const startMs = g.commenceTime ? new Date(g.commenceTime).getTime() : 0;
+  if (!startMs || startMs - Date.now() > EDGE_BOOK_MAX_DAYS_OUT * 24 * 3600 * 1000) return null;
+  if (startMs - Date.now() < EDGE_PREGAME_MIN_MINUTES * 60 * 1000) return null;
+  const bookTs = g.vegas && g.vegas.h2hUpdatedAt ? new Date(g.vegas.h2hUpdatedAt).getTime() : null;
+  if (bookTs && Date.now() - bookTs > EDGE_MAX_BOOK_AGE_MIN * 60 * 1000) return null;
+  const cost = typeof pm.cost === "number" && pm.cost > 0 ? pm.cost : pm.price;
+  if (cost <= 3 || cost >= 97) return null;
+  const edgeNet = vegProb - cost;
+  if (edgeNet < EDGE_ALERT_MIN || edgeNet > EDGE_ALERT_MAX) return null;
+  const gl = g.polymarket && g.polymarket.moneyline ? g.polymarket.moneyline[side] : null;
+  return {
+    id: `${sport}:${g.id}:${side}:us`, venue: "us",
+    sport, game: `${g.awayTeam} @ ${g.homeTeam}`, homeTeam: g.homeTeam, awayTeam: g.awayTeam, commenceTime: g.commenceTime,
+    side, team: side === "home" ? g.homeTeam : g.awayTeam,
+    vegasProb: vegProb, polyPrice: cost, midPrice: pm.price, edgeNet,
+    honestFill: true, pregame: true, minutesToStart: Math.round((startMs - Date.now()) / 60000),
+    bookUpdatedAt: (g.vegas && g.vegas.h2hUpdatedAt) || null,
+    polySlug: gl && gl.slug ? gl.slug : null, usSlug: pm.slug || null, url: g.polymarketUs.url || null, league: g.polymarketUs.league || null,
+    detectedAt: new Date().toISOString(), outcome: null, settledAt: null, pnl: null
+  };
+}
 var EDGE_ALERT_MAX = 15;  // above this the "edge" is almost always a market-matching or stale-book error, not free money
 var EDGE_BOOK_MAX_DAYS_OUT = 10; // don't book games further out — far-future Polymarket books are thin and unreliable
 // PREGAME ONLY. Oct 2026 audit: 95 of 99 settled opportunities were booked
@@ -4008,6 +4038,9 @@ async function scanEdges(env) {
     scanned++;
     for (const g of cmp.games) {
       for (const side of ["home", "away"]) {
+        // Polymarket US first: its own book against the same devigged line.
+        const usOpp = usEdgeFor(sport, g, side);
+        if (usOpp) found.push(usOpp);
         const edge = g.edge[side];
         const pm = g.polymarket && g.polymarket.moneyline ? g.polymarket.moneyline[side] : null;
         const vegProb = g.vegas && g.vegas.moneyline ? (g.vegas.moneyline[side] || {}).prob : null;
@@ -4036,7 +4069,7 @@ async function scanEdges(env) {
           const liveEdge = vegProb != null ? vegProb - livePrice : null;
           if (liveEdge === null || liveEdge < EDGE_ALERT_MIN || liveEdge > EDGE_ALERT_MAX) continue;
           found.push({
-            id: `${sport}:${g.id}:${side}`,
+            id: `${sport}:${g.id}:${side}`, venue: "global", url: (g.polymarket && g.polymarket.url) || null,
             sport, game: `${g.awayTeam} @ ${g.homeTeam}`,
             homeTeam: g.homeTeam, awayTeam: g.awayTeam, commenceTime: g.commenceTime,
             side, team: teamName,
@@ -4127,8 +4160,9 @@ async function settleEdgeOpportunities(env) {
       // into the legacy bucket, whose ROI is known to be print-inflated.
       // _v3 = pregame-only honest rows (Oct 2026 fix); _v2 keeps the
       // honest-fill rows booked before that, which were mostly in-game.
-      const bucketOf = (o) => !o.honestFill ? "edge_lane_stats" : o.pregame ? "edge_lane_stats_v3" : "edge_lane_stats_v2";
-      for (const bucketKey of ["edge_lane_stats", "edge_lane_stats_v2", "edge_lane_stats_v3"]) {
+      // _us = Polymarket US rows (booked at the US book's taker price), their own book.
+      const bucketOf = (o) => o.venue === "us" ? "edge_lane_stats_us" : !o.honestFill ? "edge_lane_stats" : o.pregame ? "edge_lane_stats_v3" : "edge_lane_stats_v2";
+      for (const bucketKey of ["edge_lane_stats", "edge_lane_stats_v2", "edge_lane_stats_v3", "edge_lane_stats_us"]) {
         const rows = newlySettled.filter(o => bucketOf(o) === bucketKey);
         if (rows.length === 0) continue;
         const stats = await env.SIGNALS_CACHE.get(bucketKey, { type: "json" }) ||
@@ -5975,8 +6009,16 @@ export default {
         const open = opps.filter(o => !o.outcome);
         const settled = opps.filter(o => o.outcome === "WIN" || o.outcome === "LOSS");
         const wins = settled.filter(o => o.outcome === "WIN").length;
+        const byVenue = {};
+        for (const v of ["global", "us"]) {
+          const rows = opps.filter(o => (o.venue || "global") === v);
+          const st = rows.filter(o => o.outcome === "WIN" || o.outcome === "LOSS");
+          const w = st.filter(o => o.outcome === "WIN").length;
+          byVenue[v] = { count: rows.length, open: rows.filter(o => !o.outcome).length, settled: st.length, wins: w, winRate: st.length ? Math.round((w / st.length) * 100) : null, pnl: Math.round(st.reduce((s, o) => s + (o.pnl || 0), 0) * 100) / 100 };
+        }
         return atJson({
           success: true,
+          byVenue,
           count: opps.length,
           openCount: open.length,
           settledCount: settled.length,
@@ -6893,6 +6935,9 @@ export default {
         console.log("xvenue:", JSON.stringify(r).slice(0, 300));
       }
       catch (e) { console.error("xvenue error:", e.message); }
+      // A crew chat the chief could not answer from the owner's edge location (403) is answered from here.
+      try { const pc = await answerPendingCrewChat(env, await getAutotraderConfig(env)); if (pc.answered !== undefined || pc.tries) console.log("crew chat:", JSON.stringify(pc)); }
+      catch (e) { console.error("crew chat error:", e.message); }
       return;
     }
     await ensureSchema(env);

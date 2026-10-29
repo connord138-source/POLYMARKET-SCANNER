@@ -410,8 +410,11 @@ export async function usGameQuote(env, league, hit, deps = {}) {
     if (!slug) return null;
     const bbo = await cachedBbo(env, slug, deps); const mid = midOf(bbo);
     if (mid == null) return null;
-    const yes = hit.drawable || s.long ? mid : 1 - mid;
-    return { price: Math.round(yes * 100), slug, bid: bbo.bid, ask: bbo.ask, last: bbo.last, team: s.team };
+    const long = hit.drawable || !!s.long;
+    const yes = long ? mid : 1 - mid;
+    // what a taker pays for this side right now: the ask on the long side, 1 - bid on the short side
+    const cost = long ? (bbo.ask || mid) : (bbo.bid ? 1 - bbo.bid : mid);
+    return { price: Math.round(yes * 100), cost: Math.round(cost * 100), slug, bid: bbo.bid, ask: bbo.ask, last: bbo.last, team: s.team, long };
   };
   const [a, b] = await Promise.all([sidePrice(hit.aIdx), sidePrice(1 - hit.aIdx)]);
   if (!a && !b) return null;

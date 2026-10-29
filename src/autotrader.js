@@ -2844,6 +2844,7 @@ async function enterVegasEdgeOpportunities(env, config, dailyStats, stillOpen, r
 
   for (const o of opps) {
     if (openedThisCycle >= MAX_PER_CYCLE) break;
+    if (o.venue === 'us') { if (!o.outcome) veSkip('Polymarket US edge (paper lane books on global Polymarket)'); continue; }
     if (o.outcome || !o.polySlug || enteredSet.has(o.id)) { if (!o.outcome) veSkip(!o.polySlug ? 'no polySlug' : 'already entered'); continue; }
     if (typeof o.edgeNet !== 'number' || o.edgeNet < minEdge || o.edgeNet > MAX_EDGE) continue;
     const start = o.commenceTime ? new Date(o.commenceTime).getTime() : 0;

@@ -30,6 +30,7 @@ import { recordDkValuePicks, getDkPicksLedger, VALUE_EV_MIN } from './dk-picks.j
 export const CREW_KEYS = {
   DIRECTIVE: 'crew_directive',
   CHAT: 'crew_chat',
+  PENDING: 'crew_chat_pending',   // a chat message waiting for the chief's answer from the cron
   HUNT: 'crew_hunt_last',
   PICKS: 'crew_picks',
   ENTERED: 'crew_entered_ids',
@@ -193,6 +194,35 @@ async function crewStateForLlm(env, config, nowMs) {
   };
 }
 
+// A chat message the chief could not answer inline (403 from the edge location the
+// request came through) is answered here, from the cron's location. Runs every minute;
+// a single KV read when nothing is pending. Three tries, then it gives up with a note.
+export async function answerPendingCrewChat(env, config = {}, nowMs = Date.now()) {
+  let p = null;
+  try { p = await kvJson(env, CREW_KEYS.PENDING); } catch (e) { return { pending: false }; }
+  if (!p || !p.text) return { pending: false };
+  const llm = await crewLlmStatus(env);
+  if (!llm.ok) return { pending: true, waiting: llm.why };
+  const chat = (await kvJson(env, CREW_KEYS.CHAT)) || [];
+  const idx = chat.map(m => m && m.text).lastIndexOf(p.text);   // the log already holds the message and the parser's reply
+  const prior = idx >= 0 ? chat.slice(0, idx) : chat;
+  const r = await chief(env, { text: p.text, chat: prior, state: await crewStateForLlm(env, config, nowMs) });
+  if (r.ok && r.data && typeof r.data.reply === 'string' && r.data.reply.trim()) {
+    const applied = await applyChiefAction(env, r.data, config, nowMs);
+    await appendCrewChat(env, 'crew', r.data.reply, { by: 'chief', deferred: true });
+    await env.SIGNALS_CACHE.delete(CREW_KEYS.PENDING);
+    return { pending: false, answered: true, applied: applied.changed };
+  }
+  const tries = (p.tries || 0) + 1;
+  if (tries >= 3) {
+    await env.SIGNALS_CACHE.delete(CREW_KEYS.PENDING);
+    await appendCrewChat(env, 'crew', `The chief could not answer that one (${r.error || 'empty reply'}). The basic parser's reading stands.`, { by: 'desk' });
+    return { pending: false, answered: false, error: r.error || null };
+  }
+  await env.SIGNALS_CACHE.put(CREW_KEYS.PENDING, JSON.stringify({ ...p, tries }), { expirationTtl: 900 });
+  return { pending: true, tries, error: r.error || null };
+}
+
 // Handle a message from the chat box. Claude (the chief) when available,
 // the keyword parser otherwise. Returns the crew's reply text.
 export async function handleCrewOrder(env, text, config = {}, nowMs = Date.now()) {
@@ -207,7 +237,15 @@ export async function handleCrewOrder(env, text, config = {}, nowMs = Date.now()
       await appendCrewChat(env, 'crew', r.data.reply, { by: 'chief' });
       return { reply: r.data.reply, parsed: { kind: r.data.action, focus: r.data.focus, applied: applied.changed }, via: 'claude' };
     }
-    fallbackNote = ` (The chief couldn't answer just now: ${r.error || 'empty reply'}. Using the basic parser.)`;
+    if (/403/.test(String(r.error || ''))) {
+      // The Claude API refused the request from the edge location this HTTP request came
+      // through (the cron's debates from another location work). Park the message; the
+      // minute cron answers it from its own location (answerPendingCrewChat).
+      try { await env.SIGNALS_CACHE.put(CREW_KEYS.PENDING, JSON.stringify({ text, at: nowMs, tries: 0 }), { expirationTtl: 900 }); } catch (e) {}
+      fallbackNote = ' (The chief could not be reached from this connection; the desk will answer within a minute or two.)';
+    } else {
+      fallbackNote = ` (The chief couldn't answer just now: ${r.error || 'empty reply'}. Using the basic parser.)`;
+    }
   } else if (env.ANTHROPIC_API_KEY) {
     fallbackNote = ` (Basic parser only: ${llm.why}.)`;
   }

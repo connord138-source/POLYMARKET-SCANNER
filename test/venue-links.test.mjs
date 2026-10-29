@@ -38,6 +38,7 @@ const m = await usMatchForGame(env, "nba", "Sacramento Kings", "New Orleans Peli
 check("usMatchForGame: by Odds API sport name, returns league + url", m && m.league === "nba" && m.url.startsWith("https://polymarket.us/sports/nba/nba-sac-no-2026-10-29"), m);
 const q = await usGameQuote(env, "nba", m, { fetchImpl, nowMs: now });
 check("usGameQuote: Pelicans (long) 48¢ from the mid, Kings 52¢ as the complement", q && q.teamA.price === 52 && q.teamB.price === 48 && q.teamA.team === "Sacramento Kings", q);
+check("usGameQuote: taker cost is the ask on the long side (49) and 1 - bid on the short side (53)", q && q.teamB.cost === 49 && q.teamB.long === true && q.teamA.cost === 53 && q.teamA.long === false, q);
 const none = await usMatchForGame(env, "ncaab", "Duke", "Kansas", { fetchImpl, nowMs: now });
 check("usMatchForGame: ncaab maps to the cbb league and misses cleanly", none === null);
 
