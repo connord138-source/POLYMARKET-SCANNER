@@ -21,7 +21,7 @@ import {
   computeFavoritesExperiment, updateExecQueueItem
 } from "./src/autotrader.js";
 import { runForge, maybeRunForge, getForgeReport } from "./src/forge.js";
-import { logSignalWallets, backfillWalletLedger, topWallets } from "./src/wallet-ledger.js";
+import { logSignalWallets, backfillWalletLedger, topWallets, buildWalletLeaderboard, LEDGER_MIN_N } from "./src/wallet-ledger.js";
 import { trackSpeed, updateSpeed, speedReport } from "./src/speed.js";
 import { buildAgentHub } from "./src/agent-hub.js";
 import { handleCrewOrder, runCrewHunt, getCrewState, saveBrowserDkBoard, answerPendingCrewChat } from "./src/crew.js";
@@ -5040,6 +5040,32 @@ export default {
         const limit = Math.min(parseInt(url.searchParams.get("limit") || "25"), 100);
         const minN = Math.max(parseInt(url.searchParams.get("minN") || "10"), 1);
         return atJson({ success: true, minN, wallets: await topWallets(env, limit, minN) });
+      }
+
+      // Top wallets page: the KV running records merged with the D1 skill
+      // ledger (buildWalletLeaderboard in src/wallet-ledger.js). The page used
+      // to ask for this path while only /learning/leaderboard existed, so it
+      // read empty from the day it shipped. KV-cached for two minutes: an
+      // uncached build reads every tracked wallet record.
+      if (path === "/wallets/leaderboard" && request.method === "GET") {
+        if (!env.SIGNALS_CACHE) return atJson({ success: false, error: "No cache configured" }, 500);
+        const cached = await env.SIGNALS_CACHE.get("wallets_leaderboard", { type: "json" });
+        if (cached) return atJson(cached);
+        const index = await env.SIGNALS_CACHE.get("tracked_wallet_index", { type: "json" }) || [];
+        let ledger = [];
+        try { ledger = await topWallets(env, 100, LEDGER_MIN_N); } catch (e) { console.error("wallet ledger read failed:", e.message); }
+        const addrs = [...new Set([...index, ...ledger.map(r => r.wallet)].filter(Boolean).map(a => String(a).toLowerCase()))];
+        const kvRows = [];
+        for (let i = 0; i < addrs.length; i += 25) {
+          kvRows.push(...await Promise.all(addrs.slice(i, i + 25).map(a => getWalletStats(env, a))));
+        }
+        const out = {
+          success: true, fetchedAt: new Date().toISOString(), minN: LEDGER_MIN_N,
+          tracked: index.length, ledgerWallets: ledger.length,
+          wallets: buildWalletLeaderboard(kvRows, ledger, { minN: LEDGER_MIN_N, limit: 100 })
+        };
+        await env.SIGNALS_CACHE.put("wallets_leaderboard", JSON.stringify(out), { expirationTtl: 120 });
+        return atJson(out);
       }
 
       // Get open positions
