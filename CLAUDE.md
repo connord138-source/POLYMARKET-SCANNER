@@ -193,6 +193,15 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   name). The edge scanner pauses under 150 credits remaining (`crew.oddsApi`
   in the snapshot shows the count); the Oct 29 2026 key read 48 of 500 (free
   tier) until the owner renewed the 20k plan.
+- `src/wallet-ledger.js` — point-in-time wallet skill in D1 (`signal_wallets`
+  joined to `signals_log`): excess = win rate minus average entry price over a
+  wallet's settled bets, trusted from `LEDGER_MIN_N` (10). `GET /wallets/ledger`
+  is the raw ranking; `GET /wallets/leaderboard` (Oct 29 2026, snapshot key
+  `walletLeaderboard`) merges it with the KV running records (`wallet:<addr>`,
+  tiers, pending, streaks) for the Top wallets page via
+  `buildWalletLeaderboard`, KV-cached two minutes. The page had asked for that
+  path since it shipped while only `/learning/leaderboard` existed, so it read
+  empty.
 - `src/gamma.js` — Gamma API settlement (`findGammaMarket` handles
   closed markets + multi-market moneyline preference).
 - D1 database `polymarket-scanner` — settled signals (`signals` table);

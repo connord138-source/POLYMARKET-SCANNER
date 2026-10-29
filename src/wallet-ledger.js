@@ -159,3 +159,48 @@ export async function topWallets(env, limit = 25, minN = LEDGER_MIN_N) {
   ).bind(minN, limit).all();
   return res.results || [];
 }
+
+// The Top wallets list: the KV running records (wallet:{addr}, what the
+// scanner has seen a wallet do since it was first tracked) merged with the
+// D1 skill ledger above (topWallets rows { wallet, n, wr, px, excess }).
+// Pure. Rank: wallets with a trusted skill score (n >= minN) by excess, then
+// wallets with settled KV bets by win rate, then pending-only wallets by
+// volume. A wallet that fell off the 500-entry KV index keeps its row when
+// the ledger still knows it; a KV wallet with nothing settled or pending is
+// dropped. `tier` is the earned KV tier, NEW (settled but unranked) or
+// PENDING (nothing settled yet); null when only the ledger knows the wallet.
+export function buildWalletLeaderboard(kvRows, ledgerRows, { minN = LEDGER_MIN_N, limit = 100 } = {}) {
+  const byAddr = new Map();
+  for (const r of ledgerRows || []) {
+    const a = norm(r && r.wallet);
+    if (!a) continue;
+    byAddr.set(a, { address: a, skill: { n: r.n || 0, winRate: r.wr ?? null, avgPrice: r.px ?? null, excess: r.excess ?? null } });
+  }
+  for (const s of kvRows || []) {
+    const a = norm(s && s.address);
+    if (!a) continue;
+    const live = (s.totalBets > 0) || (s.pending > 0);
+    if (!live && !byAddr.has(a)) continue;
+    const row = byAddr.get(a) || { address: a, skill: null };
+    const tier = s.tier || (s.tierInfo && s.tierInfo.tier) || (s.totalBets > 0 ? 'NEW' : 'PENDING');
+    Object.assign(row, {
+      tier, winRate: s.winRate || 0, wins: s.wins || 0, losses: s.losses || 0,
+      record: `${s.wins || 0}W-${s.losses || 0}L`, totalBets: s.totalBets || 0, pending: s.pending || 0,
+      totalVolume: s.totalVolume || 0, avgBetSize: s.avgBetSize || 0,
+      currentStreak: s.currentStreak || 0, bestStreak: s.bestStreak || 0,
+      lastSeen: s.lastSeen || null, firstSeen: s.firstSeen || null,
+    });
+    byAddr.set(a, row);
+  }
+  const blank = { tier: null, winRate: 0, wins: 0, losses: 0, record: '0W-0L', totalBets: 0, pending: 0, totalVolume: 0, avgBetSize: 0, currentStreak: 0, bestStreak: 0, lastSeen: null, firstSeen: null };
+  const rows = [...byAddr.values()].map(r => ({ ...blank, ...r }));
+  const bucket = (r) => (r.skill && r.skill.n >= minN) ? 0 : r.totalBets > 0 ? 1 : 2;
+  rows.sort((a, b) => {
+    const ba = bucket(a), bb = bucket(b);
+    if (ba !== bb) return ba - bb;
+    if (ba === 0) return ((b.skill.excess ?? -999) - (a.skill.excess ?? -999)) || (b.skill.n - a.skill.n);
+    if (ba === 1) return (b.winRate - a.winRate) || (b.totalBets - a.totalBets);
+    return b.totalVolume - a.totalVolume;
+  });
+  return rows.slice(0, limit);
+}
