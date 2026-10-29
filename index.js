@@ -33,7 +33,7 @@ import { getCryptoFairValue, refreshCryptoFairValue, annotateCryptoFairValue } f
 import { getUser, authConfigured } from "./src/auth.js";
 import { PLANS, planOf, hasPlan, limitsFor, policyFor, degradeFor } from "./src/tiers.js";
 import { billingConfigured, getEntitlement, createCheckoutSession, createPortalSession, verifyStripeSignature, handleStripeEvent, grantPlan, meFor, foundingSeatsUsed } from "./src/billing.js";
-import { businessReport, allowedOutbound, recordClick } from "./src/business.js";
+import { businessReport, listUsers, allowedOutbound, recordClick } from "./src/business.js";
 import { getDkPicksLedger } from "./src/dk-picks.js";
 import { addToWaitlist, loadWaitlist, waitlistSummary, isIpThrottled, markIpSubmitted } from "./src/waitlist.js";
 import {
@@ -4233,6 +4233,7 @@ export default {
       viewer = v;
     }
     if (path === "/admin/business" && request.method === "GET") return atJson(await businessReport(env));
+    if (path === "/admin/users" && request.method === "GET") return atJson(await listUsers(env, { q: url.searchParams.get("q") || "", limit: url.searchParams.get("limit") || 200 }));
     if (path === "/admin/grant" && request.method === "POST") {
       let body = {}; try { body = await request.json(); } catch (e) {}
       if (!body.userId || !PLANS[body.plan]) return atJson({ success: false, error: "userId and plan required" }, 400);
