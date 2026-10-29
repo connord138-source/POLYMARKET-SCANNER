@@ -5052,8 +5052,14 @@ export default {
         const cached = await env.SIGNALS_CACHE.get("wallets_leaderboard", { type: "json" });
         if (cached) return atJson(cached);
         const index = await env.SIGNALS_CACHE.get("tracked_wallet_index", { type: "json" }) || [];
+        // The best 100 by skill plus the worst 20, so the wallets worth
+        // fading show up at the bottom instead of being cut off.
         let ledger = [];
-        try { ledger = await topWallets(env, 100, LEDGER_MIN_N); } catch (e) { console.error("wallet ledger read failed:", e.message); }
+        try {
+          const [best, worst] = await Promise.all([topWallets(env, 100, LEDGER_MIN_N), topWallets(env, 20, LEDGER_MIN_N, { worst: true })]);
+          const seen = new Set(best.map(r => r.wallet));
+          ledger = [...best, ...worst.filter(r => !seen.has(r.wallet))];
+        } catch (e) { console.error("wallet ledger read failed:", e.message); }
         const addrs = [...new Set([...index, ...ledger.map(r => r.wallet)].filter(Boolean).map(a => String(a).toLowerCase()))];
         const kvRows = [];
         for (let i = 0; i < addrs.length; i += 25) {
@@ -5062,7 +5068,7 @@ export default {
         const out = {
           success: true, fetchedAt: new Date().toISOString(), minN: LEDGER_MIN_N,
           tracked: index.length, ledgerWallets: ledger.length,
-          wallets: buildWalletLeaderboard(kvRows, ledger, { minN: LEDGER_MIN_N, limit: 100 })
+          wallets: buildWalletLeaderboard(kvRows, ledger, { minN: LEDGER_MIN_N, limit: 120 })
         };
         await env.SIGNALS_CACHE.put("wallets_leaderboard", JSON.stringify(out), { expirationTtl: 120 });
         return atJson(out);

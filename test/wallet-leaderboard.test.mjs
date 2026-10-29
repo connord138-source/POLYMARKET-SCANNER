@@ -29,12 +29,14 @@ check("trusted skill first, by excess; then settled by win rate; then pending by
   JSON.stringify(order) === JSON.stringify(["0xaaa", "0xbbb", "0xold", "0xccc", "0xfew", "0xsettled", "0xpend2", "0xpend1"]), order);
 check("a wallet with nothing settled or pending is dropped", !order.includes("0xnothing"));
 const a = rows[0];
-check("KV fields and skill merge on one row", a.tier === "ELITE" && a.record === "11W-3L" && a.pending === 2 && a.currentStreak === 3 && a.skill.excess === 36.5 && a.skill.n === 14 && a.skill.avgPrice === 42, a);
+check("KV fields and skill merge on one row; record follows the ledger once the score is trusted", a.tier === "ELITE" && a.record === "11W-3L" && a.totalBets === 14 && a.winRate === 79 && a.pending === 2 && a.currentStreak === 3 && a.skill.excess === 36.5 && a.skill.n === 14 && a.skill.avgPrice === 42 && a.kv.totalBets === 14, a);
+const b = rows[1];
+check("ledger record overrides a KV record that counted different bets, KV kept under kv", b.record === "10W-0L" && b.winRate === 100 && b.kv.wins === 10, b);
 check("tierInfo.tier is used when tier is unset", rows[1].tier === "AVERAGE");
 check("settled but unranked reads NEW, pending-only reads PENDING", rows[3].tier === "NEW" && rows[6].tier === "PENDING" && rows[7].tier === "PENDING");
 const old = rows.find(r => r.address === "0xold");
-check("ledger-only wallet keeps a row with blank KV fields", old && old.tier === null && old.totalBets === 0 && old.record === "0W-0L" && old.skill.excess === 20, old);
-check("untrusted skill rides along but does not rank the wallet", rows[4].address === "0xfew" && rows[4].skill.n === 3);
+check("ledger-only wallet: no tier, record from the ledger", old && old.tier === null && old.totalBets === 11 && old.record === "8W-3L" && old.winRate === 70 && old.pending === 0 && old.skill.excess === 20, old);
+check("untrusted skill rides along but does not rank the wallet or replace its KV record", rows[4].address === "0xfew" && rows[4].skill.n === 3 && rows[4].record === "3W-0L" && !rows[4].kv);
 check("limit applies", buildWalletLeaderboard(kvRows, ledger, { minN: 10, limit: 2 }).length === 2);
 check("empty inputs", buildWalletLeaderboard([], []).length === 0 && buildWalletLeaderboard(null, undefined).length === 0);
 
