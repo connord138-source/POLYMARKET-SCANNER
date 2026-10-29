@@ -64,6 +64,24 @@ export function councilBoard(stats) {
   }).sort((x, y) => (y.accuracy ?? -1) - (x.accuracy ?? -1));
 }
 
+// One open position as the Agent Crew page shows it (the globe's detail
+// panel reads every field; all but the first line are optional).
+export function positionCard(p) {
+  const num = (v) => (typeof v === 'number' && !Number.isNaN(v) ? v : null);
+  return {
+    id: p.id, title: p.marketTitle, side: p.directionRaw || p.direction, entry: p.entryPrice,
+    size: p.size, openedAt: p.openedAt, lane: p.strategySource || (p.isExploration ? 'exploration' : 'whale'),
+    council: p.council ? p.council.verdict : null,
+    slug: p.marketSlug || null, category: p.marketCategory || 'other', type: p.marketType || null, subType: p.signalSubType || null,
+    shares: num(p.shares), score: num(p.score), confidence: num(p.aiConfidence ?? p.confidence), hoursUntilEvent: num(p.hoursUntilEvent),
+    walletTier: p.walletTier || null, walletWinRate: num(p.walletWinRate), walletBets: num(p.walletBets), whaleAction: p.whaleAction || null,
+    peakPctGain: num(p.peakPctGain), trailingStop: num(p.trailingStopLevel), exploration: !!p.isExploration, highConviction: !!p.isHighConviction,
+    councilMargin: p.council ? num(p.council.m) : null,
+    councilVotes: p.council && Array.isArray(p.council.v) ? p.council.v.map(v => ({ agent: v[0], vote: v[1], conviction: num(v[2]) })) : null,
+    forgeRule: p.forgeRule || null, holdToResolution: !!p.holdToResolution,
+  };
+}
+
 export async function buildAgentHub(env, deps) {
   const { getBotPerformance, getOpenPositions, getTradeLog, getTradeHistory, getDailyStats, getAutotraderConfig } = deps;
   if (env.SIGNALS_CACHE) {
@@ -101,11 +119,7 @@ export async function buildAgentHub(env, deps) {
   const byCat = {};
   for (const p of positions || []) {
     const k = p.marketCategory || 'other';
-    (byCat[k] = byCat[k] || []).push({
-      id: p.id, title: p.marketTitle, side: p.directionRaw || p.direction, entry: p.entryPrice,
-      size: p.size, openedAt: p.openedAt, lane: p.strategySource || (p.isExploration ? 'exploration' : 'whale'),
-      council: p.council ? p.council.verdict : null,
-    });
+    (byCat[k] = byCat[k] || []).push(positionCard(p));
   }
 
   const hub = {
