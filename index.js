@@ -5073,7 +5073,10 @@ export default {
           const oc = await Promise.all(batch.map(r => env.SIGNALS_CACHE.get(`wallet_onchain:${r.address}`, { type: "json" }).catch(() => null)));
           batch.forEach((r, j) => {
             const c = oc[j];
-            r.onChain = c && c.skill ? { ...c.skill, wins: c.winCount, losses: c.lossCount, pnl: c.totalPnL, open: c.openPositions, window: c.window, windowDays: c.windowDays ?? null, at: c.at } : null;
+            // Records cached before the window span was stored carry no money
+            // (the span is what says whether the figure means anything); they
+            // refresh within a day.
+            r.onChain = c && c.skill ? { ...c.skill, wins: c.winCount, losses: c.lossCount, pnl: typeof c.windowDays === "number" ? c.totalPnL : null, open: c.openPositions, window: c.window, windowDays: c.windowDays ?? null, at: c.at } : null;
           });
         }
         const out = {
