@@ -5073,7 +5073,7 @@ export default {
           const oc = await Promise.all(batch.map(r => env.SIGNALS_CACHE.get(`wallet_onchain:${r.address}`, { type: "json" }).catch(() => null)));
           batch.forEach((r, j) => {
             const c = oc[j];
-            r.onChain = c && c.skill ? { ...c.skill, wins: c.winCount, losses: c.lossCount, pnl: c.totalPnL, open: c.openPositions, window: c.window, at: c.at } : null;
+            r.onChain = c && c.skill ? { ...c.skill, wins: c.winCount, losses: c.lossCount, pnl: c.totalPnL, open: c.openPositions, window: c.window, windowDays: c.windowDays ?? null, at: c.at } : null;
           });
         }
         const out = {
@@ -8355,7 +8355,7 @@ async function refreshOnChainSkill(env, perRun = 6) {
       const sm = pnl.summary;
       await env.SIGNALS_CACHE.put(`wallet_onchain:${a}`, JSON.stringify({
         at: new Date().toISOString(), skill: sm.skill || null, totalPnL: sm.totalPnL, winCount: sm.winCount, lossCount: sm.lossCount,
-        openPositions: sm.openPositions, unknownCount: sm.unknownCount, window: sm.window
+        openPositions: sm.openPositions, unknownCount: sm.unknownCount, window: sm.window, windowDays: sm.windowDays
       }), { expirationTtl: 72 * 60 * 60 });
       index[a] = new Date().toISOString();
       refreshed++;
@@ -8662,6 +8662,13 @@ async function getWalletPnL(address) {
     
     // Sort resolved bets by time (most recent first)
     resolvedBets.sort((a, b) => new Date(b.time || 0) - new Date(a.time || 0));
+
+    // How much time the 500-activity window covers. A wallet trading
+    // thousands of times a day fits a day or two in it, and costs inside the
+    // window are matched by proceeds outside it, so its P&L here is noise;
+    // the pages keep money out of the call under WINDOW_MIN_DAYS.
+    const stamps = activity.map(a => (a.timestamp < 1e12 ? a.timestamp * 1000 : a.timestamp)).filter(t => t > 0);
+    const windowDays = stamps.length ? Math.round(10 * (Date.now() - Math.min(...stamps)) / 86400000) / 10 : null;
     
     const totalInvested = Object.values(marketBets).reduce((sum, m) => 
       sum + m.buys.reduce((s, b) => s + b.amount, 0), 0);
@@ -8689,6 +8696,8 @@ async function getWalletPnL(address) {
         skill: onChainSkill(resolvedBets),
         positionsOnFile: positions.length,
         window: "last 500 trades",
+        windowDays,
+        activityCount: activity.length,
         // Rebuilt from the activity feed (buys, sells, merges, splits,
         // redeems) and the positions on file; an estimate, not a statement.
         method: "estimate"
