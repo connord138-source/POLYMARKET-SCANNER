@@ -174,11 +174,11 @@ export function slimEvents(data) {
     const startMs = Date.parse(e.startDate || e.startTime || '');
     const markets = e.markets || [];
     const ml = markets.find(m => m && m.slug && Array.isArray(m.marketSides) && m.marketSides.length === 2 && (m.sportsMarketTypeV2 === 'SPORTS_MARKET_TYPE_MONEYLINE' || (!m.sportsMarketTypeV2 && /moneyline|winner/i.test(m.sportsMarketType || ''))));
-    if (ml) { out.push({ slug: ml.slug, startMs, title: e.title || '', sides: ml.marketSides.map(sideOf) }); continue; }
+    if (ml) { out.push({ slug: ml.slug, eventSlug: e.slug || e.ticker || null, startMs, title: e.title || '', sides: ml.marketSides.map(sideOf) }); continue; }
     const teamMarkets = markets.filter(m => m && m.slug && m.sportsMarketTypeV2 === 'SPORTS_MARKET_TYPE_DRAWABLE_OUTCOME' && Array.isArray(m.marketSides) && m.marketSides.some(x => x && x.team && x.team.name));
     if (teamMarkets.length >= 2) {
       const sides = teamMarkets.slice(0, 2).map(m => ({ ...sideOf(m.marketSides.find(x => x && x.team && x.team.name)), long: true, slug: m.slug }));
-      out.push({ slug: teamMarkets[0].slug.replace(/-[^-]+$/, ''), drawable: true, startMs, title: e.title || '', sides });
+      out.push({ slug: teamMarkets[0].slug.replace(/-[^-]+$/, ''), eventSlug: e.slug || e.ticker || null, drawable: true, startMs, title: e.title || '', sides });
     }
   }
   return out;
@@ -198,7 +198,7 @@ export function matchUsEvent(league, events, team, opponent = null, nowMs = Date
     if (best && (score < best.score || (score === best.score && d >= best.d))) continue;
     const base = ev.drawable ? 'long' : (ev.sides[idx].long ? 'long' : 'short');
     const side = want === 'no' ? (base === 'long' ? 'short' : 'long') : base;
-    best = { score, d, slug: ev.drawable ? ev.sides[idx].slug : ev.slug, side, startMs: ev.startMs, team: ev.sides[idx].team, opponent: other ? other.team : null, drawable: !!ev.drawable };
+    best = { score, d, slug: ev.drawable ? ev.sides[idx].slug : ev.slug, eventSlug: ev.eventSlug || null, side, startMs: ev.startMs, team: ev.sides[idx].team, opponent: other ? other.team : null, drawable: !!ev.drawable };
   }
   if (!best) return null;
   const { d, score, ...rest } = best; return rest;
@@ -352,4 +352,98 @@ export function fillFromOrder(order, side) {
   const state = order.state || null;
   if (!(q > 0) || !(yes > 0)) return { shares: 0, state };
   return { shares: r4(q), avgYesPx: r4(yes), effectivePx: r4(side === 'long' ? yes : 1 - yes), feeUsd: r2(Number((order.commissionNotionalTotalCollected && order.commissionNotionalTotalCollected.value) || 0)), state };
+}
+
+// ---- the public site: where a market lives on polymarket.us, and its price there ----
+// Event pages are /sports/{league}/{eventSlug} (marketSlug selects the moneyline on the page);
+// non-sports topics live under /category/{tag}. The US venue lists far less than global
+// Polymarket (no spreads, totals, long-dated crypto targets or most politics), so a link is
+// "exact" only when the venue has the event; otherwise it goes to the nearest league/category.
+export const PMUS_SITE = 'https://polymarket.us';
+export function usEventUrl(league, eventSlug = null, marketSlug = null) {
+  if (!league) return `${PMUS_SITE}/sports`;
+  if (!eventSlug) return `${PMUS_SITE}/sports/${encodeURIComponent(league)}`;
+  return `${PMUS_SITE}/sports/${encodeURIComponent(league)}/${encodeURIComponent(eventSlug)}${marketSlug ? `?marketSlug=${encodeURIComponent(marketSlug)}` : ''}`;
+}
+export function usCategoryUrl({ marketSlug = '', marketTitle = '' } = {}) {
+  const t = `${marketSlug} ${marketTitle}`.toLowerCase();
+  if (/bitcoin|\bbtc\b|ethereum|\beth\b|solana|\bsol\b|crypto|dogecoin|\bxrp\b/.test(t)) return `${PMUS_SITE}/category/crypto`;
+  if (/election|president|senate|governor|midterm|congress|house of representatives|democrat|republican|parliament|prime minister|mayor/.test(t)) return `${PMUS_SITE}/category/politics`;
+  if (/\bfed\b|fomc|rate cut|rate hike|inflation|\bcpi\b|\bgdp\b|unemployment|jobs report|treasury|tariff/.test(t)) return `${PMUS_SITE}/category/economics`;
+  return PMUS_SITE;
+}
+// Score a US side against a team name: the big-four city/nickname table first, normalized names after.
+const anySideScore = (league, side, name) => Math.max(sideScore(league, side, name), nameScore(side.team, name), nameScore(side.alt, name));
+// The US event for a game given both team names in either order. Nearest to startMs when given,
+// else the soonest; window now-6h .. now+7d (the league feed lists the coming week).
+export function findUsGame(league, events, teamA, teamB, { nowMs = Date.now(), startMs = null, windowMs = 7 * 86400e3 } = {}) {
+  let best = null;
+  for (const ev of events || []) {
+    if (!Number.isFinite(ev.startMs) || ev.startMs < nowMs - 6 * 3600e3 || ev.startMs > nowMs + windowMs) continue;
+    if (!ev.sides || ev.sides.length < 2) continue;
+    const [s0, s1] = ev.sides;
+    const straight = Math.min(anySideScore(league, s0, teamA), anySideScore(league, s1, teamB));
+    const flipped = Math.min(anySideScore(league, s0, teamB), anySideScore(league, s1, teamA));
+    const score = Math.max(straight, flipped);
+    if (!score) continue;
+    const d = startMs ? Math.abs(ev.startMs - startMs) : Math.abs(ev.startMs - nowMs);
+    if (best && (score < best.score || (score === best.score && d >= best.d))) continue;
+    best = { score, d, ev, aIdx: straight >= flipped ? 0 : 1 };
+  }
+  if (!best) return null;
+  const { ev, aIdx } = best;
+  return { slug: ev.slug, eventSlug: ev.eventSlug || null, startMs: ev.startMs, drawable: !!ev.drawable, sides: ev.sides, aIdx, teamA: ev.sides[aIdx].team, teamB: ev.sides[1 - aIdx].team };
+}
+const BBO_TTL_S = 90;
+async function cachedBbo(env, slug, { fetchImpl = fetch, nowMs = Date.now() } = {}) {
+  const key = `pmus_bbo_${slug}`;
+  const cached = await kvJson(env, key);
+  if (cached && nowMs - (cached.at || 0) < BBO_TTL_S * 1000) return cached.bbo;
+  try { const bbo = await fetchUsBbo(slug, { fetchImpl }); await kvPut(env, key, { at: nowMs, bbo }, BBO_TTL_S * 2); return bbo; } catch (e) { return null; }
+}
+const midOf = (bbo) => (bbo && bbo.bid && bbo.ask ? (bbo.bid + bbo.ask) / 2 : (bbo && (bbo.last || bbo.bid || bbo.ask)) || null);
+// Each team's price on the US book, in cents of YES (the long side carries the YES price; the
+// other side is its complement; a soccer "drawable" row has one Yes/No market per team).
+export async function usGameQuote(env, league, hit, deps = {}) {
+  const sidePrice = async (idx) => {
+    const s = hit.sides[idx]; const slug = hit.drawable ? s.slug : hit.slug;
+    if (!slug) return null;
+    const bbo = await cachedBbo(env, slug, deps); const mid = midOf(bbo);
+    if (mid == null) return null;
+    const yes = hit.drawable || s.long ? mid : 1 - mid;
+    return { price: Math.round(yes * 100), slug, bid: bbo.bid, ask: bbo.ask, last: bbo.last, team: s.team };
+  };
+  const [a, b] = await Promise.all([sidePrice(hit.aIdx), sidePrice(1 - hit.aIdx)]);
+  if (!a && !b) return null;
+  return { teamA: a, teamB: b, url: usEventUrl(league, hit.eventSlug, hit.drawable ? null : hit.slug) };
+}
+const US_SPORT_KEY = { ncaab: 'cbb', ncaaf: 'cfb' };
+// Both teams of a game (global sport prefix or Odds API sport name) -> the US event + page. Never throws.
+export async function usMatchForGame(env, sport, teamA, teamB, { startMs = null, events: preloaded = null, ...deps } = {}) {
+  const key = String(sport || '').toLowerCase();
+  const leagues = LEAGUES[key] || LEAGUES[US_SPORT_KEY[key]] || [];
+  for (const league of leagues) {
+    let events = preloaded && preloaded[league];
+    if (!events) { try { events = await fetchLeagueEvents(env, league, deps); } catch (e) { continue; } }
+    const hit = findUsGame(league, events, teamA, teamB, { nowMs: deps.nowMs || Date.now(), startMs });
+    if (hit) return { league, ...hit, url: usEventUrl(league, hit.eventSlug, hit.drawable ? null : hit.slug) };
+  }
+  return null;
+}
+// A global market (slug + title) -> its Polymarket US page. exact=true means the venue lists the
+// event; false means the nearest league or category page. Never throws.
+export async function usLinkFor(env, { marketSlug = '', marketTitle = '' } = {}, deps = {}) {
+  try {
+    const intent = { marketSlug, marketTitle };
+    const leagues = leaguesOf(intent);
+    if (!leagues.length) return { url: usCategoryUrl(intent), exact: false, league: null };
+    const teams = teamsOfTitle(marketTitle);
+    const nowMs = deps.nowMs || Date.now();
+    for (const league of leagues) {
+      let events; try { events = await fetchLeagueEvents(env, league, deps); } catch (e) { continue; }
+      const h = teams.length === 2 ? findUsGame(league, events, teams[0], teams[1], { nowMs }) : teams.length === 1 ? matchUsEvent(league, events, teams[0], null, nowMs, 'long') : null;
+      if (h) return { url: usEventUrl(league, h.eventSlug, h.drawable ? null : h.slug), exact: !!h.eventSlug, league };
+    }
+    return { url: usEventUrl(leagues[0], null), exact: false, league: leagues[0] };
+  } catch (e) { return { url: PMUS_SITE, exact: false, league: null }; }
 }

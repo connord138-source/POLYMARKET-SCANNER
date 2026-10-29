@@ -272,3 +272,41 @@ export {
   GAMMA_API, parseGammaArray, normalizeOutcomeText, matchOutcomeIndex,
   fetchGammaJson, findGammaMarket, settleWithGamma
 };
+
+// A game's moneyline on global Polymarket, from Gamma's public search ("Cavaliers Hawks").
+// The trade tape only shows games with recent whale trades, so the Odds vs books page looks
+// the rest up here. Pure part first (testable), fetch wrapper after.
+export function gammaMoneylineFromSearch(data, sport, game, { teamNamesOverlap }) {
+  const prefixes = sport === 'ncaab' ? 'ncaab|cbb' : sport === 'cfb' || sport === 'ncaaf' ? 'cfb|ncaaf' : String(sport || '').toLowerCase();
+  const re = new RegExp(`^(?:${prefixes})-([a-z0-9]+)-([a-z0-9]+)-(\\d{4}-\\d{2}-\\d{2})$`, 'i');
+  const date = String(game.commenceTime || game.commence_time || '').slice(0, 10);
+  const near = (d) => !date || Math.abs(Date.parse(`${d}T12:00:00Z`) - Date.parse(`${date}T12:00:00Z`)) <= 36 * 3600e3;
+  const home = game.homeTeam || game.home_team, away = game.awayTeam || game.away_team;
+  for (const e of (data && data.events) || []) {
+    const m = String(e.slug || '').match(re);
+    if (!m || !near(m[3])) continue;
+    const markets = e.markets || [];
+    const ml = markets.find(mk => mk && mk.sportsMarketType === 'moneyline') || markets.find(mk => mk && mk.slug === e.slug);
+    if (!ml) continue;
+    let outcomes, prices;
+    try { outcomes = JSON.parse(ml.outcomes || '[]'); prices = JSON.parse(ml.outcomePrices || '[]'); } catch (x) { continue; }
+    if (!Array.isArray(outcomes) || outcomes.length !== 2) continue;
+    const side = (i) => ({ price: Math.round(Number(prices[i]) * 100), slug: e.slug, team: outcomes[i] });
+    let h = null, a = null;
+    outcomes.forEach((o, i) => { if (!h && teamNamesOverlap(o, home)) h = side(i); else if (!a && teamNamesOverlap(o, away)) a = side(i); });
+    if (!h && !a) continue;
+    return { moneyline: { home: h, away: a }, slug: e.slug, url: `https://polymarket.com/event/${e.slug}` };
+  }
+  return null;
+}
+export async function gammaGameMoneyline(env, sport, game, { teamNamesOverlap, fetchImpl = fetch, nowMs = Date.now() }) {
+  const key = `gamma_game_${sport}_${game.id || `${game.awayTeam}-${game.homeTeam}`}`;
+  try { const c = env.SIGNALS_CACHE && await env.SIGNALS_CACHE.get(key, { type: 'json' }); if (c && nowMs - (c.at || 0) < 120e3) return c.v; } catch (e) {}
+  const nick = (n) => String(n || '').trim().split(' ').pop();
+  const q = `${nick(game.awayTeam || game.away_team)} ${nick(game.homeTeam || game.home_team)}`;
+  const res = await fetchImpl(`https://gamma-api.polymarket.com/public-search?q=${encodeURIComponent(q)}&limit_per_type=12`);
+  if (!res.ok) return null;
+  const v = gammaMoneylineFromSearch(await res.json(), sport, game, { teamNamesOverlap });
+  try { if (env.SIGNALS_CACHE) await env.SIGNALS_CACHE.put(key, JSON.stringify({ at: nowMs, v }), { expirationTtl: 300 }); } catch (e) {}
+  return v;
+}

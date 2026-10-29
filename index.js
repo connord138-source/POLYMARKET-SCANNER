@@ -9,6 +9,8 @@ import {
 import {
   parseGammaArray, matchOutcomeIndex, fetchGammaJson, findGammaMarket, settleWithGamma
 } from "./src/gamma.js";
+import { gammaGameMoneyline } from "./src/gamma.js";
+import { usLinkFor, usMatchForGame, usGameQuote, fetchLeagueEvents as fetchUsLeagueEvents, LEAGUES as US_LEAGUES } from "./src/polymarket-us.js";
 import {
   getAutotraderConfig, updateAutotraderConfig, getOpenPositions,
   getTradeHistory, getTradeLog, getBotPerformance, getDailyStats,
@@ -3831,7 +3833,61 @@ async function buildOddsComparison(env, sport) {
     };
   });
 
-  return { games, polymarketGamesFound: Object.keys(polyPrices).length, polymarketGameKeys: Object.keys(polyPrices) };
+  await annotateVenues(env, sport, games);
+  return { games, polymarketGamesFound: games.filter(g => g.hasPolymarket).length, polymarketGameKeys: Object.keys(polyPrices) };
+}
+
+// Second pass over the compared games: global Polymarket for the games the trade tape
+// missed (Gamma search), and Polymarket US (the regulated venue, its own book) for every
+// game. Each game then says which venue lists it, so the page can label the two.
+const edgesAgainstVegas = (g, home, away) => {
+  const vh = g.vegas && g.vegas.moneyline && g.vegas.moneyline.home ? g.vegas.moneyline.home.prob : null;
+  const va = g.vegas && g.vegas.moneyline && g.vegas.moneyline.away ? g.vegas.moneyline.away.prob : null;
+  const homeEdge = home && home.price && vh !== null && vh !== undefined ? vh - home.price : null;
+  const awayEdge = away && away.price && va !== null && va !== undefined ? va - away.price : null;
+  let bestBet = null;
+  if (homeEdge !== null && homeEdge >= 5) bestBet = { team: g.homeTeam, edge: homeEdge, type: 'moneyline' };
+  else if (awayEdge !== null && awayEdge >= 5) bestBet = { team: g.awayTeam, edge: awayEdge, type: 'moneyline' };
+  return { home: homeEdge, away: awayEdge, bestBet };
+};
+async function annotateVenues(env, sport, games) {
+  const nowIso = new Date().toISOString();
+  // one league-events fetch per US league, shared by every game
+  const usEvents = {};
+  for (const league of US_LEAGUES[sport] || US_LEAGUES[{ ncaab: 'cbb', ncaaf: 'cfb' }[sport]] || []) {
+    try { usEvents[league] = await fetchUsLeagueEvents(env, league); } catch (e) { /* venue down: no US column */ }
+  }
+  await Promise.all(games.map(async (g) => {
+    if (!g.hasPolymarket) {
+      try {
+        const gm = await gammaGameMoneyline(env, sport, g, { teamNamesOverlap });
+        if (gm) {
+          g.polymarket = { moneyline: gm.moneyline, spread: { home: null, away: null }, lastUpdate: nowIso, source: 'gamma', url: gm.url };
+          g.hasPolymarket = true;
+          g.edge = edgesAgainstVegas(g, gm.moneyline.home, gm.moneyline.away);
+        }
+      } catch (e) { /* Gamma unreachable: the card says no data, as before */ }
+    } else if (g.polymarket && !g.polymarket.url) {
+      const ml = g.polymarket.moneyline || {};
+      const slug = (ml.home && ml.home.slug) || (ml.away && ml.away.slug) || '';
+      if (slug) g.polymarket.url = `https://polymarket.com/event/${slug.replace(/-spread.*$/, '')}`;
+      g.polymarket.source = 'trades';
+    }
+    g.hasPolymarketUs = false;
+    try {
+      const hit = Object.keys(usEvents).length ? await usMatchForGame(env, sport, g.awayTeam, g.homeTeam, { startMs: Date.parse(g.commenceTime) || null, events: usEvents }) : null;
+      if (hit) {
+        const q = await usGameQuote(env, hit.league, hit);
+        const away = q && q.teamA, home = q && q.teamB;
+        g.polymarketUs = {
+          moneyline: { home: home ? { price: home.price, slug: home.slug, bid: home.bid, ask: home.ask } : null, away: away ? { price: away.price, slug: away.slug, bid: away.bid, ask: away.ask } : null },
+          url: hit.url, league: hit.league, eventSlug: hit.eventSlug, lastUpdate: nowIso
+        };
+        g.hasPolymarketUs = !!(home || away);
+        g.edgeUs = edgesAgainstVegas(g, home, away);
+      }
+    } catch (e) { /* no US column for this game */ }
+  }));
 }
 
 // Shape the comparison into the Edge Detector page's contract
@@ -3867,7 +3923,7 @@ function shapeEdgeDetection(sport, cmp) {
   const topEdges = withEdge.slice().sort((a, b) => b.edgeScore - a.edgeScore).slice(0, 10);
   return {
     success: true, sport,
-    dataSources: { vegasPolymarket: true, sharpLines: false, bettingSplits: false },
+    dataSources: { sportsbooks: games.length > 0, polymarket: games.some(g => g.hasPolymarket), polymarketUs: games.some(g => g.hasPolymarketUs), vegasPolymarket: true, sharpLines: false, bettingSplits: false },
     summary: {
       totalGames: games.length,
       gamesWithEdge: withEdge.length,
@@ -5851,6 +5907,18 @@ export default {
       }
       
       // Get Vegas odds WITH Polymarket prices for comparison
+      // Where a global Polymarket market lives on Polymarket US: the exact event page when the
+      // venue lists it, else the nearest league or category page. Public; cached ten minutes.
+      if (path === "/venue/us-link") {
+        const slug = (url.searchParams.get("slug") || "").slice(0, 200), title = (url.searchParams.get("title") || "").slice(0, 300);
+        const key = `us_link_${slug || title}`;
+        const cached = await env.SIGNALS_CACHE.get(key, { type: "json" });
+        if (cached) return atJson({ success: true, ...cached, cached: true });
+        const r = await usLinkFor(env, { marketSlug: slug, marketTitle: title });
+        await env.SIGNALS_CACHE.put(key, JSON.stringify(r), { expirationTtl: 600 });
+        return atJson({ success: true, ...r });
+      }
+
       // Usage: /odds/compare-all?sport=nba
       // Returns both Vegas odds and current Polymarket prices for each game
       if (path === "/odds/compare-all") {
