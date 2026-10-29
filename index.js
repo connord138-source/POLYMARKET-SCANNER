@@ -21,7 +21,7 @@ import {
   computeFavoritesExperiment, updateExecQueueItem
 } from "./src/autotrader.js";
 import { runForge, maybeRunForge, getForgeReport } from "./src/forge.js";
-import { logSignalWallets, backfillWalletLedger, topWallets, buildWalletLeaderboard, walletSkill, onChainSkill, LEDGER_MIN_N } from "./src/wallet-ledger.js";
+import { logSignalWallets, backfillWalletLedger, topWallets, buildWalletLeaderboard, walletSkill, onChainSkill, walletsFromSignal, LEDGER_MIN_N } from "./src/wallet-ledger.js";
 import { trackSpeed, updateSpeed, speedReport } from "./src/speed.js";
 import { buildAgentHub } from "./src/agent-hub.js";
 import { handleCrewOrder, runCrewHunt, getCrewState, saveBrowserDkBoard, answerPendingCrewChat } from "./src/crew.js";
@@ -4216,6 +4216,28 @@ async function alertEdgeOpportunities(env, opps) {
 // signal is rejected as "No winning wallet on signal". A wallet only routes
 // through the quality gate when it has real proven history (>=5 settled bets,
 // >=60% WR); otherwise the signal uses the score-based high-conviction bypass.
+// The other side of the bet a signal describes: YES/NO flip, Over/Under
+// flip, the other team of an "A vs. B" title, else "Against <side>".
+function fadeSideOf(sig) {
+  const d = String(sig.direction || "").trim();
+  if (sig.fadeAlert && sig.fadeAlert.fadeDirection) return sig.fadeAlert.fadeDirection;
+  if (/^yes$/i.test(d)) return "NO";
+  if (/^no$/i.test(d)) return "YES";
+  if (/^over\b/i.test(d)) return d.replace(/^over/i, "Under");
+  if (/^under\b/i.test(d)) return d.replace(/^under/i, "Over");
+  // "Erste Bank Open: Zverev vs Landaluce" -> drop the event prefix first
+  let title = String(sig.marketTitle || "");
+  const ci = title.indexOf(":");
+  if (ci > 0 && !/\bvs\b/i.test(title.slice(0, ci))) title = title.slice(ci + 1).trim();
+  const m = title.match(/^(.+?)\s+vs\.?\s+(.+?)(?::|\s+-|$)/i);
+  if (m && d) {
+    const a = m[1].trim(), b = m[2].trim();
+    if (a.toLowerCase().includes(d.toLowerCase()) || d.toLowerCase().includes(a.toLowerCase())) return b;
+    if (b.toLowerCase().includes(d.toLowerCase()) || d.toLowerCase().includes(b.toLowerCase())) return a;
+  }
+  return d ? `Against ${d}` : "The other side";
+}
+
 function adaptSignalForAutotrader(signal) {
   const entry = signal.avgEntryPrice;
   let hasWinningWallet = false;
@@ -6902,40 +6924,42 @@ export default {
       }
       
       // Get fade alerts (signals where known losers are betting)
+      // Fade the losers: the bets wallets with a NEGATIVE skill score just
+      // made, flipped. A low win rate alone is not a reason to fade (a
+      // long-shot buyer loses most bets and has no edge), so the candidates
+      // come from the ledger's worst wallets (excess <= -5 over LEDGER_MIN_N
+      // settled signal bets); the older KV fade alert (win rate <= 40%) rides
+      // along as `record` for signals the ledger has not scored.
       if (path === "/learning/fades") {
-        if (!env.SIGNALS_CACHE) {
-          return new Response(JSON.stringify({ error: "No cache configured" }), {
-            status: 500,
-            headers: { ...corsHeaders, "Content-Type": "application/json" }
-          });
-        }
-        
+        if (!env.SIGNALS_CACHE) return atJson({ success: false, error: "No cache configured" }, 500);
         try {
-          // Get recent signals and check for fade opportunities
           const cached = await env.SIGNALS_CACHE.get("signals", { type: "json" }) || [];
-          const fadeSignals = cached.filter(s => s.fadeAlert && s.fadeAlert.isFade);
-          
-          return new Response(JSON.stringify({
-            success: true,
-            totalFades: fadeSignals.length,
-            fades: fadeSignals.slice(0, 20).map(s => ({
-              market: s.marketTitle,
-              originalDirection: s.direction,
-              fadeDirection: s.fadeAlert.fadeDirection,
-              losingWalletWinRate: s.fadeAlert.walletWinRate,
-              losingWalletRecord: s.fadeAlert.walletRecord,
-              confidence: s.fadeAlert.confidence,
-              betAmount: s.largestBet,
-              reasoning: s.fadeAlert.reasoning
-            }))
-          }), {
-            headers: { ...corsHeaders, "Content-Type": "application/json" }
-          });
+          let worst = [];
+          try { worst = await topWallets(env, 60, LEDGER_MIN_N, { worst: true }); } catch (e) { console.error("fade ledger read failed:", e.message); }
+          const fadeRows = new Map(worst.filter(r => r.excess <= -5).map(r => [String(r.wallet).toLowerCase(), r]));
+          const fades = [];
+          for (const sig of cached) {
+            const hits = walletsFromSignal(sig).filter(w => fadeRows.has(w.wallet)).map(w => ({ ...w, row: fadeRows.get(w.wallet) })).sort((a, b) => a.row.excess - b.row.excess);
+            const kvFade = sig.fadeAlert && sig.fadeAlert.isFade ? sig.fadeAlert : null;
+            if (!hits.length && !kvFade) continue;
+            const hit = hits[0] || null;
+            const paid = typeof sig.avgEntryPrice === "number" ? Math.round(sig.avgEntryPrice) : null;
+            fades.push({
+              id: sig.id, market: sig.marketTitle, marketSlug: sig.marketSlug, eventSlug: sig.eventSlug || null,
+              detectedAt: sig.detectedAt || sig.firstTradeTime || null, hoursUntilEvent: sig.hoursUntilEvent ?? null,
+              originalDirection: sig.direction, fadeDirection: fadeSideOf(sig),
+              paidPrice: paid, fadePrice: paid != null ? 100 - paid : null,
+              betAmount: hit && hit.usd ? hit.usd : (sig.largestBet || null),
+              wallet: hit ? hit.wallet : (kvFade.losingWallet || null),
+              skill: hit ? { n: hit.row.n, winRate: hit.row.wr, avgPrice: hit.row.px, excess: hit.row.excess } : null,
+              record: kvFade ? { winRate: kvFade.walletWinRate, record: kvFade.walletRecord } : null,
+              fadeWallets: hits.length, score: sig.score ?? null
+            });
+          }
+          fades.sort((a, b) => ((a.skill ? a.skill.excess : 0) - (b.skill ? b.skill.excess : 0)) || ((b.betAmount || 0) - (a.betAmount || 0)));
+          return atJson({ success: true, totalFades: fades.length, fadeWallets: fadeRows.size, minN: LEDGER_MIN_N, fades: fades.slice(0, 30) });
         } catch (e) {
-          return new Response(JSON.stringify({ error: e.message }), {
-            status: 500,
-            headers: { ...corsHeaders, "Content-Type": "application/json" }
-          });
+          return atJson({ success: false, error: e.message }, 500);
         }
       }
       
