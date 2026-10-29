@@ -5065,10 +5065,22 @@ export default {
         for (let i = 0; i < addrs.length; i += 25) {
           kvRows.push(...await Promise.all(addrs.slice(i, i + 25).map(a => getWalletStats(env, a))));
         }
+        const rows = buildWalletLeaderboard(kvRows, ledger, { minN: LEDGER_MIN_N, limit: 120 });
+        // The wallet's everyday on-chain record, when the cron has pulled it
+        // (refreshOnChainSkill): the page weighs it against the signal record.
+        for (let i = 0; i < rows.length; i += 25) {
+          const batch = rows.slice(i, i + 25);
+          const oc = await Promise.all(batch.map(r => env.SIGNALS_CACHE.get(`wallet_onchain:${r.address}`, { type: "json" }).catch(() => null)));
+          batch.forEach((r, j) => {
+            const c = oc[j];
+            r.onChain = c && c.skill ? { ...c.skill, wins: c.winCount, losses: c.lossCount, pnl: c.totalPnL, open: c.openPositions, window: c.window, at: c.at } : null;
+          });
+        }
         const out = {
           success: true, fetchedAt: new Date().toISOString(), minN: LEDGER_MIN_N,
           tracked: index.length, ledgerWallets: ledger.length,
-          wallets: buildWalletLeaderboard(kvRows, ledger, { minN: LEDGER_MIN_N, limit: 120 })
+          onChainCovered: rows.filter(r => r.onChain).length,
+          wallets: rows
         };
         await env.SIGNALS_CACHE.put("wallets_leaderboard", JSON.stringify(out), { expirationTtl: 120 });
         return atJson(out);
@@ -7212,6 +7224,8 @@ export default {
         cronStatus.signalBackfill = await d1BackfillSignalOutcomes(env, 25);
         try { cronStatus.walletLedger = await backfillWalletLedger(env, 150); }
         catch (e) { cronStatus.walletLedger = { error: e.message }; }
+        try { cronStatus.onChainSkill = await refreshOnChainSkill(env); }
+        catch (e) { cronStatus.onChainSkill = { error: e.message }; }
       } catch (e) {
         cronStatus.signalBackfill = { error: e.message };
       }
@@ -8320,6 +8334,38 @@ async function getWalletPositions(address) {
 }
 
 // Get closed positions (resolved bets) and calculate PnL
+// On-chain record for the wallets the Top wallets list shows (the ledger's
+// best 100 and worst 20), refreshed a few per cron so the list can weigh a
+// wallet's everyday betting and not only the big bets the scanner flagged.
+// KV wallet_onchain:<addr> (72h) holds the summary; wallet_onchain_index
+// holds each address's refresh time so a cron reads one key to pick work.
+var ONCHAIN_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+async function refreshOnChainSkill(env, perRun = 6) {
+  if (!env.SIGNALS_CACHE || !env.DB) return { skipped: "no DB/KV" };
+  const [best, worst] = await Promise.all([topWallets(env, 100, LEDGER_MIN_N), topWallets(env, 20, LEDGER_MIN_N, { worst: true })]);
+  const addrs = [...new Set([...best, ...worst].map(r => String(r.wallet).toLowerCase()))];
+  const index = await env.SIGNALS_CACHE.get("wallet_onchain_index", { type: "json" }) || {};
+  const now = Date.now();
+  const due = addrs.filter(a => !index[a] || now - Date.parse(index[a]) > ONCHAIN_MAX_AGE_MS);
+  let refreshed = 0, failed = 0;
+  for (const a of due.slice(0, perRun)) {
+    try {
+      const pnl = await getWalletPnL(a);
+      if (!pnl || !pnl.success) { failed++; continue; }
+      const sm = pnl.summary;
+      await env.SIGNALS_CACHE.put(`wallet_onchain:${a}`, JSON.stringify({
+        at: new Date().toISOString(), skill: sm.skill || null, totalPnL: sm.totalPnL, winCount: sm.winCount, lossCount: sm.lossCount,
+        openPositions: sm.openPositions, unknownCount: sm.unknownCount, window: sm.window
+      }), { expirationTtl: 72 * 60 * 60 });
+      index[a] = new Date().toISOString();
+      refreshed++;
+    } catch (e) { failed++; }
+  }
+  for (const k of Object.keys(index)) if (!addrs.includes(k) && now - Date.parse(index[k]) > 7 * ONCHAIN_MAX_AGE_MS) delete index[k];
+  await env.SIGNALS_CACHE.put("wallet_onchain_index", JSON.stringify(index), { expirationTtl: 30 * 24 * 60 * 60 });
+  return { wallets: addrs.length, due: due.length, refreshed, failed };
+}
+
 // Every position the data-api holds for a wallet. The endpoint pages at
 // 500 (and answered 100 with no limit at all): a long-shot sprayer can hold
 // 900+ resolved positions, and a market whose position fell off the page
