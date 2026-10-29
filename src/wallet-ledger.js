@@ -149,13 +149,15 @@ export async function backfillWalletLedger(env, limit = 150) {
 }
 
 // Leaderboard of wallets by as-of-now skill (for the UI + sanity checks).
-export async function topWallets(env, limit = 25, minN = LEDGER_MIN_N) {
+// `worst: true` returns the other end of the ranking (lowest excess first):
+// the wallets worth fading.
+export async function topWallets(env, limit = 25, minN = LEDGER_MIN_N, { worst = false } = {}) {
   if (!env.DB) return [];
   const res = await env.DB.prepare(
     `WITH h AS (SELECT sw.wallet, sl.market_slug || '|' || sl.direction_raw k, MAX(sl.outcome='WIN') win, AVG(sl.avg_entry_price) px ` +
     `FROM signal_wallets sw JOIN signals_log sl ON sl.id = sw.signal_id WHERE sl.outcome IN ('WIN','LOSS') GROUP BY sw.wallet, k) ` +
     `SELECT wallet, COUNT(*) n, ROUND(100.0*AVG(win),1) wr, ROUND(AVG(px),1) px, ROUND(100.0*AVG(win) - AVG(px),1) excess ` +
-    `FROM h GROUP BY wallet HAVING n >= ?1 ORDER BY excess DESC LIMIT ?2`
+    `FROM h GROUP BY wallet HAVING n >= ?1 ORDER BY excess ${worst ? 'ASC' : 'DESC'} LIMIT ?2`
   ).bind(minN, limit).all();
   return res.results || [];
 }
@@ -169,6 +171,11 @@ export async function topWallets(env, limit = 25, minN = LEDGER_MIN_N) {
 // the ledger still knows it; a KV wallet with nothing settled or pending is
 // dropped. `tier` is the earned KV tier, NEW (settled but unranked) or
 // PENDING (nothing settled yet); null when only the ledger knows the wallet.
+// Once the skill score is trusted, the row's record, win rate and settled
+// count are the LEDGER's (the same bets the score is built on), so a row
+// tells one story; the KV counts stay under `kv` for the detail view. KV
+// only tracks a wallet that bet $1k+ on a signal, the ledger every wallet
+// on it, so the two can disagree on how many bets have settled.
 export function buildWalletLeaderboard(kvRows, ledgerRows, { minN = LEDGER_MIN_N, limit = 100 } = {}) {
   const byAddr = new Map();
   for (const r of ledgerRows || []) {
@@ -193,7 +200,16 @@ export function buildWalletLeaderboard(kvRows, ledgerRows, { minN = LEDGER_MIN_N
     byAddr.set(a, row);
   }
   const blank = { tier: null, winRate: 0, wins: 0, losses: 0, record: '0W-0L', totalBets: 0, pending: 0, totalVolume: 0, avgBetSize: 0, currentStreak: 0, bestStreak: 0, lastSeen: null, firstSeen: null };
-  const rows = [...byAddr.values()].map(r => ({ ...blank, ...r }));
+  const rows = [...byAddr.values()].map(r => {
+    const row = { ...blank, ...r };
+    const s = row.skill;
+    if (s && s.n >= minN && typeof s.winRate === 'number') {
+      row.kv = { totalBets: row.totalBets, wins: row.wins, losses: row.losses, winRate: row.winRate };
+      const wins = Math.round(s.n * s.winRate / 100);
+      Object.assign(row, { totalBets: s.n, wins, losses: s.n - wins, winRate: Math.round(s.winRate), record: `${wins}W-${s.n - wins}L` });
+    }
+    return row;
+  });
   const bucket = (r) => (r.skill && r.skill.n >= minN) ? 0 : r.totalBets > 0 ? 1 : 2;
   rows.sort((a, b) => {
     const ba = bucket(a), bb = bucket(b);
