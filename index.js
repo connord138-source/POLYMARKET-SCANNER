@@ -4225,7 +4225,11 @@ function fadeSideOf(sig) {
   if (/^no$/i.test(d)) return "YES";
   if (/^over\b/i.test(d)) return d.replace(/^over/i, "Under");
   if (/^under\b/i.test(d)) return d.replace(/^under/i, "Over");
-  const m = String(sig.marketTitle || "").match(/^(.+?)\s+vs\.?\s+(.+?)(?::|\s+-|$)/i);
+  // "Erste Bank Open: Zverev vs Landaluce" -> drop the event prefix first
+  let title = String(sig.marketTitle || "");
+  const ci = title.indexOf(":");
+  if (ci > 0 && !/\bvs\b/i.test(title.slice(0, ci))) title = title.slice(ci + 1).trim();
+  const m = title.match(/^(.+?)\s+vs\.?\s+(.+?)(?::|\s+-|$)/i);
   if (m && d) {
     const a = m[1].trim(), b = m[2].trim();
     if (a.toLowerCase().includes(d.toLowerCase()) || d.toLowerCase().includes(a.toLowerCase())) return b;
