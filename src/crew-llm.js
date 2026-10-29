@@ -87,6 +87,7 @@ async function callClaude(env, { system, messages, schema, effort, maxTokens, ti
         try { await env.SIGNALS_CACHE.put('anthropic_billing_down', JSON.stringify({ at: Date.now() }), { expirationTtl: 3600 }); } catch (e) {}
         return { ok: false, error: 'the Anthropic account is out of credits (add them at console.anthropic.com, Plans & Billing)' };
       }
+      if (res.status === 403 && /not allowed/i.test(msg)) return { ok: false, error: 'Claude API error 403: request not allowed from this edge location' };
       return { ok: false, error: `Claude API error ${res.status}: ${msg.slice(0, 140)}` };
     }
     const u = body.usage || {};
