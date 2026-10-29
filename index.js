@@ -8366,6 +8366,8 @@ async function getWalletPnL(address) {
           buys: [],
           sells: [],
           redeems: [],
+          merges: [],   // YES+NO pairs merged back into cash: proceeds
+          splits: [],   // cash split into YES+NO pairs: cost
           outcome: a.outcome
         };
       }
@@ -8384,6 +8386,10 @@ async function getWalletPnL(address) {
         marketBets[market].sells.push({ amount: usdValue, time: timestamp, price: parseFloat(a.price) || 0 });
       } else if (a.type === 'REDEEM') {
         marketBets[market].redeems.push({ amount: usdValue, time: timestamp });
+      } else if (a.type === 'MERGE') {
+        marketBets[market].merges.push({ amount: usdValue, time: timestamp });
+      } else if (a.type === 'SPLIT') {
+        marketBets[market].splits.push({ amount: usdValue, time: timestamp });
       }
     });
     
@@ -8453,8 +8459,10 @@ async function getWalletPnL(address) {
     };
     
     for (const [market, data] of Object.entries(marketBets)) {
-      const totalBought = data.buys.reduce((sum, b) => sum + b.amount, 0);
-      const totalSold = data.sells.reduce((sum, s) => sum + s.amount, 0);
+      // A market maker buys both sides and merges the pairs back into cash;
+      // that cash used to be invisible, so every such market read as a loss.
+      const totalBought = data.buys.reduce((sum, b) => sum + b.amount, 0) + data.splits.reduce((sum, b) => sum + b.amount, 0);
+      const totalSold = data.sells.reduce((sum, s) => sum + s.amount, 0) + data.merges.reduce((sum, m) => sum + m.amount, 0);
       const totalRedeemed = data.redeems.reduce((sum, r) => sum + r.amount, 0);
       const avgBuyPrice = data.buys.length > 0 
         ? data.buys.reduce((sum, b) => sum + b.price, 0) / data.buys.length 
@@ -8464,8 +8472,16 @@ async function getWalletPnL(address) {
       const position = positions.find(p => p.slug === market || p.conditionId === market);
       const hasPosition = position && parseFloat(position.size || 0) > 0;
       
-      // Check if market appears to be settled even if position shows as "open"
-      const likelySettled = isMarketLikelySettled(data.title, data.slug, position);
+      // Resolved when the position says so: redeemable, priced at 1, or
+      // priced at 0 past its end date. The title/date heuristic alone
+      // called every game played TODAY settled (a date at midnight is
+      // already in the past), booking live positions as losses, or as
+      // "wins" that lost money.
+      const posPrice = parseFloat(position?.curPrice || position?.currentPrice || 0);
+      const endDate = position?.endDate ? String(position.endDate).slice(0, 10) : null;
+      const endPast = endDate ? endDate < new Date().toISOString().slice(0, 10) : false;
+      const resolvedByPosition = hasPosition && (position.redeemable === true || posPrice >= 0.99 || (posPrice <= 0.01 && endPast));
+      const likelySettled = hasPosition ? resolvedByPosition : isMarketLikelySettled(data.title, data.slug, position);
       const isOpen = hasPosition && !likelySettled;
       
       if (totalRedeemed > 0) {
@@ -8507,17 +8523,21 @@ async function getWalletPnL(address) {
         
         // If current value is significantly positive or price is near 100%, it's likely a win they haven't redeemed
         if (currentValue > totalBought * 0.5 || currentPrice >= 0.95) {
-          // Likely an unredeemed WIN
+          // Unredeemed, resolved: the result is the net profit (a wallet that
+          // bought both sides can hold the winner and still be net down).
           const profit = currentValue - totalBought + totalSold;
           if (profit > 0) {
             totalWins += profit;
             winCount++;
+          } else {
+            totalLosses += Math.abs(profit);
+            lossCount++;
           }
           resolvedBets.push({
             market: data.title,
             marketSlug: data.slug,
             outcome: data.outcome,
-            result: 'WIN',
+            result: profit > 0 ? 'WIN' : 'LOSS',
             invested: Math.round(totalBought),
             returned: Math.round(currentValue + totalSold),
             profit: Math.round(profit),
@@ -8622,7 +8642,10 @@ async function getWalletPnL(address) {
         // how much of the wallet the record covers.
         skill: onChainSkill(resolvedBets),
         positionsOnFile: positions.length,
-        window: "last 500 trades"
+        window: "last 500 trades",
+        // Rebuilt from the activity feed (buys, sells, merges, splits,
+        // redeems) and the positions on file; an estimate, not a statement.
+        method: "estimate"
       },
       resolvedBets: resolvedBets.slice(0, 50),
       openBets: openBets.slice(0, 20)
