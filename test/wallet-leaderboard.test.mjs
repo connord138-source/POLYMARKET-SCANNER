@@ -1,5 +1,5 @@
 // Top wallets list: KV records merged with the D1 skill ledger. Run with: node test/wallet-leaderboard.test.mjs
-import { buildWalletLeaderboard } from "../src/wallet-ledger.js";
+import { buildWalletLeaderboard, onChainSkill } from "../src/wallet-ledger.js";
 let pass = 0, fail = 0;
 const check = (n, c, x) => { if (c) pass++; else { fail++; console.error("FAIL:", n, x ?? ""); } };
 
@@ -39,6 +39,15 @@ check("ledger-only wallet: no tier, record from the ledger", old && old.tier ===
 check("untrusted skill rides along but does not rank the wallet or replace its KV record", rows[4].address === "0xfew" && rows[4].skill.n === 3 && rows[4].record === "3W-0L" && !rows[4].kv);
 check("limit applies", buildWalletLeaderboard(kvRows, ledger, { minN: 10, limit: 2 }).length === 2);
 check("empty inputs", buildWalletLeaderboard([], []).length === 0 && buildWalletLeaderboard(null, undefined).length === 0);
+
+const bets = [
+  { result: "WIN", avgPrice: 40 }, { result: "WIN", avgPrice: 50 }, { result: "LOSS", avgPrice: 60 }, { result: "WIN", avgPrice: 30 },
+  { result: "LOSS", avgPrice: 0 },          // no price: skipped
+  { result: "OPEN", avgPrice: 55 },         // not settled: skipped
+];
+const oc = onChainSkill(bets);
+check("onChainSkill: win rate minus average price over priced settled rows", oc && oc.n === 4 && oc.winRate === 75 && oc.avgPrice === 45 && oc.excess === 30, oc);
+check("onChainSkill: minimum rows and empty input", onChainSkill(bets, 5) === null && onChainSkill([]) === null && onChainSkill(null) === null);
 
 console.log(`wallet-leaderboard: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

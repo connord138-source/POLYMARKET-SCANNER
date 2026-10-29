@@ -162,6 +162,34 @@ export async function topWallets(env, limit = 25, minN = LEDGER_MIN_N, { worst =
   return res.results || [];
 }
 
+// One wallet's skill row over every settled signal bet (same shape as a
+// topWallets row, no minimum): null when the ledger has never seen it.
+export async function walletSkill(env, address) {
+  const a = norm(address);
+  if (!env.DB || !a) return null;
+  const res = await env.DB.prepare(
+    `WITH h AS (SELECT sl.market_slug || '|' || sl.direction_raw k, MAX(sl.outcome='WIN') win, AVG(sl.avg_entry_price) px ` +
+    `FROM signal_wallets sw JOIN signals_log sl ON sl.id = sw.signal_id WHERE sw.wallet = ?1 AND sl.outcome IN ('WIN','LOSS') GROUP BY k) ` +
+    `SELECT COUNT(*) n, ROUND(100.0*AVG(win),1) wr, ROUND(AVG(px),1) px, ROUND(100.0*AVG(win) - AVG(px),1) excess FROM h`
+  ).bind(a).first();
+  if (!res || !res.n) return null;
+  return { n: res.n, winRate: res.wr, avgPrice: res.px, excess: res.excess };
+}
+
+// The same score from a wallet's own on-chain record (the resolved markets
+// getWalletPnL builds from the data-api activity feed): one row per market,
+// `result` WIN/LOSS, `avgPrice` the average buy price in cents. Markets
+// without a price are skipped. Pure; null under `minN` rows.
+export function onChainSkill(resolvedBets, minN = 1) {
+  const rows = (resolvedBets || []).filter(b => b && (b.result === 'WIN' || b.result === 'LOSS') && b.avgPrice > 0 && b.avgPrice < 100);
+  if (rows.length < Math.max(1, minN)) return null;
+  const n = rows.length;
+  const wins = rows.filter(b => b.result === 'WIN').length;
+  const winRate = Math.round(1000 * wins / n) / 10;
+  const avgPrice = Math.round(10 * rows.reduce((s, b) => s + b.avgPrice, 0) / n) / 10;
+  return { n, winRate, avgPrice, excess: Math.round(10 * (winRate - avgPrice)) / 10 };
+}
+
 // The Top wallets list: the KV running records (wallet:{addr}, what the
 // scanner has seen a wallet do since it was first tracked) merged with the
 // D1 skill ledger above (topWallets rows { wallet, n, wr, px, excess }).

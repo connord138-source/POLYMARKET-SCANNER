@@ -21,7 +21,7 @@ import {
   computeFavoritesExperiment, updateExecQueueItem
 } from "./src/autotrader.js";
 import { runForge, maybeRunForge, getForgeReport } from "./src/forge.js";
-import { logSignalWallets, backfillWalletLedger, topWallets, buildWalletLeaderboard, LEDGER_MIN_N } from "./src/wallet-ledger.js";
+import { logSignalWallets, backfillWalletLedger, topWallets, buildWalletLeaderboard, walletSkill, onChainSkill, LEDGER_MIN_N } from "./src/wallet-ledger.js";
 import { trackSpeed, updateSpeed, speedReport } from "./src/speed.js";
 import { buildAgentHub } from "./src/agent-hub.js";
 import { handleCrewOrder, runCrewHunt, getCrewState, saveBrowserDkBoard, answerPendingCrewChat } from "./src/crew.js";
@@ -5582,18 +5582,21 @@ export default {
           });
         }
         
-        const stats = await getWalletStats(env, address);
-        if (!stats) {
-          return new Response(JSON.stringify({ 
-            success: false, 
-            message: "Wallet not tracked yet. Stats will appear after placing significant bets." 
-          }), {
-            headers: { ...corsHeaders, "Content-Type": "application/json" }
-          });
-        }
-        
-        return new Response(JSON.stringify({ success: true, wallet: stats }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        // KV running record (only wallets that bet $1k+ on a signal) plus the
+        // ledger skill row (every wallet on a settled signal). `wallet` is
+        // null when KV never tracked the address; `skill` null when the
+        // ledger has never seen it.
+        const [stats, skill] = await Promise.all([
+          getWalletStats(env, address),
+          walletSkill(env, address).catch(() => null)
+        ]);
+        return atJson({
+          success: true,
+          tracked: !!stats,
+          wallet: stats || null,
+          skill,
+          minN: LEDGER_MIN_N,
+          ...(stats ? {} : { message: "Wallet not tracked yet. Stats will appear after placing significant bets." })
         });
       }
       
@@ -8317,22 +8320,35 @@ async function getWalletPositions(address) {
 }
 
 // Get closed positions (resolved bets) and calculate PnL
+// Every position the data-api holds for a wallet. The endpoint pages at
+// 500 (and answered 100 with no limit at all): a long-shot sprayer can hold
+// 900+ resolved positions, and a market whose position fell off the page
+// used to be read as "no position" and written down as a loss.
+async function fetchAllPositions(address, maxPages = 4) {
+  const out = [];
+  for (let page = 0; page < maxPages; page++) {
+    const res = await fetch(`${POLYMARKET_API}/positions?user=${address}&limit=500&offset=${page * 500}`);
+    if (!res.ok) break;
+    const rows = await res.json();
+    if (!Array.isArray(rows) || rows.length === 0) break;
+    out.push(...rows);
+    if (rows.length < 500) break;
+  }
+  return out;
+}
+
 async function getWalletPnL(address) {
   try {
     // Fetch all activity to analyze bets
-    const [activityRes, positionsRes] = await Promise.all([
+    const [activityRes, positions] = await Promise.all([
       fetch(`${POLYMARKET_API}/activity?user=${address}&limit=500`),
-      fetch(`${POLYMARKET_API}/positions?user=${address}`)
+      fetchAllPositions(address).catch(() => [])
     ]);
     
     let activity = [];
-    let positions = [];
     
     if (activityRes.ok) {
       activity = await activityRes.json() || [];
-    }
-    if (positionsRes.ok) {
-      positions = await positionsRes.json() || [];
     }
     
     // Group activity by market to track full bet lifecycle
@@ -8378,6 +8394,7 @@ async function getWalletPnL(address) {
     let totalLosses = 0;
     let winCount = 0;
     let lossCount = 0;
+    let unknownCount = 0;   // bought, never redeemed, no position, not sold out: not classified
     
     // Helper function to check if market is likely settled based on title/date
     const isMarketLikelySettled = (title, slug, position) => {
@@ -8476,7 +8493,14 @@ async function getWalletPnL(address) {
           icon: data.icon
         });
       } else if (!isOpen && totalBought > 0 && totalRedeemed === 0) {
-        // Market is settled (no position or likelySettled) with no redeem
+        // Market is settled (no position or likelySettled) with no redeem.
+        // With no position on file and the stake not sold out, the result is
+        // simply unknown (dust under the API's size floor, a transfer); it
+        // used to be written down as a loss.
+        if (!position && totalSold < totalBought * 0.5) {
+          unknownCount++;
+          continue;
+        }
         // Check if this might be an unredeemed WIN based on current value
         const currentValue = parseFloat(position?.currentValue || position?.value || 0);
         const currentPrice = parseFloat(position?.curPrice || position?.currentPrice || 0);
@@ -8591,7 +8615,14 @@ async function getWalletPnL(address) {
         winCount,
         lossCount,
         winRate: winCount + lossCount > 0 ? Math.round((winCount / (winCount + lossCount)) * 100) : 0,
-        openPositions: openBets.length
+        openPositions: openBets.length,
+        unknownCount,
+        // Skill the same way the ledger scores a wallet: win rate minus the
+        // average price paid, over these resolved markets. Positions on file:
+        // how much of the wallet the record covers.
+        skill: onChainSkill(resolvedBets),
+        positionsOnFile: positions.length,
+        window: "last 500 trades"
       },
       resolvedBets: resolvedBets.slice(0, 50),
       openBets: openBets.slice(0, 20)
