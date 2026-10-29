@@ -10,11 +10,11 @@ export const PLANS = {
   },
   pro: {
     name: 'Pro', priceMonthly: 29, foundingMonthly: 19, priceAnnual: 149,
-    features: { signalsDelayMin: 0, signalsMax: null, alerts: true, dkBoardLive: true, crewRead: true, crewOrdersPerDay: 20, intel: 'full', api: false, cryptoLabRows: null, tradeRouting: true },
+    features: { signalsDelayMin: 0, signalsMax: null, alerts: true, dkBoardLive: true, crewRead: true, crewOrdersPerDay: 0, intel: 'full', api: false, cryptoLabRows: null, tradeRouting: true },
   },
   desk: {
     name: 'Desk', priceMonthly: 49, priceAnnual: 399,
-    features: { signalsDelayMin: 0, signalsMax: null, alerts: true, dkBoardLive: true, crewRead: true, crewOrdersPerDay: null, intel: 'full', api: true, cryptoLabRows: null, tradeRouting: true },
+    features: { signalsDelayMin: 0, signalsMax: null, alerts: true, dkBoardLive: true, crewRead: true, crewOrdersPerDay: 0, intel: 'full', api: true, cryptoLabRows: null, tradeRouting: true },
   },
 };
 export const PLAN_RANK = { free: 0, pro: 1, desk: 2 };
@@ -42,7 +42,10 @@ export const ROUTE_POLICY = [
   { test: (p) => p === '/scan' || p === '/api/scan', tier: 'free', degrade: 'scan' },
   { test: (p) => p === '/crypto/fairvalue', tier: 'free', degrade: 'cryptoFv' },
   { test: (p) => p === '/agents/crew', tier: 'free', degrade: 'crew' },
-  { test: (p, m) => p.startsWith('/agents/crew/') && m === 'POST', tier: 'pro' },
+  // Crew orders and chat are the owner's alone: requiresAdmin() in index.js
+  // answers 401 to any POST under /agents/crew without the admin token, before
+  // this table is consulted. Members read the crew (`crewRead`), nothing more.
+  { test: (p, m) => p.startsWith('/agents/crew/') && m === 'POST', tier: 'desk' },
   { test: (p) => p.startsWith('/agents/'), tier: 'pro' },
   { test: (p) => p.startsWith('/alerts') || p.startsWith('/fade') || p.startsWith('/whale'), tier: 'pro' },
   { test: (p) => p.startsWith('/odds') || p.startsWith('/edge') || p.startsWith('/sweep') || p.startsWith('/lines'), tier: 'pro' },
