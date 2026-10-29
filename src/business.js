@@ -50,6 +50,41 @@ export async function supabaseUserStats(env, nowMs = Date.now()) {
   } catch (e) { return { configured: true, error: e.message.slice(0, 80) }; }
 }
 
+// Every account with its plan, for the Admin page's members list: the owner
+// needs the Supabase auth id to comp someone. Users come from the auth admin
+// API (service role), plans from the entitlement rows in KV. `q` filters by
+// email or id; newest accounts first.
+export async function listUsers(env, { q = '', limit = 200, nowMs = Date.now() } = {}) {
+  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) return { success: true, configured: false, users: [], total: 0 };
+  const base = String(env.SUPABASE_URL).replace(/\/$/, '');
+  const headers = { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}` };
+  const users = [];
+  for (let page = 1; page <= 5; page++) {
+    const res = await fetch(`${base}/auth/v1/admin/users?page=${page}&per_page=1000`, { headers });
+    if (!res.ok) return { success: false, configured: true, error: `supabase ${res.status}`, users: [], total: 0 };
+    const data = await res.json();
+    const got = data.users || [];
+    users.push(...got);
+    if (got.length < 1000) break;
+  }
+  const ents = new Map();
+  for (const e of await listEntitlements(env)) if (e && e.userId) ents.set(e.userId, e);
+  const needle = String(q || '').trim().toLowerCase();
+  const rows = users
+    .filter(u => !needle || String(u.email || '').toLowerCase().includes(needle) || String(u.id || '').toLowerCase().includes(needle))
+    .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))
+    .slice(0, Math.max(1, Math.min(1000, Number(limit) || 200)))
+    .map(u => {
+      const e = ents.get(u.id);
+      return {
+        id: u.id, email: u.email || null, createdAt: u.created_at || null, lastSignInAt: u.last_sign_in_at || null,
+        confirmed: !!(u.email_confirmed_at || u.confirmed_at),
+        plan: planOf(e, nowMs), status: e ? e.status || null : null, periodEnd: e ? e.currentPeriodEnd || null : null, founding: !!(e && e.founding),
+      };
+    });
+  return { success: true, configured: true, total: users.length, shown: rows.length, users: rows };
+}
+
 export async function businessReport(env, nowMs = Date.now()) {
   const ents = await listEntitlements(env);
   const byPlan = { free: 0, pro: 0, desk: 0 }; let mrr = 0, founding = 0, pastDue = 0, cancelAtEnd = 0, comped = 0;
