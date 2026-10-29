@@ -5076,7 +5076,7 @@ export default {
             // Records cached before the window span was stored carry no money
             // (the span is what says whether the figure means anything); they
             // refresh within a day.
-            r.onChain = c && c.skill ? { ...c.skill, wins: c.winCount, losses: c.lossCount, pnl: typeof c.windowDays === "number" ? c.totalPnL : null, open: c.openPositions, window: c.window, windowDays: c.windowDays ?? null, at: c.at } : null;
+            r.onChain = c && c.skill ? { ...c.skill, wins: c.winCount, losses: c.lossCount, pnl: typeof c.windowDays === "number" ? c.totalPnL : null, open: c.openPositions, window: c.window, windowDays: c.windowDays ?? null, official: c.official || null, at: c.at } : null;
           });
         }
         const out = {
@@ -8358,7 +8358,8 @@ async function refreshOnChainSkill(env, perRun = 6) {
       const sm = pnl.summary;
       await env.SIGNALS_CACHE.put(`wallet_onchain:${a}`, JSON.stringify({
         at: new Date().toISOString(), skill: sm.skill || null, totalPnL: sm.totalPnL, winCount: sm.winCount, lossCount: sm.lossCount,
-        openPositions: sm.openPositions, unknownCount: sm.unknownCount, window: sm.window, windowDays: sm.windowDays
+        openPositions: sm.openPositions, unknownCount: sm.unknownCount, window: sm.window, windowDays: sm.windowDays,
+        official: sm.official ? { lifetime: sm.official.lifetime, pnl30d: sm.official.pnl30d, pnl7d: sm.official.pnl7d, ageDays: sm.official.ageDays, since: sm.official.since, volume: sm.official.volume, record: sm.official.record, deadLegs: sm.official.deadLegs } : null
       }), { expirationTtl: 72 * 60 * 60 });
       index[a] = new Date().toISOString();
       refreshed++;
@@ -8367,6 +8368,64 @@ async function refreshOnChainSkill(env, perRun = 6) {
   for (const k of Object.keys(index)) if (!addrs.includes(k) && now - Date.parse(index[k]) > 7 * ONCHAIN_MAX_AGE_MS) delete index[k];
   await env.SIGNALS_CACHE.put("wallet_onchain_index", JSON.stringify(index), { expirationTtl: 30 * 24 * 60 * 60 });
   return { wallets: addrs.length, due: due.length, refreshed, failed };
+}
+
+// Polymarket's own profit series for a wallet, the figure its profile shows:
+// cumulative daily points since the first trade. economic_pnl is the
+// profile's Total P&L (realized + unrealized + rebates + rewards - fees).
+// The activity-feed rebuild below is an estimate over a window; this is
+// the venue's own book over the account's life. Null when unavailable.
+async function getWalletOfficialPnL(address) {
+  const res = await fetch(`${POLYMARKET_API}/v2/user-pnl?user=${address}&interval=all&fidelity=1d`);
+  if (!res.ok) return null;
+  const d = await res.json();
+  const pts = d && d.data && d.data.points;
+  if (!Array.isArray(pts) || !pts.length) return null;
+  const tot = (p) => (typeof p.economic_pnl === "number" ? p.economic_pnl : (p.realized_market_pnl || 0) + (p.unrealized_pnl || 0));
+  const last = pts[pts.length - 1];
+  const now = last.timestamp;
+  const at = (days) => { let v = 0; for (const p of pts) { if (p.timestamp <= now - days * 86400) v = tot(p); else break; } return v; };
+  const lifetime = tot(last);
+  const r = (x) => Math.round(x);
+  return {
+    lifetime: r(lifetime), realized: r(last.realized_market_pnl || 0), unrealized: r(last.unrealized_pnl || 0),
+    pnl30d: r(lifetime - at(30)), pnl7d: r(lifetime - at(7)), pnl1d: r(lifetime - at(1)),
+    volume: r(last.volume || 0), trades: last.trade_count || null,
+    since: new Date(pts[0].timestamp * 1000).toISOString().slice(0, 10),
+    ageDays: Math.max(1, Math.round((now - pts[0].timestamp) / 86400)),
+    at: new Date(now * 1000).toISOString()
+  };
+}
+
+// Polymarket's closed positions (sold or redeemed; 50 a page): wins and
+// losses by realized P&L. A losing leg that resolved to zero is never
+// "closed" (there is nothing to redeem) and stays on the positions list
+// at $0, which is why a winning account's Active tab can look like a
+// graveyard; the lifetime record adds those from the positions on file.
+async function getWalletClosedRecord(address, maxPages = 8) {
+  let wins = 0, losses = 0, won = 0, lost = 0, n = 0, truncated = false;
+  for (let page = 0; page < maxPages; page++) {
+    const res = await fetch(`${POLYMARKET_API}/closed-positions?user=${address}&limit=50&offset=${page * 50}`);
+    if (!res.ok) break;
+    const rows = await res.json();
+    if (!Array.isArray(rows) || !rows.length) break;
+    for (const c of rows) {
+      const pnl = parseFloat(c.realizedPnl) || 0;
+      n++;
+      if (pnl > 0) { wins++; won += pnl; } else if (pnl < 0) { losses++; lost += -pnl; }
+    }
+    if (rows.length < 50) break;
+    if (page === maxPages - 1) truncated = true;
+  }
+  return { closed: n, wins, losses, won: Math.round(won), lost: Math.round(lost), truncated };
+}
+
+// A resolved losing leg still sitting on the positions list at $0.
+function isDeadLeg(p) {
+  const cp = parseFloat(p.curPrice || p.currentPrice || 0);
+  if (cp > 0.01) return false;
+  const end = p.endDate ? String(p.endDate).slice(0, 10) : null;
+  return p.redeemable === true || (end ? end < new Date().toISOString().slice(0, 10) : false);
 }
 
 // Every position the data-api holds for a wallet. The endpoint pages at
@@ -8388,10 +8447,12 @@ async function fetchAllPositions(address, maxPages = 4) {
 
 async function getWalletPnL(address) {
   try {
-    // Fetch all activity to analyze bets
-    const [activityRes, positions] = await Promise.all([
+    // Fetch all activity to analyze bets, plus the venue's own book
+    const [activityRes, positions, official, closedRec] = await Promise.all([
       fetch(`${POLYMARKET_API}/activity?user=${address}&limit=500`),
-      fetchAllPositions(address).catch(() => [])
+      fetchAllPositions(address).catch(() => []),
+      getWalletOfficialPnL(address).catch(() => null),
+      getWalletClosedRecord(address).catch(() => null)
     ]);
     
     let activity = [];
@@ -8450,6 +8511,7 @@ async function getWalletPnL(address) {
     let winCount = 0;
     let lossCount = 0;
     let unknownCount = 0;   // bought, never redeemed, no position, not sold out: not classified
+    let bothSides = 0, marketsBought = 0;
     
     // Helper function to check if market is likely settled based on title/date
     const isMarketLikelySettled = (title, slug, position) => {
@@ -8508,6 +8570,9 @@ async function getWalletPnL(address) {
     };
     
     for (const [market, data] of Object.entries(marketBets)) {
+      // Both sides of one market bought: a market maker's signature.
+      if (new Set(data.buys.map(b => b.outcome).filter(Boolean)).size > 1) bothSides++;
+      marketsBought++;
       // A market maker buys both sides and merges the pairs back into cash;
       // that cash used to be invisible, so every such market read as a loss.
       const totalBought = data.buys.reduce((sum, b) => sum + b.amount, 0) + data.splits.reduce((sum, b) => sum + b.amount, 0);
@@ -8703,7 +8768,17 @@ async function getWalletPnL(address) {
         activityCount: activity.length,
         // Rebuilt from the activity feed (buys, sells, merges, splits,
         // redeems) and the positions on file; an estimate, not a statement.
-        method: "estimate"
+        method: "estimate",
+        bothSides, marketsBought,
+        // Polymarket's own book: lifetime / 30d / 7d / 1d P&L, account age,
+        // and the lifetime record from closed positions plus the losing legs
+        // still on the positions list at $0.
+        official: official ? (() => {
+          const dead = positions.filter(isDeadLeg);
+          const deadCost = Math.round(dead.reduce((sum, p) => sum + (parseFloat(p.initialValue) || 0), 0));
+          const record = closedRec && !closedRec.truncated ? { wins: closedRec.wins, losses: closedRec.losses + dead.length } : null;
+          return { ...official, closed: closedRec, deadLegs: dead.length, deadLegsCost: deadCost, record };
+        })() : null
       },
       resolvedBets: resolvedBets.slice(0, 50),
       openBets: openBets.slice(0, 20)
