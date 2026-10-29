@@ -1,0 +1,31 @@
+name: Push Odds API Key
+
+# Pushes the ODDS_API_KEY GitHub repo secret into the worker as a wrangler
+# secret, same pattern as Push Anthropic Key. Use it when the key changes or
+# the plan is renewed: add or update the repo secret first (Settings >
+# Secrets and variables > Actions > ODDS_API_KEY = the key from
+# the-odds-api.com, Account), then run this. The sportsbook feed, the edge
+# scanner and the crew's pricing pick the new key up on the next request;
+# the edge scanner resumes once the key reports 150+ credits remaining.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  push-key:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Push ODDS_API_KEY repo secret into the worker
+        env:
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$ODDS_API_KEY" ]; then
+            echo "::error::ODDS_API_KEY repo secret is not set. Add it under Settings > Secrets and variables > Actions (value = your key from the-odds-api.com), then re-run this workflow."
+            exit 1
+          fi
+          printf '%s' "$ODDS_API_KEY" | npx wrangler@4 secret put ODDS_API_KEY
+          echo "Key pushed. The next sportsbook request uses it; crew.oddsApi.remaining in status/backend.json shows the new credit count."

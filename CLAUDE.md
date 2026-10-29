@@ -188,7 +188,11 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   mint entitlements or burn founding seats), and `STRIPE_PORTAL_CONFIG` is
   EdgeRunner's own Customer Portal configuration. SpecScan's webhook sees
   EdgeRunner events too but matches no profile row, which is harmless.
-- `src/odds.js` — The Odds API client (KV-cached; `ODDS_API_KEY` secret).
+- `src/odds.js` — The Odds API client (KV-cached; `ODDS_API_KEY` secret, pushed
+  by `.github/workflows/push-odds-api-key.yml` from the repo secret of the same
+  name). The edge scanner pauses under 150 credits remaining (`crew.oddsApi`
+  in the snapshot shows the count); the Oct 29 2026 key read 48 of 500 (free
+  tier) until the owner renewed the 20k plan.
 - `src/gamma.js` — Gamma API settlement (`findGammaMarket` handles
   closed markets + multi-market moneyline preference).
 - D1 database `polymarket-scanner` — settled signals (`signals` table);
