@@ -4220,7 +4220,9 @@ async function alertEdgeOpportunities(env, opps) {
 // flip, the other team of an "A vs. B" title, else "Against <side>".
 function fadeSideOf(sig) {
   const d = String(sig.direction || "").trim();
-  if (sig.fadeAlert && sig.fadeAlert.fadeDirection) return sig.fadeAlert.fadeDirection;
+  // The older KV alert flips the RAW yes/no, while `direction` here is the
+  // display side ("Bucks"), so its answer only applies when the display
+  // side is itself a yes/no.
   if (/^yes$/i.test(d)) return "NO";
   if (/^no$/i.test(d)) return "YES";
   if (/^over\b/i.test(d)) return d.replace(/^over/i, "Under");
@@ -4236,7 +4238,21 @@ function fadeSideOf(sig) {
     if (a.toLowerCase().includes(d.toLowerCase()) || d.toLowerCase().includes(a.toLowerCase())) return b;
     if (b.toLowerCase().includes(d.toLowerCase()) || d.toLowerCase().includes(b.toLowerCase())) return a;
   }
+  if (sig.fadeAlert && sig.fadeAlert.fadeDirection && /^(yes|no)$/i.test(sig.fadeAlert.fadeDirection) && !d) return String(sig.fadeAlert.fadeDirection).toUpperCase();
   return d ? `Against ${d}` : "The other side";
+}
+
+// A signal whose market has already closed: the event started (the
+// scanner's own countdown) or the date in its slug or title is past.
+function fadeMarketIsOver(sig, nowMs = Date.now()) {
+  if (typeof sig.hoursUntilEvent === "number" && sig.hoursUntilEvent <= 0) return true;
+  const m = String(sig.marketSlug || "").match(/(\d{4})-(\d{2})-(\d{2})/) || String(sig.marketTitle || "").match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (m) {
+    // the slug date is the game's UTC date; treat it as over a day later
+    const dayEnd = Date.UTC(+m[1], +m[2] - 1, +m[3]) + 36 * 3600 * 1000;
+    if (dayEnd < nowMs) return true;
+  }
+  return false;
 }
 
 function adaptSignalForAutotrader(signal) {
@@ -6947,6 +6963,7 @@ export default {
             const hits = walletsFromSignal(sig).filter(w => fadeRows.has(w.wallet) && w.usd >= MIN_FADE_USD).map(w => ({ ...w, row: fadeRows.get(w.wallet) })).sort((a, b) => a.row.excess - b.row.excess);
             const kvFade = sig.fadeAlert && sig.fadeAlert.isFade ? sig.fadeAlert : null;
             if (!hits.length && !kvFade) continue;
+            if (fadeMarketIsOver(sig)) continue;   // the 48h signal cache keeps games already played
             const hit = hits[0] || null;
             const paid = typeof sig.avgEntryPrice === "number" ? Math.round(sig.avgEntryPrice) : null;
             fades.push({
