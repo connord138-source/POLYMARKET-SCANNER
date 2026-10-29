@@ -45,7 +45,7 @@ export const ROUTE_POLICY = [
   // Crew orders and chat are the owner's alone: requiresAdmin() in index.js
   // answers 401 to any POST under /agents/crew without the admin token, before
   // this table is consulted. Members read the crew (`crewRead`), nothing more.
-  { test: (p, m) => p.startsWith('/agents/crew/') && m === 'POST', tier: 'desk' },
+  { test: (p, m) => p.startsWith('/agents/crew/') && m === 'POST', tier: 'pro' },
   { test: (p) => p.startsWith('/agents/'), tier: 'pro' },
   { test: (p) => p.startsWith('/alerts') || p.startsWith('/fade') || p.startsWith('/whale'), tier: 'pro' },
   { test: (p) => p.startsWith('/odds') || p.startsWith('/edge') || p.startsWith('/sweep') || p.startsWith('/lines'), tier: 'pro' },
