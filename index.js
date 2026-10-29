@@ -3709,7 +3709,13 @@ async function buildOddsComparison(env, sport) {
     const match = slug.match(/^(nba|nfl|mlb|nhl|wnba|ncaab|ncaaf|cfb)-([a-z0-9]+)-([a-z0-9]+)-(\d{4}-\d{2}-\d{2})/i);
     if (!match) continue;
     const gameKey = `${match[2]}-${match[3]}-${match[4]}`.toLowerCase();
-    const isSpread = slug.includes('-spread');
+    // Only the game's own moneyline market (its slug IS the event slug) or a spread market.
+    // Totals, team totals, halves and the other sub-markets share the event slug and used
+    // to land in the moneyline bucket (a Panthers +9.5 print at 13c read as "Panthers 13c").
+    const marketSlug = String(trade.slug || slug).toLowerCase();
+    const isSpread = marketSlug.includes('-spread');
+    if (!isSpread && marketSlug !== String(slug).toLowerCase()) continue;
+    const ts = Number(trade.timestamp) || 0;
     const price = parseFloat(trade.price) * 100;
     const outcome = trade.outcome || '';
     if (!polyPrices[gameKey]) {
@@ -3733,8 +3739,9 @@ async function buildOddsComparison(env, sport) {
       else if (homeWords.some(w => w.length > 3 && outcomeLower.includes(w))) isHomeTeam = true;
     }
     const bucket = isSpread ? polyPrices[gameKey].spread : polyPrices[gameKey].moneyline;
-    if (isAwayTeam) bucket.away = { price: Math.round(price), slug, team: outcome };
-    else if (isHomeTeam) bucket.home = { price: Math.round(price), slug, team: outcome };
+    // the feed is newest first; keep the newest print, never the oldest
+    if (isAwayTeam) { if (!bucket.away || ts >= (bucket.away.ts || 0)) bucket.away = { price: Math.round(price), slug, team: outcome, ts }; }
+    else if (isHomeTeam) { if (!bucket.home || ts >= (bucket.home.ts || 0)) bucket.home = { price: Math.round(price), slug, team: outcome, ts }; }
     else {
       // College codes (cfb-jaxst-ndkst) aren't in TEAM_ALIASES, so the
       // outcome label can't be classified from the slug. Stash it — the
@@ -3858,19 +3865,21 @@ async function annotateVenues(env, sport, games) {
     try { usEvents[league] = await fetchUsLeagueEvents(env, league); } catch (e) { /* venue down: no US column */ }
   }
   await Promise.all(games.map(async (g) => {
-    if (!g.hasPolymarket) {
-      try {
-        const gm = await gammaGameMoneyline(env, sport, g, { teamNamesOverlap });
-        if (gm) {
-          g.polymarket = { moneyline: gm.moneyline, spread: { home: null, away: null }, lastUpdate: nowIso, source: 'gamma', url: gm.url };
-          g.hasPolymarket = true;
-          g.edge = edgesAgainstVegas(g, gm.moneyline.home, gm.moneyline.away);
-        }
-      } catch (e) { /* Gamma unreachable: the card says no data, as before */ }
-    } else if (g.polymarket && !g.polymarket.url) {
+    // Global Polymarket: Gamma's live moneyline is the price people see on the site, so it
+    // is the price here for every game. The trade tape (the last whale print, possibly hours
+    // old) only fills in when Gamma has nothing, and says so.
+    let live = null;
+    try { live = await gammaGameMoneyline(env, sport, g, { teamNamesOverlap }); } catch (e) { /* Gamma unreachable */ }
+    if (live && (live.moneyline.home || live.moneyline.away)) {
+      const spread = g.polymarket && g.polymarket.spread ? g.polymarket.spread : { home: null, away: null };
+      const lastTrade = g.polymarket && g.polymarket.moneyline ? g.polymarket.moneyline : null;
+      g.polymarket = { moneyline: live.moneyline, spread, lastUpdate: nowIso, source: 'gamma', url: live.url, lastTrade };
+      g.hasPolymarket = true;
+      g.edge = edgesAgainstVegas(g, live.moneyline.home, live.moneyline.away);
+    } else if (g.hasPolymarket && g.polymarket) {
       const ml = g.polymarket.moneyline || {};
       const slug = (ml.home && ml.home.slug) || (ml.away && ml.away.slug) || '';
-      if (slug) g.polymarket.url = `https://polymarket.com/event/${slug.replace(/-spread.*$/, '')}`;
+      if (slug && !g.polymarket.url) g.polymarket.url = `https://polymarket.com/event/${slug.replace(/-spread.*$/, '')}`;
       g.polymarket.source = 'trades';
     }
     g.hasPolymarketUs = false;
