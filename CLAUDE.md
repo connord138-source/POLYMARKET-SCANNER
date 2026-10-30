@@ -222,6 +222,17 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   `buildWalletLeaderboard`, KV-cached two minutes. The page had asked for that
   path since it shipped while only `/learning/leaderboard` existed, so it read
   empty.
+- `src/wallet-book.js` — a wallet's recent book rebuilt from its last 500
+  data-api activities plus the positions on file (`rebuildWalletBook`, pure;
+  `getWalletPnL` in index.js fetches and adds Polymarket's own book from
+  `/v2/user-pnl`). Polymarket never lists a losing leg under Closed: it stays
+  on Active at $0, or, when the wallet redeems the condition, shows in the
+  feed as a `REDEEM` that paid $0 and is burned (nothing left on file). Oct 30
+  2026: a wallet whose book read -$2.8k lifetime read +$78k here until $0
+  redeems counted as losses (`zeroRedeems`); a redeem whose buys fell before
+  the window is `outsideWindow`, sold-out markets settle on the sale. The
+  pages show the book's money and this module's record and skill (win rate
+  minus average price); its dollars appear only when the book is missing.
 - `src/gamma.js` — Gamma API settlement (`findGammaMarket` handles
   closed markets + multi-market moneyline preference).
 - D1 database `polymarket-scanner` — settled signals (`signals` table);
