@@ -22,7 +22,7 @@ import {
 } from "./src/autotrader.js";
 import { runForge, maybeRunForge, getForgeReport } from "./src/forge.js";
 import { logSignalWallets, backfillWalletLedger, topWallets, buildWalletLeaderboard, walletSkill, onChainSkill, walletsFromSignal, LEDGER_MIN_N } from "./src/wallet-ledger.js";
-import { pollCopyWallets, getCopyState, addCopyWallet, removeCopyWallet, setCopyWalletEnabled, listCopyWallets } from "./src/copy.js";
+import { pollCopyWallets, getCopyState, addCopyWallet, removeCopyWallet, setCopyWalletEnabled, setCopyWalletMode, listCopyWallets, modeOf as copyModeOf } from "./src/copy.js";
 import { trackSpeed, updateSpeed, speedReport } from "./src/speed.js";
 import { buildAgentHub } from "./src/agent-hub.js";
 import { handleCrewOrder, runCrewHunt, getCrewState, saveBrowserDkBoard, answerPendingCrewChat } from "./src/crew.js";
@@ -5041,7 +5041,13 @@ export default {
       }
       if (path === "/agents/copy/wallets" && request.method === "POST") {
         const body = await request.json().catch(() => ({}));
-        const r = await addCopyWallet(env, { address: body.address, nickname: body.nickname });
+        const r = await addCopyWallet(env, { address: body.address, nickname: body.nickname, mode: body.mode }, Date.now(), { officialBook: getWalletOfficialPnL });
+        if (!r.ok) return atJson({ success: false, error: r.error }, 400);
+        return atJson(await getCopyState(env, { getTradeHistory, getOpenPositions, getAutotraderConfig, walletSkill }));
+      }
+      if (path === "/agents/copy/wallets/mode" && request.method === "POST") {
+        const body = await request.json().catch(() => ({}));
+        const r = await setCopyWalletMode(env, body.address, body.mode);
         if (!r.ok) return atJson({ success: false, error: r.error }, 400);
         return atJson(await getCopyState(env, { getTradeHistory, getOpenPositions, getAutotraderConfig, walletSkill }));
       }
@@ -5131,6 +5137,11 @@ export default {
           kvRows.push(...await Promise.all(addrs.slice(i, i + 25).map(a => getWalletStats(env, a))));
         }
         const rows = buildWalletLeaderboard(kvRows, ledger, { minN: LEDGER_MIN_N, limit: 120 });
+        // Which rows the operator follows or copies (src/copy.js).
+        try {
+          const followed = new Map((await listCopyWallets(env)).map(w => [w.address, copyModeOf(w)]));
+          for (const r of rows) r.followed = followed.get(r.address) || null;
+        } catch (e) {}
         // The wallet's everyday on-chain record, when the cron has pulled it
         // (refreshOnChainSkill): the page weighs it against the signal record.
         for (let i = 0; i < rows.length; i += 25) {
