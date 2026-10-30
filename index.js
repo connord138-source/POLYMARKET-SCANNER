@@ -23,7 +23,7 @@ import {
 import { runForge, maybeRunForge, getForgeReport } from "./src/forge.js";
 import { logSignalWallets, backfillWalletLedger, topWallets, buildWalletLeaderboard, walletSkill, onChainSkill, walletsFromSignal, LEDGER_MIN_N } from "./src/wallet-ledger.js";
 import { rebuildWalletBook } from "./src/wallet-book.js";
-import { annotateSignalWalletSkill } from "./src/signal-skill.js";
+import { annotateSignalWalletSkill, signalWalletsByMoney } from "./src/signal-skill.js";
 import { pollCopyWallets, getCopyState, addCopyWallet, removeCopyWallet, setCopyWalletEnabled, setCopyWalletMode, listCopyWallets, modeOf as copyModeOf, setCopyWalletSize, copySettingsUpdates } from "./src/copy.js";
 import { trackSpeed, updateSpeed, speedReport } from "./src/speed.js";
 import { buildAgentHub } from "./src/agent-hub.js";
@@ -8475,11 +8475,22 @@ async function getWalletPositions(address) {
 // holds each address's refresh time so a cron reads one key to pick work.
 var ONCHAIN_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 var ONCHAIN_V = 3;
+// The wallets behind the current signals join the queue (Oct 30 2026): their
+// on-chain record backs the Whale signals call within hours of a whale
+// appearing, instead of waiting for ten of its signals to settle. Largest
+// stake first, capped, with a fixed share of each run so the ranked list
+// still gets refreshed.
+var SIGNAL_WALLET_REFRESH_MAX = 60;
+var SIGNAL_WALLET_SLOTS = 4;
 async function refreshOnChainSkill(env, perRun = 6) {
   if (!env.SIGNALS_CACHE || !env.DB) return { skipped: "no DB/KV" };
   const [best, worst, copied] = await Promise.all([topWallets(env, 100, LEDGER_MIN_N), topWallets(env, 20, LEDGER_MIN_N, { worst: true }), listCopyWallets(env).catch(() => [])]);
-  // the copied wallets first: their page reads the book too
-  const addrs = [...new Set([...copied.map(w => w.address), ...[...best, ...worst].map(r => String(r.wallet).toLowerCase())])];
+  let signalWallets = [];
+  try { const sigs = await env.SIGNALS_CACHE.get("signals", { type: "json" }); signalWallets = signalWalletsByMoney(sigs, SIGNAL_WALLET_REFRESH_MAX); } catch (e) {}
+  const copiedAddrs = copied.map(w => String(w.address).toLowerCase());
+  const rankedAddrs = [...best, ...worst].map(r => String(r.wallet).toLowerCase());
+  // the copied wallets first: their page reads the book too; then the signal wallets; then the ranked list
+  const addrs = [...new Set([...copiedAddrs, ...signalWallets, ...rankedAddrs])];
   const index = await env.SIGNALS_CACHE.get("wallet_onchain_index", { type: "json" }) || {};
   const now = Date.now();
   // Index entries: { at, v }. v2 = the record carries the venue's book; v3 =
@@ -8489,8 +8500,11 @@ async function refreshOnChainSkill(env, perRun = 6) {
   const entAt = (e) => (e && typeof e === "object" ? e.at : e);
   const entV = (e) => (e && typeof e === "object" ? e.v || 1 : 1);
   const due = addrs.filter(a => !index[a] || entV(index[a]) < ONCHAIN_V || now - Date.parse(entAt(index[a])) > ONCHAIN_MAX_AGE_MS);
+  // each run: every due copied wallet, then up to SIGNAL_WALLET_SLOTS signal wallets, then the ranked list fills the rest
+  const copiedSet = new Set(copiedAddrs), signalSet = new Set(signalWallets.filter(a => !copiedSet.has(a)));
+  const run = [...due.filter(a => copiedSet.has(a)), ...due.filter(a => signalSet.has(a)).slice(0, SIGNAL_WALLET_SLOTS), ...due.filter(a => !copiedSet.has(a) && !signalSet.has(a))].slice(0, perRun);
   let refreshed = 0, failed = 0;
-  for (const a of due.slice(0, perRun)) {
+  for (const a of run) {
     try {
       const pnl = await getWalletPnL(a);
       if (!pnl || !pnl.success) { failed++; continue; }
@@ -8506,7 +8520,7 @@ async function refreshOnChainSkill(env, perRun = 6) {
   }
   for (const k of Object.keys(index)) if (!addrs.includes(k) && now - Date.parse(entAt(index[k])) > 7 * ONCHAIN_MAX_AGE_MS) delete index[k];
   await env.SIGNALS_CACHE.put("wallet_onchain_index", JSON.stringify(index), { expirationTtl: 30 * 24 * 60 * 60 });
-  return { wallets: addrs.length, due: due.length, refreshed, failed };
+  return { wallets: addrs.length, signalWallets: signalWallets.length, due: due.length, refreshed, failed };
 }
 
 // Polymarket's own profit series for a wallet, the figure its profile shows:

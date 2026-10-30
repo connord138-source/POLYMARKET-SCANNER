@@ -110,10 +110,10 @@ export async function annotateSignalWalletSkill(env, signals, { minN = LEDGER_MI
   const addrs = new Set();
   for (const s of list) for (const w of walletsFromSignal(s)) addrs.add(w.wallet);
   const all = [...addrs];
-  const [ledger, chain] = await Promise.all([
-    walletSkillMany(env, all).catch(() => new Map()),
-    onChainSkillMany(env, all).catch(() => new Map()),
-  ]);
+  const ledger = await walletSkillMany(env, all).catch(() => new Map());
+  // the on-chain book is only needed where the signal ledger has no trusted row
+  const need = all.filter(a => !(ledger.get(a) && ledger.get(a).n >= minN));
+  const chain = await onChainSkillMany(env, need).catch(() => new Map());
   const at = new Date().toISOString();
   let proven = 0, fades = 0;
   for (const s of list) {
@@ -136,6 +136,21 @@ export async function annotateSignalWalletSkill(env, signals, { minN = LEDGER_MI
     if (c.fade) fades++;
   }
   return { annotated: list.length, wallets: all.length, ledger: ledger.size, onchain: chain.size, proven, fades };
+}
+
+// Pure: the wallets behind a list of signals, largest single stake first,
+// for the on-chain refresher's queue: a whale's own recent markets then back
+// a call within hours of it appearing, instead of waiting for ten of its
+// signals to settle. One entry per wallet (its biggest stake), capped.
+export function signalWalletsByMoney(signals, limit = 60) {
+  const best = new Map();
+  for (const s of Array.isArray(signals) ? signals : []) {
+    for (const { wallet, usd } of walletsFromSignal(s)) {
+      const v = usd == null ? 0 : usd;
+      if (!best.has(wallet) || v > best.get(wallet)) best.set(wallet, v);
+    }
+  }
+  return [...best.entries()].sort((a, b) => b[1] - a[1]).slice(0, limit).map(([w]) => w);
 }
 
 // Pure: the same signal with every wallet address shortened (the Free plan's
