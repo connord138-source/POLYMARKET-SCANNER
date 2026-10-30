@@ -8,7 +8,7 @@
 // mid 1 / 5 / 15 / 60 minutes later, at the end of the game, and at
 // settlement. No orders are placed anywhere. Rows live in D1 `us_lane_events`;
 // `GET /xvenue/uslane` reads them back.
-import { US_TAKER_RATE, usFee } from './xvenue.js';
+import { US_TAKER_RATE, KALSHI_TAKER_RATE, usFee, kalshiFee } from './xvenue.js';
 
 const GAMMA_API = 'https://gamma-api.polymarket.com';
 
@@ -22,11 +22,14 @@ export const US_LANE_SCHEMA = [
   `CREATE INDEX IF NOT EXISTS idx_usl_open ON us_lane_events(final, settle, ts)`,
   `ALTER TABLE us_lane_events ADD COLUMN x5 REAL`,      // round trip: the US exit price 5 / 15 min later (bid for a buy, ask for a sell)
   `ALTER TABLE us_lane_events ADD COLUMN x15 REAL`,     // migrations/0010_us_lane_roundtrip.sql
+  `ALTER TABLE us_lane_events ADD COLUMN kh0 REAL`,     // Kalshi hedge: the same leg sold at Kalshi's bid (buy) / bought at its ask (sell), in the event minute
+  `ALTER TABLE us_lane_events ADD COLUMN kh1 REAL`,     // ... and at the next sample; migrations/0011_us_lane_kalshi_hedge.sql
 ];
 
 export const US_LANE_KEYS = { PREV: 'xv_prev' };
 export const HORIZONS = { m1: 60, m5: 300, m15: 900, m60: 3600 };
 export const RT_HORIZONS = { x5: 300, x15: 900 };   // round-trip exits on the US book
+export const HEDGE_MARKS = { kh0: 0, kh1: 60 };      // Kalshi hedge priced in the event minute / at the next sample (seconds after the event)
 export const MARK_TOLERANCE_S = 90;            // nearest sample within +-90s of the horizon
 export const FINAL_AFTER_S = 4.5 * 3600;       // = XV_LIVE_AFTER_MS: the game is over once the sampler's live window has passed
 export const NO_DATA = -1;                     // sentinel: horizon passed with no sample / market voided
@@ -80,6 +83,18 @@ export function rtPnlC(ev, exitPx, usRate = US_TAKER_RATE) {
   return r2((gross - ev.fee - usFee(exitPx, usRate)) * 100);
 }
 
+// Pure: the two-venue lock. The US fill is hedged on Kalshi as a taker on the
+// same leg: a buy on US is sold on Kalshi at its bid, a sell on US is bought
+// back on Kalshi at its ask. Both moneylines pay on the same game, so the net
+// is locked whatever happens; the US entry fee and Kalshi's taker fee are
+// charged. Kalshi sizes are not sampled. This is what a Kalshi-hedged lane
+// would book per share, against the single-venue round trip (x5/x15).
+export function hedgePnlC(ev, hedgePx, { kRate = KALSHI_TAKER_RATE } = {}) {
+  if (hedgePx == null || hedgePx < 0) return null;
+  const gross = ev.side === 'buy' ? hedgePx - ev.px : ev.px - hedgePx;
+  return r2((gross - ev.fee - kalshiFee(hedgePx, kRate)) * 100);
+}
+
 // Pure: fill the marks of one event from the leg's later samples
 // ([{ts, p_bid, p_ask}] sorted by ts). A horizon gets the nearest sample within
 // MARK_TOLERANCE_S once the horizon (+ one minute of slack) has passed, or
@@ -103,6 +118,13 @@ export function marksFromSeries(ev, rows, nowS) {
   const exitSide = ev.side === 'buy' ? 'us_bid' : 'us_ask';
   const usRows = (rows || []).filter(r => r.ts > ev.ts && r[exitSide] != null);
   for (const [k, h] of Object.entries(RT_HORIZONS)) fill(k, h, usRows, r => r[exitSide]);
+  // Kalshi hedge: kh0 is the same sample as the event (exact ts), kh1 the nearest later sample at +60s
+  const hedgeSide = ev.side === 'buy' ? 'k_bid' : 'k_ask';
+  if (ev.kh0 == null && nowS >= ev.ts + 60) {
+    const same = (rows || []).find(r => r.ts === ev.ts && r[hedgeSide] != null);
+    if (same) out.kh0 = r4(same[hedgeSide]); else if (nowS >= ev.ts + 600) out.kh0 = NO_DATA;
+  }
+  fill('kh1', HEDGE_MARKS.kh1, (rows || []).filter(r => r.ts > ev.ts && r[hedgeSide] != null), r => r[hedgeSide]);
   if (ev.final == null && nowS >= ev.ts + FINAL_AFTER_S) {
     const last = usable.length ? usable[usable.length - 1] : null;
     out.final = last ? r4(mid(last.p_bid, last.p_ask)) : NO_DATA;
@@ -130,9 +152,9 @@ export function settlementFromGamma(market, token) {
 
 // Pure: aggregate events (with marks) into the report shape.
 export const TRADABLE_QTY = 50;   // shares shown at the stale price for an event to count as fillable
-const MARK_KEYS = [...Object.keys(HORIZONS), 'final', 'settle', ...Object.keys(RT_HORIZONS)];
+const MARK_KEYS = [...Object.keys(HORIZONS), 'final', 'settle', ...Object.keys(RT_HORIZONS), ...Object.keys(HEDGE_MARKS)];
 const mkMarks = () => Object.fromEntries(MARK_KEYS.map(k => [k, { n: 0, sumC: 0, hits: 0, noData: 0, usdSum: 0 }]));
-const markPnlC = (k, ev, m) => (k in RT_HORIZONS ? rtPnlC({ side: ev.side, px: ev.px, fee: ev.fee }, m) : pnlC({ side: ev.side, px: ev.px, fee: ev.fee }, m));
+const markPnlC = (k, ev, m) => (k in RT_HORIZONS ? rtPnlC({ side: ev.side, px: ev.px, fee: ev.fee }, m) : k in HEDGE_MARKS ? hedgePnlC({ side: ev.side, px: ev.px, fee: ev.fee }, m) : pnlC({ side: ev.side, px: ev.px, fee: ev.fee }, m));
 export function summarizeUsLane(events, { tradableQty = TRADABLE_QTY } = {}) {
   const mk = () => ({ n: 0, buy: 0, sell: 0, edgeSumC: 0, qtySum: 0, qtyN: 0, qtys: [], pxSum: 0, marks: mkMarks(), tradable: { n: 0, pxSum: 0, marks: mkMarks() } });
   const all = mk(), bySport = {};
@@ -196,7 +218,8 @@ export async function recordUsLaneEvents(env, legs, nowMs = Date.now(), opts = {
 // horizon (+60s slack), else the end of the live window for `final`.
 export function nextDueS(ev) {
   let due = null;
-  for (const [k, h] of [...Object.entries(HORIZONS), ...Object.entries(RT_HORIZONS)]) if (ev[k] == null && (due === null || ev.ts + h + 60 < due)) due = ev.ts + h + 60;
+  // both hedge marks are readable from the first read (the same-minute sample and the next one), so they share m1's due time
+  for (const [k, h] of [...Object.entries(HORIZONS), ...Object.entries(RT_HORIZONS), ['kh0', 60], ['kh1', 60]]) if (ev[k] == null && (due === null || ev.ts + h + 60 < due)) due = ev.ts + h + 60;
   return due ?? ev.ts + FINAL_AFTER_S;
 }
 
@@ -205,12 +228,13 @@ export function nextDueS(ev) {
 export async function markUsLaneEvents(env, nowMs = Date.now()) {
   if (!env.DB) return { marked: 0 };
   const nowS = Math.floor(nowMs / 1000);
-  // (final IS NULL OR x15 IS NULL): the second clause backfills the round-trip marks on events logged before they existed
-  const due = await env.DB.prepare(`SELECT id, ts, game, team, side, px, fee, m1, m5, m15, m60, final, x5, x15 FROM us_lane_events WHERE (final IS NULL OR x15 IS NULL) AND ts <= ? AND (marked_at IS NULL OR marked_at <= ?) ORDER BY ts LIMIT ?`).bind(nowS - 120, nowS - 120, MARK_EVENTS_PER_RUN).all();
+  // (final IS NULL OR x15 IS NULL OR kh1 IS NULL): the later clauses backfill the round-trip and hedge marks on events logged before they existed
+  const due = await env.DB.prepare(`SELECT id, ts, game, team, side, px, fee, m1, m5, m15, m60, final, x5, x15, kh0, kh1 FROM us_lane_events WHERE (final IS NULL OR x15 IS NULL OR kh1 IS NULL) AND ts <= ? AND (marked_at IS NULL OR marked_at <= ?) ORDER BY ts LIMIT ?`).bind(nowS - 120, nowS - 120, MARK_EVENTS_PER_RUN).all();
   const events = (due && due.results) || [];
   let marked = 0; const stmts = [];
   for (const ev of events) {
-    const q = await env.DB.prepare(`SELECT ts, p_bid, p_ask, us_bid, us_ask FROM xvenue_quotes WHERE game = ? AND team = ? AND ts > ? AND ts <= ? AND (p_bid IS NOT NULL OR us_bid IS NOT NULL) ORDER BY ts LIMIT 400`).bind(ev.game, ev.team, ev.ts, ev.ts + FINAL_AFTER_S + 600).all();
+    // ts >= ev.ts: the event's own sample carries the Kalshi quote the same-minute hedge (kh0) is priced at
+    const q = await env.DB.prepare(`SELECT ts, p_bid, p_ask, us_bid, us_ask, k_bid, k_ask FROM xvenue_quotes WHERE game = ? AND team = ? AND ts >= ? AND ts <= ? AND (p_bid IS NOT NULL OR us_bid IS NOT NULL OR k_bid IS NOT NULL) ORDER BY ts LIMIT 400`).bind(ev.game, ev.team, ev.ts, ev.ts + FINAL_AFTER_S + 600).all();
     const m = marksFromSeries(ev, (q && q.results) || [], nowS);
     const cols = Object.keys(m);
     // marked_at doubles as "not before": the row is re-read when its next unfilled horizon is due, not every two minutes
@@ -254,15 +278,15 @@ export async function settleUsLaneEvents(env, nowMs = Date.now(), fetchImpl = fe
 
 export async function usLaneReport(env, { hours = 168, recent = 20, nowMs = Date.now() } = {}) {
   const since = Math.floor(nowMs / 1000) - hours * 3600;
-  const q = await env.DB.prepare(`SELECT id, ts, sport, game, team, side, px, qty, fee, p_bid, p_ask, p_mid, dp_c, edge_c, m1, m5, m15, m60, final, settle, x5, x15 FROM us_lane_events WHERE ts >= ? ORDER BY ts LIMIT 20000`).bind(since).all();
+  const q = await env.DB.prepare(`SELECT id, ts, sport, game, team, side, px, qty, fee, p_bid, p_ask, p_mid, dp_c, edge_c, m1, m5, m15, m60, final, settle, x5, x15, kh0, kh1 FROM us_lane_events WHERE ts >= ? ORDER BY ts LIMIT 20000`).bind(since).all();
   const rows = (q && q.results) || [];
   const sum = summarizeUsLane(rows);
   const legs = new Set(rows.map(r => `${r.sport}|${r.game}|${r.team}`)).size;
   const games = new Set(rows.map(r => `${r.sport}|${r.game}`)).size;
-  const rec = rows.slice(-recent).reverse().map(r => ({ at: new Date(r.ts * 1000).toISOString(), sport: r.sport, game: r.game, team: r.team, side: r.side, px: r.px, qty: r.qty, dpC: r.dp_c, edgeC: r.edge_c, m5C: pnlC(r, r.m5), m15C: pnlC(r, r.m15), finalC: pnlC(r, r.final), settleC: pnlC(r, r.settle), x5C: rtPnlC(r, r.x5), x15C: rtPnlC(r, r.x15) }));
+  const rec = rows.slice(-recent).reverse().map(r => ({ at: new Date(r.ts * 1000).toISOString(), sport: r.sport, game: r.game, team: r.team, side: r.side, px: r.px, qty: r.qty, dpC: r.dp_c, edgeC: r.edge_c, m5C: pnlC(r, r.m5), m15C: pnlC(r, r.m15), finalC: pnlC(r, r.final), settleC: pnlC(r, r.settle), x5C: rtPnlC(r, r.x5), x15C: rtPnlC(r, r.x15), kh0C: hedgePnlC(r, r.kh0), kh1C: hedgePnlC(r, r.kh1) }));
   let prev = null; try { prev = await env.SIGNALS_CACHE.get(US_LANE_KEYS.PREV, { type: 'json' }); } catch (e) {}
   return {
     success: true, hours, events: rows.length, legs, games, ...sum, recent: rec, prevAt: prev && prev.at ? new Date(prev.at).toISOString() : null,
-    read: `Paper only: each event is a hypothetical taker fill on Polymarket US at the sampled quote (px, qty = shares shown at that price; one event per game minute, on the leg the US instrument quotes). tradable = the subset with at least ${TRADABLE_QTY} shares shown (usd = dollars on the shown size, capped at 1000 shares) in a minute where global Polymarket's mid moved >= 3c and the US quote was still crossable after the ${US_TAKER_RATE * 100}% x p(1-p) taker fee (edgeC = cents of edge at entry). marks.* = cents per share after the entry fee, marked at global Polymarket's mid 1/5/15/60 minutes later and at the end of the game (final), and at settlement (0/1); exit fees and the US spread are not charged on those. marks.x5 / marks.x15 are the round trip: closed on the Polymarket US book 5 / 15 minutes later (the bid for a buy, the ask for a sell, so the spread is paid) with the exit taker fee charged too - what a scalping lane would actually have booked. roiPct = avg mark pnl / avg entry price. noData = horizon passed with no sample. Decision rule (docs/PROFIT-AVENUES.md Part 2): after ~200 events, a Polymarket US lane is worth building only if the round trip (x5 or x15) is positive on the tradable subset with a hit rate above 50%, or settle is; the real-money flip stays the operator's call.`,
+    read: `Paper only: each event is a hypothetical taker fill on Polymarket US at the sampled quote (px, qty = shares shown at that price; one event per game minute, on the leg the US instrument quotes). tradable = the subset with at least ${TRADABLE_QTY} shares shown (usd = dollars on the shown size, capped at 1000 shares) in a minute where global Polymarket's mid moved >= 3c and the US quote was still crossable after the ${US_TAKER_RATE * 100}% x p(1-p) taker fee (edgeC = cents of edge at entry). marks.* = cents per share after the entry fee, marked at global Polymarket's mid 1/5/15/60 minutes later and at the end of the game (final), and at settlement (0/1); exit fees and the US spread are not charged on those. marks.x5 / marks.x15 are the round trip: closed on the Polymarket US book 5 / 15 minutes later (the bid for a buy, the ask for a sell, so the spread is paid) with the exit taker fee charged too - what a scalping lane would actually have booked. roiPct = avg mark pnl / avg entry price. noData = horizon passed with no sample. marks.kh0 / marks.kh1 are the Kalshi hedge (Oct 30 2026): the same leg sold on Kalshi at its bid (for a buy) or bought at its ask (for a sell) as a taker, priced in the event minute (kh0) or at the next sample (kh1, the honest one: the US leg first, Kalshi a minute later); the US entry fee and Kalshi's taker fee are charged and the position is then locked whatever the game does, so this is what a two-venue, US-legal lane would book per share (Kalshi sizes are not sampled; usd uses the US shown size; noData = Kalshi not quoted there). Decision rule (docs/PROFIT-AVENUES.md Part 2): after ~200 events, a Polymarket US lane is worth building only if the round trip (x5 or x15) is positive on the tradable subset with a hit rate above 50%, or settle is; a Kalshi-hedged lane only if kh1 is positive on the tradable subset at a hit rate above 50% over ~200 events with a Kalshi quote, and it beats x5; the real-money flip stays the operator's call.`,
   };
 }
