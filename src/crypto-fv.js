@@ -22,6 +22,8 @@ const COINBASE = 'https://api.exchange.coinbase.com';
 const KRAKEN = 'https://api.kraken.com/0/public';
 const GAMMA = 'https://gamma-api.polymarket.com';
 
+import { getUsBoard, attachUsVenue } from './kalshi-crypto.js';
+
 export const FV_KEYS = { CACHE: 'crypto_fv', ASSETS: 'crypto_fv_assets' };   // ASSETS = last good stats per asset
 // Kraken/Coinbase throttle the candle endpoints a few times a day (429 since Oct 16 2026). A
 // throttled asset keeps its last good vols (<= VOLS_STALE_MAX_MS old) with a fresh ticker spot and is
@@ -229,7 +231,7 @@ export function summarize(rows) {
   const byKind = {};
   for (const r of liquid) { const b = byKind[r.kind] || (byKind[r.kind] = { n: 0, sumGap: 0 }); b.n++; b.sumGap += r.gap; }
   for (const k of Object.keys(byKind)) { byKind[k].meanGap = Math.round(byKind[k].sumGap / byKind[k].n * 1000) / 1000; delete byKind[k].sumGap; }
-  return { contracts: rows.length, liquid: liquid.length, medianAbsGapLiquid: med(liquid.map(r => Math.abs(r.gap))), over10c: liquid.filter(r => Math.abs(r.gap) > 0.10).length, byKind };
+  return { contracts: rows.length, liquid: liquid.length, medianAbsGapLiquid: med(liquid.map(r => Math.abs(r.gap))), over10c: liquid.filter(r => Math.abs(r.gap) > 0.10).length, byKind, usListed: rows.filter(r => r.us).length };
 }
 
 export async function refreshCryptoFairValue(env, nowMs = Date.now()) {
@@ -252,8 +254,16 @@ export async function refreshCryptoFairValue(env, nowMs = Date.now()) {
   try { await env.SIGNALS_CACHE.put(FV_KEYS.ASSETS, JSON.stringify(lastGood), { expirationTtl: 7 * 86400 }); } catch (e) {}
   let markets = [];
   try { markets = await gammaCryptoMarkets(3); } catch (e) { errors.gamma = e.message.slice(0, 80); }
-  const rows = priceMarkets(markets, assets, nowMs);
-  const blob = { at: new Date(nowMs).toISOString(), assets, rows, summary: summarize(rows), errors: Object.keys(errors).length ? errors : undefined, read: 'model = driftless lognormal at the asset\'s 30-day realized vol (sigma); gap = model - market for the YES side. Far-dated dip/reach tails trade above the model by design (fat tails): treat a big tail gap as a model warning, not an edge.' };
+  let rows = priceMarkets(markets, assets, nowMs);
+  // Where a US client trades the same view: Kalshi's hourly and monthly
+  // one-touch contracts (kalshi-crypto.js). Polymarket US lists no crypto.
+  let us = null;
+  try {
+    const board = await getUsBoard(env, nowMs);
+    rows = attachUsVenue(rows, board);
+    us = { venue: 'Kalshi', at: board.at, stale: !!board.stale, listed: rows.filter(r => r.us).length, errors: board.errors || undefined };
+  } catch (e) { errors.kalshi = String(e.message || e).slice(0, 80); rows = rows.map(r => ({ ...r, us: null })); }
+  const blob = { at: new Date(nowMs).toISOString(), assets, rows, us, summary: summarize(rows), errors: Object.keys(errors).length ? errors : undefined, read: 'model = driftless lognormal at the asset\'s 30-day realized vol (sigma); gap = model - market for the YES side. Far-dated dip/reach tails trade above the model by design (fat tails): treat a big tail gap as a model warning, not an edge.' };
   try { await env.SIGNALS_CACHE.put(FV_KEYS.CACHE, JSON.stringify(blob), { expirationTtl: FV_TTL_S * 3 }); } catch (e) {}
   return blob;
 }
