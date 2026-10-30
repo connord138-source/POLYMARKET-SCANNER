@@ -298,6 +298,17 @@ by roughly the spread (NFL books average 1.8c) plus the taker fee.
    positive on the tradable subset at a >50% hit rate -> a Polymarket US
    scalping lane is worth building; the real-money flip is the operator's
    call. Not met as of Oct 19.
+   **Oct 30:** Kalshi quotes began reaching the sampler on the night of Oct
+   29 (no key; the throttling eased) and `kUsCross` read 118 minutes in 48h,
+   but only 13% persisted to the next row and the fat ones sat at game ends
+   or in one goal-swing minute where the US book was 30c stale: the same US
+   lag seen from Kalshi's side, not an arbitrage yet (`crosses` in the
+   report lists the minutes). Built in response: the lane's Kalshi hedge
+   marks (`kh0`/`kh1`): each US event hedged on Kalshi as a taker on the
+   same leg in the event minute / at the next sample, both fees charged,
+   P&L locked. Rule: `kh1` positive on the tradable subset at a >50% hit
+   rate over ~200 Kalshi-quoted events, and better than `x5`, before a
+   two-venue lane is proposed; the flip is the operator's.
 4. **Not worth building** (measured above): neg-risk arbitrage, strike
    monotonicity, cross-venue pregame arbitrage, settlement-lag sniping,
    liquidity-reward market making (Track A), faster whale copying.

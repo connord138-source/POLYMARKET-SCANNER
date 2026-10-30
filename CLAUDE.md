@@ -176,7 +176,15 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   on tradable size. Decision rule: ~200 events with the round trip (or
   settle) positive on the tradable subset at a >50% hit rate before a
   real-money lane is proposed; that flip is the operator's call. Places no
-  orders.
+  orders. Kalshi hedge marks (Oct 30 2026, `kh0`/`kh1`, `hedgePnlC`): the
+  same leg sold on Kalshi at its bid (for a buy) or bought at its ask (for a
+  sell) as a taker, priced in the event minute and at the next sample, US
+  entry fee plus Kalshi's taker fee charged; both venues pay on the same game
+  so that P&L is locked, i.e. what a two-venue US-legal lane would book per
+  share. Filled by the same marker from `xvenue_quotes.k_*` (backfilled on
+  older events; NO_DATA where Kalshi was not quoted). Rule: kh1 positive on
+  the tradable subset at a >50% hit rate over ~200 Kalshi-quoted events, and
+  better than x5, before a hedged lane is proposed.
 - `src/crypto-fv.js` — crypto fair value: every Polymarket BTC/ETH/SOL price
   contract ("above $X on <date>" = European digital; "dip to"/"reach" =
   one-touch via reflection) priced from Coinbase realized vol (7d/30d/90d,
