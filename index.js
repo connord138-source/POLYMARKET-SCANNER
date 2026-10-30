@@ -22,6 +22,7 @@ import {
 } from "./src/autotrader.js";
 import { runForge, maybeRunForge, getForgeReport } from "./src/forge.js";
 import { logSignalWallets, backfillWalletLedger, topWallets, buildWalletLeaderboard, walletSkill, onChainSkill, walletsFromSignal, LEDGER_MIN_N } from "./src/wallet-ledger.js";
+import { rebuildWalletBook } from "./src/wallet-book.js";
 import { pollCopyWallets, getCopyState, addCopyWallet, removeCopyWallet, setCopyWalletEnabled, setCopyWalletMode, listCopyWallets, modeOf as copyModeOf } from "./src/copy.js";
 import { trackSpeed, updateSpeed, speedReport } from "./src/speed.js";
 import { buildAgentHub } from "./src/agent-hub.js";
@@ -8446,6 +8447,7 @@ async function getWalletPositions(address) {
 // KV wallet_onchain:<addr> (72h) holds the summary; wallet_onchain_index
 // holds each address's refresh time so a cron reads one key to pick work.
 var ONCHAIN_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+var ONCHAIN_V = 3;
 async function refreshOnChainSkill(env, perRun = 6) {
   if (!env.SIGNALS_CACHE || !env.DB) return { skipped: "no DB/KV" };
   const [best, worst, copied] = await Promise.all([topWallets(env, 100, LEDGER_MIN_N), topWallets(env, 20, LEDGER_MIN_N, { worst: true }), listCopyWallets(env).catch(() => [])]);
@@ -8453,11 +8455,13 @@ async function refreshOnChainSkill(env, perRun = 6) {
   const addrs = [...new Set([...copied.map(w => w.address), ...[...best, ...worst].map(r => String(r.wallet).toLowerCase())])];
   const index = await env.SIGNALS_CACHE.get("wallet_onchain_index", { type: "json" }) || {};
   const now = Date.now();
-  // Index entries: v2 = { at, v: 2 } (record carries the venue's book); a
-  // bare timestamp is a record from before the book existed, due now.
+  // Index entries: { at, v }. v2 = the record carries the venue's book; v3 =
+  // built after $0 redeems count as losses (wallet-book.js, Oct 30 2026). A
+  // bare timestamp is a record from before the book existed. Anything below
+  // ONCHAIN_V is due now.
   const entAt = (e) => (e && typeof e === "object" ? e.at : e);
   const entV = (e) => (e && typeof e === "object" ? e.v || 1 : 1);
-  const due = addrs.filter(a => !index[a] || entV(index[a]) < 2 || now - Date.parse(entAt(index[a])) > ONCHAIN_MAX_AGE_MS);
+  const due = addrs.filter(a => !index[a] || entV(index[a]) < ONCHAIN_V || now - Date.parse(entAt(index[a])) > ONCHAIN_MAX_AGE_MS);
   let refreshed = 0, failed = 0;
   for (const a of due.slice(0, perRun)) {
     try {
@@ -8469,7 +8473,7 @@ async function refreshOnChainSkill(env, perRun = 6) {
         openPositions: sm.openPositions, unknownCount: sm.unknownCount, window: sm.window, windowDays: sm.windowDays,
         official: sm.official ? { lifetime: sm.official.lifetime, pnl30d: sm.official.pnl30d, pnl7d: sm.official.pnl7d, ageDays: sm.official.ageDays, since: sm.official.since, volume: sm.official.volume, record: sm.official.record, deadLegs: sm.official.deadLegs } : null
       }), { expirationTtl: 72 * 60 * 60 });
-      index[a] = { at: new Date().toISOString(), v: 2 };
+      index[a] = { at: new Date().toISOString(), v: ONCHAIN_V };
       refreshed++;
     } catch (e) { failed++; }
   }
@@ -8569,288 +8573,12 @@ async function getWalletPnL(address) {
       activity = await activityRes.json() || [];
     }
     
-    // Group activity by market to track full bet lifecycle
-    const marketBets = {};
-    
-    activity.forEach(a => {
-      const market = a.slug || a.conditionId;
-      if (!market) return;
-      
-      if (!marketBets[market]) {
-        marketBets[market] = {
-          title: a.title || market,
-          slug: a.slug,
-          icon: a.icon,
-          buys: [],
-          sells: [],
-          redeems: [],
-          merges: [],   // YES+NO pairs merged back into cash: proceeds
-          splits: [],   // cash split into YES+NO pairs: cost
-          outcome: a.outcome
-        };
-      }
-      
-      // Update outcome if we get one (some activities might have it, some might not)
-      if (a.outcome && !marketBets[market].outcome) {
-        marketBets[market].outcome = a.outcome;
-      }
-      
-      const usdValue = parseFloat(a.usdcSize) || parseFloat(a.usd_value) || 0;
-      const timestamp = a.timestamp < 1e12 ? a.timestamp * 1000 : a.timestamp;
-      
-      if (a.type === 'BUY' || a.side === 'BUY') {
-        marketBets[market].buys.push({ amount: usdValue, time: timestamp, price: parseFloat(a.price) || 0, outcome: a.outcome });
-      } else if (a.type === 'SELL' || a.side === 'SELL') {
-        marketBets[market].sells.push({ amount: usdValue, time: timestamp, price: parseFloat(a.price) || 0 });
-      } else if (a.type === 'REDEEM') {
-        marketBets[market].redeems.push({ amount: usdValue, time: timestamp });
-      } else if (a.type === 'MERGE') {
-        marketBets[market].merges.push({ amount: usdValue, time: timestamp });
-      } else if (a.type === 'SPLIT') {
-        marketBets[market].splits.push({ amount: usdValue, time: timestamp });
-      }
-    });
-    
-    // Analyze each market bet
-    const resolvedBets = [];
-    const openBets = [];
-    let totalWins = 0;
-    let totalLosses = 0;
-    let winCount = 0;
-    let lossCount = 0;
-    let unknownCount = 0;   // bought, never redeemed, no position, not sold out: not classified
-    let bothSides = 0, marketsBought = 0;
-    
-    // Helper function to check if market is likely settled based on title/date
-    const isMarketLikelySettled = (title, slug, position) => {
-      const titleLower = (title || '').toLowerCase();
-      const slugLower = (slug || '').toLowerCase();
-      const now = new Date();
-      const currentYear = now.getFullYear();
-      const currentMonth = now.getMonth() + 1;
-      
-      // Check for past years in title (2024, 2023, etc. when we're in 2026)
-      const yearMatch = titleLower.match(/\b(20\d{2})\b/);
-      if (yearMatch) {
-        const year = parseInt(yearMatch[1]);
-        if (year < currentYear) {
-          return true; // Past year = settled
-        }
-      }
-      
-      // Check for specific past dates in slug (format: 2025-10-29)
-      const dateMatch = slugLower.match(/(\d{4})-(\d{2})-(\d{2})/);
-      if (dateMatch) {
-        const eventDate = new Date(parseInt(dateMatch[1]), parseInt(dateMatch[2]) - 1, parseInt(dateMatch[3]));
-        if (eventDate < now) {
-          return true; // Past date = settled
-        }
-      }
-      
-      // Check for month+year patterns like "October 2025"
-      const monthYearPatterns = [
-        /january\s+(\d{4})/i, /february\s+(\d{4})/i, /march\s+(\d{4})/i,
-        /april\s+(\d{4})/i, /may\s+(\d{4})/i, /june\s+(\d{4})/i,
-        /july\s+(\d{4})/i, /august\s+(\d{4})/i, /september\s+(\d{4})/i,
-        /october\s+(\d{4})/i, /november\s+(\d{4})/i, /december\s+(\d{4})/i
-      ];
-      
-      for (let i = 0; i < monthYearPatterns.length; i++) {
-        const match = titleLower.match(monthYearPatterns[i]);
-        if (match) {
-          const year = parseInt(match[1]);
-          const month = i + 1;
-          // If month/year is in the past
-          if (year < currentYear || (year === currentYear && month < currentMonth)) {
-            return true;
-          }
-        }
-      }
-      
-      // Check if current price is essentially resolved (99.5%+ or 0.5%-)
-      // This is tighter than before to avoid catching in-progress games
-      const curPrice = parseFloat(position?.curPrice || position?.currentPrice || 0);
-      if (curPrice >= 0.995 || curPrice <= 0.005) {
-        return true;
-      }
-      
-      return false;
-    };
-    
-    for (const [market, data] of Object.entries(marketBets)) {
-      // Both sides of one market bought: a market maker's signature.
-      if (new Set(data.buys.map(b => b.outcome).filter(Boolean)).size > 1) bothSides++;
-      marketsBought++;
-      // A market maker buys both sides and merges the pairs back into cash;
-      // that cash used to be invisible, so every such market read as a loss.
-      const totalBought = data.buys.reduce((sum, b) => sum + b.amount, 0) + data.splits.reduce((sum, b) => sum + b.amount, 0);
-      const totalSold = data.sells.reduce((sum, s) => sum + s.amount, 0) + data.merges.reduce((sum, m) => sum + m.amount, 0);
-      const totalRedeemed = data.redeems.reduce((sum, r) => sum + r.amount, 0);
-      const avgBuyPrice = data.buys.length > 0 
-        ? data.buys.reduce((sum, b) => sum + b.price, 0) / data.buys.length 
-        : 0;
-      
-      // Check if market is resolved (has redeems or position is closed)
-      const position = positions.find(p => p.slug === market || p.conditionId === market);
-      const hasPosition = position && parseFloat(position.size || 0) > 0;
-      
-      // Resolved when the position says so: redeemable, priced at 1, or
-      // priced at 0 past its end date. The title/date heuristic alone
-      // called every game played TODAY settled (a date at midnight is
-      // already in the past), booking live positions as losses, or as
-      // "wins" that lost money.
-      const posPrice = parseFloat(position?.curPrice || position?.currentPrice || 0);
-      const endDate = position?.endDate ? String(position.endDate).slice(0, 10) : null;
-      const endPast = endDate ? endDate < new Date().toISOString().slice(0, 10) : false;
-      const resolvedByPosition = hasPosition && (position.redeemable === true || posPrice >= 0.99 || (posPrice <= 0.01 && endPast));
-      const likelySettled = hasPosition ? resolvedByPosition : isMarketLikelySettled(data.title, data.slug, position);
-      const isOpen = hasPosition && !likelySettled;
-      
-      if (totalRedeemed > 0) {
-        // Market resolved (a payout was redeemed). Classify by NET profit, not
-        // by the mere presence of a redeem: a wallet can redeem and still be
-        // net-down on the market (it bought more than the winning position
-        // returned, or averaged in badly). Counting those as wins inflates the
-        // win rate — which drives the proven-winner score bonus (up to +80) and
-        // the confidence blend — so a redeemed-but-net-loss market is a LOSS.
-        const profit = totalRedeemed - totalBought + totalSold;
-        const won = profit > 0;
-        if (won) { totalWins += profit; winCount++; }
-        else { totalLosses += Math.abs(profit); lossCount++; }
-        resolvedBets.push({
-          market: data.title,
-          marketSlug: data.slug,
-          outcome: data.outcome,
-          result: won ? 'WIN' : 'LOSS',
-          invested: Math.round(totalBought),
-          returned: Math.round(totalRedeemed + totalSold),
-          profit: Math.round(profit),
-          profitPct: totalBought > 0 ? Math.round((profit / totalBought) * 100) : 0,
-          avgPrice: Math.round(avgBuyPrice * 100),
-          time: data.redeems[0]?.time ? new Date(data.redeems[0].time).toISOString() : null,
-          icon: data.icon
-        });
-      } else if (!isOpen && totalBought > 0 && totalRedeemed === 0) {
-        // Market is settled (no position or likelySettled) with no redeem.
-        // With no position on file and the stake not sold out, the result is
-        // simply unknown (dust under the API's size floor, a transfer); it
-        // used to be written down as a loss.
-        if (!position && totalSold < totalBought * 0.5) {
-          unknownCount++;
-          continue;
-        }
-        // Check if this might be an unredeemed WIN based on current value
-        const currentValue = parseFloat(position?.currentValue || position?.value || 0);
-        const currentPrice = parseFloat(position?.curPrice || position?.currentPrice || 0);
-        
-        // If current value is significantly positive or price is near 100%, it's likely a win they haven't redeemed
-        if (currentValue > totalBought * 0.5 || currentPrice >= 0.95) {
-          // Unredeemed, resolved: the result is the net profit (a wallet that
-          // bought both sides can hold the winner and still be net down).
-          const profit = currentValue - totalBought + totalSold;
-          if (profit > 0) {
-            totalWins += profit;
-            winCount++;
-          } else {
-            totalLosses += Math.abs(profit);
-            lossCount++;
-          }
-          resolvedBets.push({
-            market: data.title,
-            marketSlug: data.slug,
-            outcome: data.outcome,
-            result: profit > 0 ? 'WIN' : 'LOSS',
-            invested: Math.round(totalBought),
-            returned: Math.round(currentValue + totalSold),
-            profit: Math.round(profit),
-            profitPct: totalBought > 0 ? Math.round((profit / totalBought) * 100) : 0,
-            avgPrice: Math.round(avgBuyPrice * 100),
-            time: data.buys[data.buys.length - 1]?.time ? new Date(data.buys[data.buys.length - 1].time).toISOString() : null,
-            icon: data.icon,
-            note: 'Unredeemed'
-          });
-        } else {
-          // Lost - bought but no redeem and low/no value
-          const loss = totalBought - totalSold - currentValue;
-          if (loss > 0) {
-            totalLosses += loss;
-            lossCount++;
-            resolvedBets.push({
-              market: data.title,
-              marketSlug: data.slug,
-              outcome: data.outcome,
-              result: 'LOSS',
-              invested: Math.round(totalBought),
-              returned: Math.round(totalSold + currentValue),
-              profit: Math.round(-loss),
-              profitPct: totalBought > 0 ? Math.round((-loss / totalBought) * 100) : 0,
-              avgPrice: Math.round(avgBuyPrice * 100),
-              time: data.buys[data.buys.length - 1]?.time ? new Date(data.buys[data.buys.length - 1].time).toISOString() : null,
-              icon: data.icon
-            });
-          }
-        }
-      } else if (isOpen) {
-        // Check if this is actually a resolved loss (current value is $0 or near $0)
-        const currentValue = parseFloat(position.currentValue || position.value || 0);
-        const currentPrice = parseFloat(position.curPrice || position.currentPrice || 0);
-        
-        // If current value is $0 (or very small) and they invested significant money, it's a loss
-        // Also check if current price is near 0 (market resolved against this position)
-        if ((currentValue < 1 || currentPrice < 0.02) && totalBought > 100) {
-          // This is a resolved loss, not an open position
-          const loss = totalBought - totalSold;
-          totalLosses += loss;
-          lossCount++;
-          resolvedBets.push({
-            market: data.title,
-            marketSlug: data.slug,
-            outcome: data.outcome,
-            result: 'LOSS',
-            invested: Math.round(totalBought),
-            returned: Math.round(totalSold),
-            profit: Math.round(-loss),
-            profitPct: totalBought > 0 ? Math.round((-loss / totalBought) * 100) : 0,
-            avgPrice: Math.round(avgBuyPrice * 100),
-            time: data.buys[data.buys.length - 1]?.time ? new Date(data.buys[data.buys.length - 1].time).toISOString() : null,
-            icon: data.icon
-          });
-        } else {
-          // Actually still open - use position outcome as fallback
-          const outcomeToUse = data.outcome || position.outcome || 
-            (data.buys.length > 0 ? data.buys[0].outcome : null);
-          const unrealizedPnL = currentValue - totalBought + totalSold;
-          openBets.push({
-            market: data.title,
-            marketSlug: data.slug,
-            outcome: outcomeToUse,
-            invested: Math.round(totalBought),
-            currentValue: Math.round(currentValue),
-            unrealizedPnL: Math.round(unrealizedPnL),
-            unrealizedPct: totalBought > 0 ? Math.round((unrealizedPnL / totalBought) * 100) : 0,
-            avgPrice: Math.round(avgBuyPrice * 100),
-            currentPrice: Math.round((parseFloat(position.curPrice) || 0) * 100),
-            icon: data.icon
-          });
-        }
-      }
-    }
-    
-    // Sort resolved bets by time (most recent first)
-    resolvedBets.sort((a, b) => new Date(b.time || 0) - new Date(a.time || 0));
-
-    // How much time the 500-activity window covers. A wallet trading
-    // thousands of times a day fits a day or two in it, and costs inside the
-    // window are matched by proceeds outside it, so its P&L here is noise;
-    // the pages keep money out of the call under WINDOW_MIN_DAYS.
-    const stamps = activity.map(a => (a.timestamp < 1e12 ? a.timestamp * 1000 : a.timestamp)).filter(t => t > 0);
-    const windowDays = stamps.length ? Math.round(10 * (Date.now() - Math.min(...stamps)) / 86400000) / 10 : null;
-    
-    const totalInvested = Object.values(marketBets).reduce((sum, m) => 
-      sum + m.buys.reduce((s, b) => s + b.amount, 0), 0);
-    
-    const realizedPnL = totalWins - totalLosses;
-    const unrealizedPnL = openBets.reduce((sum, b) => sum + b.unrealizedPnL, 0);
+    // Classified by rebuildWalletBook (src/wallet-book.js): each market in
+    // the window is a WIN or LOSS by its net, open, cashed before the window,
+    // or unknown. A REDEEM that paid $0 is a losing leg being burned.
+    const book = rebuildWalletBook(activity, positions);
+    const { resolvedBets, openBets } = book;
+    const { totalWins, totalLosses, winCount, lossCount, unknownCount, outsideWindow, zeroRedeems, bothSides, marketsBought, windowDays, totalInvested, realizedPnL, unrealizedPnL } = book.totals;
     
     return {
       success: true,
@@ -8866,6 +8594,10 @@ async function getWalletPnL(address) {
         winRate: winCount + lossCount > 0 ? Math.round((winCount / (winCount + lossCount)) * 100) : 0,
         openPositions: openBets.length,
         unknownCount,
+        // Cashed in the window but bought before it (no cost basis here), and
+        // losing legs the wallet cashed for $0 (burned, so Polymarket lists
+        // them under neither Active nor Closed).
+        outsideWindow, zeroRedeems,
         // Skill the same way the ledger scores a wallet: win rate minus the
         // average price paid, over these resolved markets. Positions on file:
         // how much of the wallet the record covers.
