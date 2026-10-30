@@ -4181,18 +4181,7 @@ async function repriceEdgeOpportunities(env, { max = EDGE_REPRICE_MAX } = {}) {
   let repriced = 0, failed = 0, skipped = 0;
   for (const o of open) {
     try {
-      let live = null;
-      if ((o.venue || "global") === "us") {
-        if (typeof o.usLong !== "boolean" || !o.usSlug) { skipped++; continue; }
-        const bbo = await usTopOfBook(o.usSlug);
-        const cost = bbo ? (o.usLong ? bbo.ask : (bbo.bid != null ? 1 - bbo.bid : null)) : null;
-        if (typeof cost === "number" && cost > 0) live = Math.round(cost * 100);
-      } else if (o.polySlug) {
-        const foundG = await findGammaMarket(o.polySlug, o.team);
-        const baseG = gammaBaselineForDirection(foundG, o.team);
-        if (typeof baseG.marketProb === "number") live = Math.round(baseG.marketProb * 100);
-      } else { skipped++; continue; }
-      if (live === null || live <= 0 || live >= 100) { failed++; continue; }
+      // the books' side first: it applies even when the venue price cannot be refreshed
       const odds = await cachedOdds(o.sport);
       if (odds) {
         const eventId = String(o.id || "").split(":")[1];
@@ -4202,14 +4191,29 @@ async function repriceEdgeOpportunities(env, { max = EDGE_REPRICE_MAX } = {}) {
         if (typeof prob === "number") { o.lastVegasProb = prob; o.lineUpdatedAt = line.updatedAt; o.lineCheckedAt = new Date().toISOString(); o.lineMissing = false; linesRefreshed++; }
         else { o.lineMissing = true; linesMissing++; }
       }
+      // the venue side
+      let live = null, priceable = true;
+      if ((o.venue || "global") === "us") {
+        if (typeof o.usLong !== "boolean" || !o.usSlug) priceable = false;
+        else {
+          const bbo = await usTopOfBook(o.usSlug);
+          const cost = bbo ? (o.usLong ? bbo.ask : (bbo.bid != null ? 1 - bbo.bid : null)) : null;
+          if (typeof cost === "number" && cost > 0) live = Math.round(cost * 100);
+        }
+      } else if (o.polySlug) {
+        const foundG = await findGammaMarket(o.polySlug, o.team);
+        const baseG = gammaBaselineForDirection(foundG, o.team);
+        if (typeof baseG.marketProb === "number") live = Math.round(baseG.marketProb * 100);
+      } else priceable = false;
+      if (!priceable) skipped++;
+      else if (live === null || live <= 0 || live >= 100) failed++;
+      else { o.lastPolyPrice = live; o.pricedAt = new Date().toISOString(); repriced++; }
       const vegas = typeof o.lastVegasProb === "number" ? o.lastVegasProb : o.vegasProb;
-      o.lastPolyPrice = live;
-      if (typeof vegas === "number") o.lastEdgeNet = Math.round((vegas - live) * 10) / 10;
-      o.pricedAt = new Date().toISOString();
-      repriced++;
+      const px = typeof o.lastPolyPrice === "number" ? o.lastPolyPrice : o.polyPrice;
+      if (typeof vegas === "number" && typeof px === "number") o.lastEdgeNet = Math.round((vegas - px) * 10) / 10;
     } catch (e) { failed++; }
   }
-  if (repriced) await env.SIGNALS_CACHE.put("edge_opportunities", JSON.stringify(opps), { expirationTtl: 7 * 24 * 3600 });
+  if (repriced || linesRefreshed || linesMissing) await env.SIGNALS_CACHE.put("edge_opportunities", JSON.stringify(opps), { expirationTtl: 7 * 24 * 3600 });
   const summary = { at: now, open: open.length, repriced, failed, skipped, linesRefreshed, linesMissing };
   await env.SIGNALS_CACHE.put("edge_reprice_last", JSON.stringify(summary), { expirationTtl: 3600 });
   return summary;
