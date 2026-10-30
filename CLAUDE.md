@@ -152,7 +152,10 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   sides -> D1 `xvenue_quotes` (k_*, p_*, us_* columns); `GET /xvenue/report`
   = do the US-legal venues lag global Polymarket in-game enough to clear their
   taker fees (`staleRate`/`staleUsRate`, `avg*EdgeC`) and does Kalshi ever
-  cross Polymarket US after both fees (`kUsCross`). `boot` shows the last
+  cross Polymarket US after both fees (`kUsCross`; `crosses`, Oct 30 2026,
+  lists those minutes with next-row persistence, the US shares shown and the
+  games they came from, since one game carrying most of a sport's crosses is a
+  mis-mapped Kalshi leg). `boot` shows the last
   stage the minute cron reached (`xv_boot`). Pregame scans
   (Oct 2026) found no cross-venue or neg-risk arbitrage — see
   `docs/PROFIT-AVENUES.md` Part 2 before proposing structural-arb features.

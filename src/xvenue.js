@@ -402,10 +402,48 @@ export function analyzeSeries(rows, { moveC = 3, feeRate = KALSHI_TAKER_RATE, us
   return out;
 }
 
+// Pure: every sampled minute where the two US-legal venues crossed each other
+// after both taker fees (the kUsCross minutes), with whether the cross was
+// still there on the next row. The sampler reads Kalshi a few seconds before
+// Polymarket US inside the same minute, so a cross that is gone a minute
+// later is most likely one book catching up between the two reads, or a
+// one-off print; only a persisting cross is something two legs could take.
+// One game supplying most of a sport's crosses is the signature of a
+// mis-mapped Kalshi leg, so the summary names the games too. usQty = shares
+// shown on the US side taken (Kalshi sizes are not sampled).
+export function collectCrosses(groups, { feeRate = KALSHI_TAKER_RATE, usRate = US_TAKER_RATE, limit = 40 } = {}) {
+  const crossOf = (r) => {
+    if (r.k_bid == null || r.k_ask == null || r.us_bid == null || r.us_ask == null) return null;
+    const c1 = r.k_bid - r.us_ask - kalshiFee(r.k_bid, feeRate) - usFee(r.us_ask, usRate);   // buy US, sell Kalshi
+    const c2 = r.us_bid - r.k_ask - usFee(r.us_bid, usRate) - kalshiFee(r.k_ask, feeRate);   // buy Kalshi, sell US
+    return c1 >= c2 ? { c: c1, dir: 'buy US, sell Kalshi', qty: r.us_ask_qty ?? null } : { c: c2, dir: 'buy Kalshi, sell US', qty: r.us_bid_qty ?? null };
+  };
+  const all = [];
+  for (const series of groups.values()) {
+    for (let i = 0; i < series.length; i++) {
+      const r = series[i]; const x = crossOf(r);
+      if (!x || x.c <= 0) continue;
+      const next = series[i + 1]; const nx = next && next.ts - r.ts <= 180 ? crossOf(next) : null;
+      const pm = r.p_bid != null && r.p_ask != null ? +((r.p_bid + r.p_ask) / 2).toFixed(4) : null;
+      all.push({ ts: r.ts, at: new Date(r.ts * 1000).toISOString(), sport: r.sport, game: r.game, team: r.team, dir: x.dir, c: +(x.c * 100).toFixed(2), usQty: x.qty,
+        k_bid: r.k_bid, k_ask: r.k_ask, us_bid: r.us_bid, us_ask: r.us_ask, p_mid: pm, nextC: nx ? +(nx.c * 100).toFixed(2) : null, persisted: !!(nx && nx.c > 0) });
+    }
+  }
+  all.sort((a, b) => b.ts - a.ts);
+  const persisted = all.filter(x => x.persisted);
+  const avg = (xs) => (xs.length ? +(xs.reduce((a, b) => a + b, 0) / xs.length).toFixed(2) : null);
+  const qtys = all.map(x => x.usQty).filter(q => typeof q === 'number').sort((a, b) => a - b);
+  const byGame = new Map();
+  for (const x of all) { const k = `${x.sport}|${x.game}`; const g = byGame.get(k) || byGame.set(k, { game: k, n: 0, persisted: 0, avgC: 0 }).get(k); g.n++; if (x.persisted) g.persisted++; g.avgC += x.c; }
+  const games = [...byGame.values()].sort((a, b) => b.n - a.n || b.persisted - a.persisted || b.avgC - a.avgC).slice(0, 10).map(g => ({ ...g, avgC: +(g.avgC / g.n).toFixed(2) }));
+  return { n: all.length, persisted: persisted.length, persistRate: all.length ? +(persisted.length / all.length).toFixed(2) : null, avgC: avg(all.map(x => x.c)), avgPersistedC: avg(persisted.map(x => x.c)),
+    withUsQty: qtys.length, medUsQty: qtys.length ? qtys[Math.floor(qtys.length / 2)] : null, games, recent: all.slice(0, limit) };
+}
+
 // Read back the last `hours` of live-phase rows and aggregate per sport.
 export async function xvenueReport(env, { hours = 48, moveC = 3 } = {}) {
   const since = Math.floor(Date.now() / 1000) - hours * 3600;
-  const q = await env.DB.prepare(`SELECT ts, sport, game, team, k_bid, k_ask, p_bid, p_ask, us_bid, us_ask FROM xvenue_quotes WHERE ts >= ? AND phase = 'live' ORDER BY sport, game, team, ts LIMIT 60000`).bind(since).all();
+  const q = await env.DB.prepare(`SELECT ts, sport, game, team, k_bid, k_ask, p_bid, p_ask, us_bid, us_ask, us_bid_qty, us_ask_qty FROM xvenue_quotes WHERE ts >= ? AND phase = 'live' ORDER BY sport, game, team, ts LIMIT 60000`).bind(since).all();
   const rows = (q && q.results) || [];
   // Which venues actually delivered quotes (a 429 from Kalshi leaves k_* null while p_*/us_* fill).
   let quoted = {};
@@ -438,7 +476,7 @@ export async function xvenueReport(env, { hours = 48, moveC = 3 } = {}) {
   }
   let last = null, boot = null; try { last = await env.SIGNALS_CACHE.get(XV_KEYS.LAST, { type: 'json' }); boot = await env.SIGNALS_CACHE.get(XV_KEYS.BOOT, { type: 'json' }); } catch (e) {}
   return {
-    success: true, hours, moveC, rows: rows.length, legs: groups.size, quoted, bySport, last, boot,
-    read: `polyMoves = minutes where Polymarket's mid moved >= ${moveC}c; staleKalshi = of those, Kalshi's same-minute quote was still crossable after its ${KALSHI_TAKER_RATE * 100}% x p(1-p) taker fee (avgStaleEdgeC = cents of edge per share); kalshiSameMin/NextMin = Kalshi moved the same way that minute / the next; kalshiLeads = Kalshi moved first and Polymarket followed. A Kalshi lane is worth building only if staleRate x avgStaleEdgeC is meaningfully positive over many games. us* = the same for Polymarket US (taker ${US_TAKER_RATE * 100}% x p(1-p)); kUsCross = minutes where buying on one US-legal venue and selling on the other cleared both taker fees (the only fully legal arbitrage pair for a US operator).`,
+    success: true, hours, moveC, rows: rows.length, legs: groups.size, quoted, bySport, crosses: collectCrosses(groups), last, boot,
+    read: `polyMoves = minutes where Polymarket's mid moved >= ${moveC}c; staleKalshi = of those, Kalshi's same-minute quote was still crossable after its ${KALSHI_TAKER_RATE * 100}% x p(1-p) taker fee (avgStaleEdgeC = cents of edge per share); kalshiSameMin/NextMin = Kalshi moved the same way that minute / the next; kalshiLeads = Kalshi moved first and Polymarket followed. A Kalshi lane is worth building only if staleRate x avgStaleEdgeC is meaningfully positive over many games. us* = the same for Polymarket US (taker ${US_TAKER_RATE * 100}% x p(1-p)); kUsCross = minutes where buying on one US-legal venue and selling on the other cleared both taker fees (the only fully legal arbitrage pair for a US operator). crosses = those minutes listed (newest first, with the US shares shown on the side taken; Kalshi sizes are not sampled) and whether each was still there on the next row (persisted): the Kalshi read lands a few seconds before the US read inside a minute, so a cross gone a minute later is most likely a book catching up between the two reads; one game carrying most of a sport's crosses points at a mis-mapped Kalshi leg.`,
   };
 }

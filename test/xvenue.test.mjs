@@ -1,5 +1,5 @@
 // Cross-venue sampler. Run with: node test/xvenue.test.mjs
-import { teamMatch, matchPairs, attachUs, isLive, analyzeSeries, sampleXvenue, xvenueReport, kalshiFee, usFee, XV_LIVE_BEFORE_MS, XV_LIVE_AFTER_MS } from "../src/xvenue.js";
+import { teamMatch, matchPairs, attachUs, isLive, analyzeSeries, sampleXvenue, xvenueReport, collectCrosses, kalshiFee, usFee, XV_LIVE_BEFORE_MS, XV_LIVE_AFTER_MS } from "../src/xvenue.js";
 let pass = 0, fail = 0;
 const check = (n, c, x) => { if (c) pass++; else { fail++; console.error("FAIL:", n, x ?? ""); } };
 
@@ -94,6 +94,23 @@ const P = (q, outs, start, toks = ["t0", "t1"], extra = {}) => ({ question: q, o
     ? { results: [{ sport: "nfl", n: 2, k: 2, p: 2, us: 2 }] }
     : { results: [{ ts: 0, sport: "nfl", game: "g", team: "Bills", k_bid: 0.4, k_ask: 0.42, p_bid: 0.4, p_ask: 0.41, us_bid: 0.39, us_ask: 0.40 }, { ts: 60, sport: "nfl", game: "g", team: "Bills", k_bid: 0.4, k_ask: 0.42, p_bid: 0.45, p_ask: 0.46, us_bid: 0.39, us_ask: 0.40 }] }) }) });
   const rep = await xvenueReport(env, { hours: 1 });
+  check("report: crosses block present and empty when the venues never cross", rep.crosses && rep.crosses.n === 0 && rep.crosses.persisted === 0 && rep.crosses.persistRate === null && rep.crosses.games.length === 0 && Array.isArray(rep.crosses.recent), JSON.stringify(rep.crosses));
+  {
+    // Kalshi's bid sits 6c above the US ask on two consecutive minutes of one game (persists), 4c for a single minute of another (gone next row), and never on a third.
+    const g = new Map();
+    const row = (ts, game, team, kb, ka, ub, ua, extra = {}) => ({ ts, sport: "nhl", game, team, k_bid: kb, k_ask: ka, p_bid: 0.5, p_ask: 0.51, us_bid: ub, us_ask: ua, ...extra });
+    g.set("nhl|A|Bruins", [row(0, "A", "Bruins", 0.56, 0.58, 0.49, 0.50, { us_ask_qty: 320 }), row(60, "A", "Bruins", 0.56, 0.58, 0.49, 0.50, { us_ask_qty: 300 }), row(120, "A", "Bruins", 0.50, 0.52, 0.49, 0.50)]);
+    g.set("nhl|B|Kings", [row(0, "B", "Kings", 0.45, 0.47, 0.49, 0.50), row(60, "B", "Kings", 0.54, 0.56, 0.49, 0.50, { us_ask_qty: 80 }), row(400, "B", "Kings", 0.54, 0.56, 0.49, 0.50)]);
+    g.set("nhl|C|Jets", [row(0, "C", "Jets", 0.49, 0.51, 0.49, 0.50), row(60, "C", "Jets", null, null, 0.49, 0.50)]);
+    const x = collectCrosses(g);
+    check("crosses: counted after both fees, newest first, persistence judged on the next row within 3 min, US size on the side taken, games ranked",
+      x.n === 4 && x.persisted === 1 && x.persistRate === 0.25 && x.recent[0].ts === 400 && x.recent[0].persisted === false && x.recent[0].nextC === null
+      && x.recent.find(r => r.ts === 0 && r.game === "A").persisted === true && x.recent.find(r => r.ts === 0 && r.game === "A").dir === "buy US, sell Kalshi" && x.recent.find(r => r.ts === 0 && r.game === "A").usQty === 320
+      && x.recent.find(r => r.ts === 60 && r.game === "A").persisted === false && x.recent.find(r => r.ts === 60 && r.game === "A").nextC < 0
+      && x.games[0].game === "nhl|A" && x.games[0].n === 2 && x.games[0].persisted === 1 && x.games[1].game === "nhl|B" && x.games[1].n === 2 && x.medUsQty === 300 && x.withUsQty === 3
+      && x.avgC > 1 && x.avgC < 3 && x.avgPersistedC > 2, JSON.stringify(x));
+    check("crosses: a 4c raw gap near 50c is only a ~0.5c cross after both taker fees", Math.abs(x.recent.find(r => r.ts === 60 && r.game === "B").c - (0.54 - 0.50 - 0.07 * 0.54 * 0.46 - 0.0695 * 0.5 * 0.5) * 100) < 0.02, JSON.stringify(x.recent));
+  }
   check("report: per-sport aggregates incl. US and quoted counts", rep.rows === 2 && rep.legs === 1 && rep.bySport.nfl.polyMoves === 1 && rep.bySport.nfl.staleKalshi === 1 && rep.bySport.nfl.staleRate === 1 && rep.bySport.nfl.avgKalshiSpreadC === 2 && rep.bySport.nfl.staleUs === 1 && rep.bySport.nfl.avgUsSpreadC === 1 && rep.bySport.nfl.kUsCross === 0 && rep.quoted.nfl.kalshi === 2 && rep.quoted.nfl.polymarketUs === 2 && rep.last && rep.last.live === 0 && rep.boot && rep.boot.stage === "done", JSON.stringify({ bySport: rep.bySport, quoted: rep.quoted }));
   // Kalshi missing entirely (the throttled nights): Polymarket US metrics must still compute
   const noK = analyzeSeries([{ ts: 0, k_bid: null, k_ask: null, p_bid: 0.40, p_ask: 0.41, us_bid: 0.39, us_ask: 0.40 }, { ts: 60, k_bid: null, k_ask: null, p_bid: 0.45, p_ask: 0.46, us_bid: 0.39, us_ask: 0.40 }]);
