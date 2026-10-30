@@ -23,7 +23,7 @@ import {
 import { runForge, maybeRunForge, getForgeReport } from "./src/forge.js";
 import { logSignalWallets, backfillWalletLedger, topWallets, buildWalletLeaderboard, walletSkill, onChainSkill, walletsFromSignal, LEDGER_MIN_N } from "./src/wallet-ledger.js";
 import { rebuildWalletBook } from "./src/wallet-book.js";
-import { pollCopyWallets, getCopyState, addCopyWallet, removeCopyWallet, setCopyWalletEnabled, setCopyWalletMode, listCopyWallets, modeOf as copyModeOf } from "./src/copy.js";
+import { pollCopyWallets, getCopyState, addCopyWallet, removeCopyWallet, setCopyWalletEnabled, setCopyWalletMode, listCopyWallets, modeOf as copyModeOf, setCopyWalletSize, copySettingsUpdates } from "./src/copy.js";
 import { trackSpeed, updateSpeed, speedReport } from "./src/speed.js";
 import { buildAgentHub } from "./src/agent-hub.js";
 import { handleCrewOrder, runCrewHunt, getCrewState, saveBrowserDkBoard, answerPendingCrewChat } from "./src/crew.js";
@@ -5062,6 +5062,23 @@ export default {
         const body = await request.json().catch(() => ({}));
         const r = await setCopyWalletEnabled(env, body.address, body.enabled !== false);
         if (!r.ok) return atJson({ success: false, error: r.error }, 400);
+        return atJson(await getCopyState(env, { getTradeHistory, getOpenPositions, getAutotraderConfig, walletSkill }));
+      }
+      // Amounts (admin): a wallet's own stake per copy, and the lane's settings
+      // (stake default, smallest bet to copy, caps, slip, age) which live in
+      // the autotrader config under the copy* keys.
+      if (path === "/agents/copy/wallets/size" && request.method === "POST") {
+        const body = await request.json().catch(() => ({}));
+        const r = await setCopyWalletSize(env, body.address, body.betSize);
+        if (!r.ok) return atJson({ success: false, error: r.error }, 400);
+        return atJson(await getCopyState(env, { getTradeHistory, getOpenPositions, getAutotraderConfig, walletSkill }));
+      }
+      if (path === "/agents/copy/settings" && request.method === "POST") {
+        const body = await request.json().catch(() => ({}));
+        const v = copySettingsUpdates(body);
+        if (!v.ok) return atJson({ success: false, error: v.error }, 400);
+        const r = await updateAutotraderConfig(env, v.updates);
+        if (r.error) return atJson({ success: false, error: r.error }, 400);
         return atJson(await getCopyState(env, { getTradeHistory, getOpenPositions, getAutotraderConfig, walletSkill }));
       }
       if (path === "/agents/crew/orders" && request.method === "POST") {
