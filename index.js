@@ -23,6 +23,7 @@ import {
 import { runForge, maybeRunForge, getForgeReport } from "./src/forge.js";
 import { logSignalWallets, backfillWalletLedger, topWallets, buildWalletLeaderboard, walletSkill, onChainSkill, walletsFromSignal, LEDGER_MIN_N } from "./src/wallet-ledger.js";
 import { rebuildWalletBook } from "./src/wallet-book.js";
+import { annotateSignalWalletSkill } from "./src/signal-skill.js";
 import { pollCopyWallets, getCopyState, addCopyWallet, removeCopyWallet, setCopyWalletEnabled, setCopyWalletMode, listCopyWallets, modeOf as copyModeOf, setCopyWalletSize, copySettingsUpdates } from "./src/copy.js";
 import { trackSpeed, updateSpeed, speedReport } from "./src/speed.js";
 import { buildAgentHub } from "./src/agent-hub.js";
@@ -8264,12 +8265,21 @@ function formatDirectionForDisplay(direction, marketTitle, marketSlug) {
     '0': trulyActiveSignals.filter(s => s.score === 0).length
   } : null;
   
+  // The proven record behind each signal (src/signal-skill.js): one D1 pass
+  // over every wallet named plus the ranked wallets' on-chain books. Never
+  // fatal: a failed read leaves the signals unproven.
+  let whaleSkill = null;
+  try { whaleSkill = await annotateSignalWalletSkill(env, finalSignals); }
+  catch (e) { whaleSkill = { error: String(e && e.message || e).slice(0, 80) }; }
+
   // REMOVED: .slice(0, 50) - now returns ALL signals
   return {
     success: true,
     scanTime: new Date().toISOString(),
     hoursScanned: hoursBack,
     totalSignals: finalSignals.length,
+    signalsWithWinners: finalSignals.filter((s) => s.hasWinningWallet).length,
+    whaleSkill,
     criticalCount: finalSignals.filter((s) => s.score >= 100).length,
     highRiskCount: finalSignals.filter((s) => s.score >= 80 && s.score < 100).length,
     mediumRiskCount: finalSignals.filter((s) => s.score >= 60 && s.score < 80).length,

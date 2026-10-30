@@ -252,6 +252,20 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   `buildWalletLeaderboard`, KV-cached two minutes. The page had asked for that
   path since it shipped while only `/learning/leaderboard` existed, so it read
   empty.
+- `src/signal-skill.js` — the proven record behind a whale signal (Oct 30
+  2026): `annotateSignalWalletSkill` runs at the end of every scan and gives
+  each signal `whaleSkill` (every named wallet's row with the money it put in
+  and its skill = win rate minus average price, from the D1 signal ledger when
+  trusted at `LEDGER_MIN_N`, else the ranked wallets' on-chain book in KV
+  `wallet_onchain:*`; `best`, `worst`, `biggest`, `thin`; the call `proven`
+  (+8 or more) / `edge` (+3) / `flat` / `losing` / `unproven`, and `fade`
+  when the biggest wallet is a trusted loser at -8 or worse), plus the legacy
+  `hasWinningWallet` / `winningWalletInfo` / `topTrades[].isWinner` flags
+  the pages read, which the scan route had never set. One chunked D1 query
+  per scan, KV reads bounded by `wallet_onchain_index`; never fatal. The
+  Free view masks the addresses (`maskWhaleSkill` in tiers.js). Display
+  only: the auto-trader's own wallet gate is untouched. The frontend's
+  `signalVerdict` turns the call into the card's label and sentence.
 - `src/wallet-book.js` — a wallet's recent book rebuilt from its last 500
   data-api activities plus the positions on file (`rebuildWalletBook`, pure;
   `getWalletPnL` in index.js fetches and adds Polymarket's own book from
