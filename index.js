@@ -22,6 +22,7 @@ import {
 } from "./src/autotrader.js";
 import { runForge, maybeRunForge, getForgeReport } from "./src/forge.js";
 import { logSignalWallets, backfillWalletLedger, topWallets, buildWalletLeaderboard, walletSkill, onChainSkill, walletsFromSignal, LEDGER_MIN_N } from "./src/wallet-ledger.js";
+import { pollCopyWallets, getCopyState, addCopyWallet, removeCopyWallet, setCopyWalletEnabled, listCopyWallets } from "./src/copy.js";
 import { trackSpeed, updateSpeed, speedReport } from "./src/speed.js";
 import { buildAgentHub } from "./src/agent-hub.js";
 import { handleCrewOrder, runCrewHunt, getCrewState, saveBrowserDkBoard, answerPendingCrewChat } from "./src/crew.js";
@@ -3668,6 +3669,7 @@ function requiresAdmin(path, url, method) {
   if (path.startsWith("/autotrader") && method === "POST") return true;
   if (path.startsWith("/forge") && method === "POST") return true;      // /forge/run spends D1 reads
   if (path.startsWith("/agents/crew") && method === "POST") return true; // crew orders steer paper bets
+  if (path.startsWith("/agents/copy") && method === "POST") return true; // which wallets the bot copies
   if (path === "/waitlist" && method === "GET") return true;        // lists sign-up emails (PII); POST stays public
   if (path === "/crypto/fairvalue" && url.searchParams.get("refresh")) return true; // forces 12 upstream fetches
   if (path.startsWith("/admin")) return true;                       // /admin/ping, /admin/reprocess-wallets, ...
@@ -5030,6 +5032,30 @@ export default {
       // Agent Crew orders: the chat box on the Agent Crew page.
       if (path === "/agents/crew" && request.method === "GET") {
         return atJson(viewer.policy ? degradeFor("crew", await getCrewState(env, { getTradeHistory, getOpenPositions }), viewer.plan) : await getCrewState(env, { getTradeHistory, getOpenPositions }));
+      }
+      // Copy a whale (src/copy.js): the wallets the bot paper-copies, their
+      // record, the queue and the lane's ledger. Adding, pausing and removing
+      // a wallet is the operator's (admin).
+      if (path === "/agents/copy" && request.method === "GET") {
+        return atJson(await getCopyState(env, { getTradeHistory, getOpenPositions, getAutotraderConfig, walletSkill }));
+      }
+      if (path === "/agents/copy/wallets" && request.method === "POST") {
+        const body = await request.json().catch(() => ({}));
+        const r = await addCopyWallet(env, { address: body.address, nickname: body.nickname });
+        if (!r.ok) return atJson({ success: false, error: r.error }, 400);
+        return atJson(await getCopyState(env, { getTradeHistory, getOpenPositions, getAutotraderConfig, walletSkill }));
+      }
+      if (path === "/agents/copy/wallets/remove" && request.method === "POST") {
+        const body = await request.json().catch(() => ({}));
+        const r = await removeCopyWallet(env, body.address);
+        if (!r.ok) return atJson({ success: false, error: r.error }, 400);
+        return atJson(await getCopyState(env, { getTradeHistory, getOpenPositions, getAutotraderConfig, walletSkill }));
+      }
+      if (path === "/agents/copy/wallets/toggle" && request.method === "POST") {
+        const body = await request.json().catch(() => ({}));
+        const r = await setCopyWalletEnabled(env, body.address, body.enabled !== false);
+        if (!r.ok) return atJson({ success: false, error: r.error }, 400);
+        return atJson(await getCopyState(env, { getTradeHistory, getOpenPositions, getAutotraderConfig, walletSkill }));
       }
       if (path === "/agents/crew/orders" && request.method === "POST") {
         const body = await request.json().catch(() => ({}));
@@ -7260,6 +7286,10 @@ export default {
         console.error("Crew hunt error:", e.message);
         cronStatus.crewHunt = { error: e.message };
       }
+      // COPY A WHALE: queue the copied wallets' fresh buys for the auto-trader
+      // below (enterCopyPicks fills them in the lane's own ledger).
+      try { cronStatus.copy = await pollCopyWallets(env, await getAutotraderConfig(env)); }
+      catch (e) { cronStatus.copy = { error: e.message }; }
       // Market-making study: snapshot reward-market order books (D1 mm_books).
       try { cronStatus.mmBooks = await collectBooks(env); }
       catch (e) { cronStatus.mmBooks = { error: e.message }; }
@@ -8407,8 +8437,9 @@ async function getWalletPositions(address) {
 var ONCHAIN_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 async function refreshOnChainSkill(env, perRun = 6) {
   if (!env.SIGNALS_CACHE || !env.DB) return { skipped: "no DB/KV" };
-  const [best, worst] = await Promise.all([topWallets(env, 100, LEDGER_MIN_N), topWallets(env, 20, LEDGER_MIN_N, { worst: true })]);
-  const addrs = [...new Set([...best, ...worst].map(r => String(r.wallet).toLowerCase()))];
+  const [best, worst, copied] = await Promise.all([topWallets(env, 100, LEDGER_MIN_N), topWallets(env, 20, LEDGER_MIN_N, { worst: true }), listCopyWallets(env).catch(() => [])]);
+  // the copied wallets first: their page reads the book too
+  const addrs = [...new Set([...copied.map(w => w.address), ...[...best, ...worst].map(r => String(r.wallet).toLowerCase())])];
   const index = await env.SIGNALS_CACHE.get("wallet_onchain_index", { type: "json" }) || {};
   const now = Date.now();
   // Index entries: v2 = { at, v: 2 } (record carries the venue's book); a

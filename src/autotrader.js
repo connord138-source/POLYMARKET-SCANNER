@@ -21,6 +21,7 @@ import {
 } from './council.js';
 import { bucketSignal, matchesFilter } from './forge.js';
 import { CREW_KEYS, appendCrewChat, fetchMoneylineQuote } from './crew.js';
+import { COPY_KEYS, appendCopyLog } from './copy.js';
 import { attachShadow, refreshShadows, settleShadow, sideTokenId } from './execution.js';
 import { buildIntent, enqueueIntent } from './executor.js';
 
@@ -586,6 +587,15 @@ const DEFAULT_CONFIG = {
   crewBetSize: 5,          // APPROVE size; a split (TRIM) vote bets half
   crewMaxPerDay: 6,
   crewMaxOpen: 10,                // Crew lane's own open-position cap
+  // Copy-a-whale lane (src/copy.js, strategySource 'whale_copy'): paper
+  // copies of a named wallet's fresh buys, own caps, follows its exits.
+  copyEntries: true,
+  copyBetSize: 5,                 // paper $ per copied bet
+  copyMaxOpen: 10,                // lane's own open-position cap
+  copyMaxPerDay: 10,              // copies per day across all copied wallets
+  copyMinWhaleUsd: 500,           // the wallet's own stake must be at least this
+  copyMaxSlipPts: 4,              // skip when the live price is this far above what the wallet paid
+  copyMaxAgeMin: 60,              // a buy older than this when first seen is not copied
   crewMinEdge: 3,          // pts of devigged-consensus edge at the ask
   // Forge lane: paper-trade signals matching strategies the Strategy Forge
   // PROMOTED (walk-forward + slippage + significance). Auto-demotes a rule
@@ -1268,6 +1278,7 @@ const laneOpenCount = (positions, lane = 'main') => (positions || []).filter(p =
 function laneOpenCap(config, lane = 'main') {
   if (lane === 'forge') return config.forgeMaxOpen ?? 10;
   if (lane === 'crew_hunt') return config.crewMaxOpen ?? (config.maxOpenPositions || 0);
+  if (lane === 'whale_copy') return config.copyMaxOpen ?? 10;
   return config.maxOpenPositions || 0;
 }
 function evaluateSignal(signal, config, dailyStats, openPositions, perf, explorationGrad) {
@@ -1931,6 +1942,34 @@ export async function processSignals(env, signals) {
       continue;
     }
     
+    // Copy lane: the copied wallet left this market (sold, redeemed or
+    // merged after we entered) → leave with it at the live price.
+    if (position.mirrorWhaleExit && whaleExitedSlugs.has(position.marketSlug) && hasLivePrice) {
+      const pnl = calculatePnL(position, currentPrice);
+      const closedTrade = {
+        ...position,
+        marketCategory: position.marketCategory || categorizeMarket(position.marketTitle || ''),
+        closedAt: new Date().toISOString(),
+        exitPrice: currentPrice,
+        exitType: 'whale_exit',
+        exitReason: `Copied wallet exited; followed it out at ${currentPrice}% (${priceSource})`,
+        pnl: pnl.amount,
+        pnlPercent: pnl.percent,
+        outcome: pnl.amount > 0 ? 'win' : pnl.amount < 0 ? 'loss' : 'push',
+      };
+      closedThisCycle.add(position);
+      await addToHistory(env, closedTrade);
+      await updatePerformance(env, closedTrade);
+      dailyStats.tradesClosed = (dailyStats.tradesClosed || 0) + 1;
+      dailyStats.realizedPnL = (dailyStats.realizedPnL || 0) + pnl.amount;
+      dailyStats.totalReturned = (dailyStats.totalReturned || 0) + position.size + pnl.amount;
+      pnl.amount > 0 ? dailyStats.wins++ : pnl.amount < 0 ? dailyStats.losses++ : null;
+      results.positionsExited = (results.positionsExited || 0) + 1;
+      await logDecision(env, { type: 'EXIT', market: position.marketTitle, reason: closedTrade.exitReason, exitType: 'whale_exit', pnl: pnl.amount, paperTrade: config.paperTradeMode });
+      try { await appendCopyLog(env, { type: 'exited', wallet: position.copyOf, nickname: position.copyNick || null, market: position.marketTitle, outcome: position.directionRaw || position.direction, our: currentPrice, pnl: pnl.amount }); } catch (e) {}
+      continue;
+    }
+
     // Vegas-edge positions replicate the lane's proven hold-to-resolution
     // model: no stop-loss / take-profit / trailing / max-hold. Everything
     // above (Gamma-closed settlement, resolved-price settlement, the stale
@@ -2654,6 +2693,7 @@ export async function processSignals(env, signals) {
   // CREW LANE: picks from the operator-ordered hunt (Agent Crew chat).
   try {
     await enterCrewPicks(env, config, dailyStats, stillOpen, results);
+    await enterCopyPicks(env, config, dailyStats, stillOpen, results);
   } catch (e) {
     console.error('Crew pick entry error:', e.message);
   }
@@ -3027,6 +3067,105 @@ async function enterCrewPicks(env, config, dailyStats, stillOpen, results) {
   try {
     await env.SIGNALS_CACHE.put(CREW_KEYS.PICKS, JSON.stringify(remaining));
     await env.SIGNALS_CACHE.put(CREW_KEYS.ENTERED, JSON.stringify(Array.from(entered).slice(-500)), { expirationTtl: 30 * 24 * 3600 });
+  } catch (e) {}
+}
+
+// Copy lane: open the fresh buys the copied wallets made (src/copy.js).
+async function enterCopyPicks(env, config, dailyStats, stillOpen, results) {
+  if (config.copyEntries === false) return;
+  let queue = [];
+  try { queue = await env.SIGNALS_CACHE.get(COPY_KEYS.PICKS, { type: 'json' }) || []; } catch (e) { return; }
+  if (!queue.length) return;
+  const stat = { entered: 0, skips: {} };
+  results.copy = stat;
+  const skip = (why) => { stat.skips[why] = (stat.skips[why] || 0) + 1; };
+  if (!config.paperTradeMode) { skip('paper only'); return; }
+  if (config.dailyLossLimit && (dailyStats.realizedPnL || 0) <= -Math.abs(config.dailyLossLimit)) { skip('daily loss limit'); return; }
+
+  let enteredIds = [];
+  try { enteredIds = await env.SIGNALS_CACHE.get(COPY_KEYS.ENTERED, { type: 'json' }) || []; } catch (e) {}
+  const entered = new Set(enteredIds);
+  const remaining = [];
+  const now = Date.now();
+  const maxPerDay = config.copyMaxPerDay ?? 10;
+  const maxSlip = config.copyMaxSlipPts ?? 4;
+  const maxAgeMs = (config.copyMaxAgeMin ?? 60) * 60e3;
+
+  for (const pick of queue) {
+    if (entered.has(pick.id)) continue;
+    if (now - (pick.lastTs || 0) > maxAgeMs) { skip('too old'); entered.add(pick.id); continue; }
+    if ((dailyStats.copyOpened || 0) >= maxPerDay) { skip('copy daily cap'); remaining.push(pick); continue; }
+    if (stillOpen.some(p => p.marketSlug === pick.marketSlug)) { skip('already holding market'); entered.add(pick.id); continue; }
+    const size = Math.round((config.copyBetSize ?? 5) * 100) / 100;
+    if (config.maxDailyTrades > 0 && dailyStats.tradesOpened >= config.maxDailyTrades) { skip('daily trade cap'); remaining.push(pick); continue; }
+    if (config.maxDailySpend > 0 && dailyStats.totalSpent + size > config.maxDailySpend) { skip('daily spend cap'); remaining.push(pick); continue; }
+    if (laneOpenCap(config, 'whale_copy') > 0 && laneOpenCount(stillOpen, 'whale_copy') >= laneOpenCap(config, 'whale_copy')) { skip('max open positions'); remaining.push(pick); continue; }
+
+    // Honest fill: the live Gamma price of the outcome the wallet bought.
+    let gamma = null;
+    try { gamma = await lookupMarketTokens(pick.marketSlug); } catch (e) {}
+    if (!gamma || !Array.isArray(gamma.gammaPrices)) { skip('gamma lookup miss'); entered.add(pick.id); continue; }
+    if (gamma.closed) { skip('market closed'); entered.add(pick.id); continue; }
+    const outs = (gamma.outcomes || []).map(x => String(x));
+    const want = String(pick.outcome || '').toLowerCase();
+    let idx = outs.findIndex(o => o.toLowerCase() === want);
+    if (idx < 0) idx = outs.findIndex(o => o.toLowerCase().includes(want) || want.includes(o.toLowerCase()));
+    if (idx < 0 || typeof gamma.gammaPrices[idx] !== 'number' || isNaN(gamma.gammaPrices[idx])) { skip('no outcome match'); entered.add(pick.id); continue; }
+    const live = Math.round(gamma.gammaPrices[idx] * 1000) / 10;
+    if (live <= 5 || live >= 95) { skip('price extreme'); entered.add(pick.id); continue; }
+    if (typeof pick.price === 'number' && live - pick.price > maxSlip) { skip('price ran away'); remaining.push(pick); continue; }
+
+    const category = categorizeMarket(pick.title || '');
+    const position = {
+      id: `at_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      marketSlug: pick.marketSlug,
+      marketTitle: pick.title,
+      marketType: category.startsWith('sports') ? 'sports' : 'other',
+      signalSubType: 'copy',
+      direction: outs[idx],
+      directionRaw: outs[idx],
+      whaleAction: 'BUY',
+      entryPrice: live,
+      size,
+      walletTier: 'COPY',
+      strategySource: 'whale_copy',
+      copyOf: pick.wallet,
+      copyNick: pick.nickname || null,
+      copyPickId: pick.id,
+      whaleWallet: pick.wallet,
+      whalePrice: pick.price ?? null,
+      whaleUsd: pick.usd ?? null,
+      openedAt: new Date().toISOString(),
+      paperTrade: true,
+      marketCategory: category,
+      holdToResolution: true,
+      mirrorWhaleExit: true,
+      shares: size / (live / 100),
+    };
+    stillOpen.push(position);
+    entered.add(pick.id);
+    stat.entered++;
+    dailyStats.tradesOpened++;
+    dailyStats.totalSpent += size;
+    dailyStats.copyOpened = (dailyStats.copyOpened || 0) + 1;
+    results.tradesPaperTraded = (results.tradesPaperTraded || 0) + 1;
+
+    const who = pick.nickname || `${pick.wallet.slice(0, 6)}…${pick.wallet.slice(-4)}`;
+    await logDecision(env, {
+      type: 'PAPER_TRADE',
+      market: position.marketTitle,
+      size,
+      entryPrice: live,
+      walletTier: 'COPY',
+      reason: `Copied ${who}: ${outs[idx]} @ ${live}¢ (it paid ${pick.price ?? '?'}¢, $${pick.usd}) — follows its exit, else holds to resolution`,
+      marketCategory: category,
+    });
+    try { await appendCopyLog(env, { type: 'copied', wallet: pick.wallet, nickname: pick.nickname || null, market: pick.title, outcome: outs[idx], usd: pick.usd, price: pick.price, our: live, size }); } catch (e) {}
+  }
+
+  try {
+    await env.SIGNALS_CACHE.put(COPY_KEYS.PICKS, JSON.stringify(remaining));
+    await env.SIGNALS_CACHE.put(COPY_KEYS.ENTERED, JSON.stringify(Array.from(entered).slice(-500)), { expirationTtl: 30 * 24 * 3600 });
   } catch (e) {}
 }
 

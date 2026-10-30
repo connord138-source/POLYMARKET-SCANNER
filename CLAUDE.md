@@ -67,6 +67,20 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   Anthropic account (`INVESTIGATION_DAILY_USD`, $1 since Oct 2026). ESPN only
   serves DraftKings odds to US clients, so the page computes the DraftKings
   board in the browser and POSTs it to `/agents/crew/dk-board`.
+- `src/copy.js` — copy a whale (Oct 30 2026): the operator feeds the agent a
+  wallet (`POST /agents/copy/wallets`, admin; the Copy a whale page or
+  `.github/workflows/copy-wallet.yml`); each 5-min cron (`pollCopyWallets`,
+  `cronStatus.copy`) reads the wallet's newest data-api trades and queues
+  every fresh BUY of `copyMinWhaleUsd` ($500) or more; `enterCopyPicks` in
+  autotrader.js fills it at the live Gamma price in its own lane
+  (`strategySource 'whale_copy'`, `copyBetSize` $5 paper, `copyMaxOpen` 10,
+  `copyMaxPerDay` 10, skipped when the price ran `copyMaxSlipPts` above what
+  the wallet paid), holds to resolution and leaves when the wallet sells,
+  redeems or merges (`mirrorWhaleExit`, exit type `whale_exit`). A wallet is
+  copied from the moment it is added; its history is not replayed. `GET
+  /agents/copy` (snapshot key `copy`) carries each wallet's record, the
+  ledger's skill row and Polymarket's book (the on-chain refresher pulls
+  copied wallets first). Paper only; the live flip is the operator's.
 - `src/execution.js` — execution shadow ledger: every paper entry records the
   live CLOB book + Gamma `feeSchedule` and tracks a taker fill (ask + fee) and
   a resting-bid maker fill (filled only if the tape prints at/below the bid
