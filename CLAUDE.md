@@ -249,10 +249,16 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   30 2026 `repriceEdgeOpportunities` runs every 5-min cron and refreshes the
   open pregame rows' venue side from the free books (Gamma for global,
   the US gateway's top of book on the side taken via `usLong` for US rows)
-  into `lastPolyPrice` / `lastEdgeNet` / `pricedAt`
+  into `lastPolyPrice` / `lastEdgeNet` / `pricedAt`, and the books' side
+  from the odds cache the scan already paid for (`devigH2H`, the same
+  preferred-book devig as detection; `lastVegasProb` / `lineUpdatedAt` /
+  `lineCheckedAt`, `lineMissing` when the game left the cache)
   (`cronStatus.lastRun.edgeReprice`, route field `lastPrice`). The pages
-  show that live view and keep the entry as "booked at" (frontend
-  `src/lib/edges.js`).
+  show that live view, keep the entry as "booked at", and call a row whose
+  line has not been confirmed for 45 min, or whose price moved 3+ points on
+  an old line, "check the line" instead of value (frontend
+  `src/lib/edges.js`): on Oct 30 a Pacers row carried a 30-hour-old 39%
+  line while injury news took the market from 34c to 27c.
 - `src/wallet-ledger.js` — point-in-time wallet skill in D1 (`signal_wallets`
   joined to `signals_log`): excess = win rate minus average entry price over a
   wallet's settled bets, trusted from `LEDGER_MIN_N` (10). `GET /wallets/ledger`
