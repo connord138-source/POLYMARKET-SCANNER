@@ -30,7 +30,7 @@ import { buildAgentHub } from "./src/agent-hub.js";
 import { handleCrewOrder, runCrewHunt, getCrewState, saveBrowserDkBoard, answerPendingCrewChat } from "./src/crew.js";
 import { settleDkPicks } from "./src/dk-picks.js";
 import { collectBooks, MM_SCHEMA } from "./src/mm-collector.js";
-import { sampleXvenue, xvenueReport, XV_SCHEMA } from "./src/xvenue.js";
+import { sampleXvenue, xvenueReport, XV_SCHEMA, usTopOfBook } from "./src/xvenue.js";
 import { US_LANE_SCHEMA, recordUsLaneEvents, markUsLaneEvents, settleUsLaneEvents, usLaneReport } from "./src/us-lane.js";
 import { getExecReport } from "./src/execution.js";
 import { runExecutor, getExecutorReport, setHalt } from "./src/executor.js";
@@ -3893,7 +3893,7 @@ async function annotateVenues(env, sport, games) {
         const q = await usGameQuote(env, hit.league, hit);
         const away = q && q.teamA, home = q && q.teamB;
         g.polymarketUs = {
-          moneyline: { home: home ? { price: home.price, cost: home.cost, slug: home.slug, bid: home.bid, ask: home.ask } : null, away: away ? { price: away.price, cost: away.cost, slug: away.slug, bid: away.bid, ask: away.ask } : null },
+          moneyline: { home: home ? { price: home.price, cost: home.cost, slug: home.slug, bid: home.bid, ask: home.ask, long: home.long } : null, away: away ? { price: away.price, cost: away.cost, slug: away.slug, bid: away.bid, ask: away.ask, long: away.long } : null },
           url: hit.url, league: hit.league, eventSlug: hit.eventSlug, lastUpdate: nowIso
         };
         g.hasPolymarketUs = !!(home || away);
@@ -3981,7 +3981,7 @@ function usEdgeFor(sport, g, side) {
     vegasProb: vegProb, polyPrice: cost, midPrice: pm.price, edgeNet,
     honestFill: true, pregame: true, minutesToStart: Math.round((startMs - Date.now()) / 60000),
     bookUpdatedAt: (g.vegas && g.vegas.h2hUpdatedAt) || null,
-    polySlug: gl && gl.slug ? gl.slug : null, usSlug: pm.slug || null, url: g.polymarketUs.url || null, league: g.polymarketUs.league || null,
+    polySlug: gl && gl.slug ? gl.slug : null, usSlug: pm.slug || null, usLong: typeof pm.long === "boolean" ? pm.long : null, url: g.polymarketUs.url || null, league: g.polymarketUs.league || null,
     detectedAt: new Date().toISOString(), outcome: null, settledAt: null, pnl: null
   };
 }
@@ -4132,6 +4132,50 @@ async function scanEdges(env) {
   if (freshStrong.length > 0) {
     try { await alertEdgeOpportunities(env, freshStrong); } catch (e) { console.error("edge alert error:", e.message); }
   }
+  return summary;
+}
+
+// Every 5-min cron (Oct 30 2026): re-price the OPEN, pregame opportunities'
+// venue side from the free public books, so the pages show today's price
+// while the entry (polyPrice / edgeNet / vegasProb) stays frozen for
+// settlement. Global rows read Gamma's live moneyline, Polymarket US rows
+// the gateway's top of book on the side taken (needs usLong, recorded on
+// rows since Oct 30; older US rows wait for the scan's own refresh). The
+// books' probability keeps the scan's 14-minute cadence (Odds API credits),
+// so lastEdgeNet is the latest known line against the live price.
+var EDGE_REPRICE_MAX = 40;
+async function repriceEdgeOpportunities(env, { max = EDGE_REPRICE_MAX } = {}) {
+  if (!env.SIGNALS_CACHE) return { skipped: "no KV" };
+  const opps = await env.SIGNALS_CACHE.get("edge_opportunities", { type: "json" }) || [];
+  const now = Date.now();
+  const liveEdgeOf = (o) => (typeof o.lastEdgeNet === "number" ? o.lastEdgeNet : o.edgeNet) || 0;
+  const open = opps.filter(o => !o.outcome && o.commenceTime && new Date(o.commenceTime).getTime() > now)
+    .sort((a, b) => liveEdgeOf(b) - liveEdgeOf(a)).slice(0, max);
+  let repriced = 0, failed = 0, skipped = 0;
+  for (const o of open) {
+    try {
+      let live = null;
+      if ((o.venue || "global") === "us") {
+        if (typeof o.usLong !== "boolean" || !o.usSlug) { skipped++; continue; }
+        const bbo = await usTopOfBook(o.usSlug);
+        const cost = bbo ? (o.usLong ? bbo.ask : (bbo.bid != null ? 1 - bbo.bid : null)) : null;
+        if (typeof cost === "number" && cost > 0) live = Math.round(cost * 100);
+      } else if (o.polySlug) {
+        const foundG = await findGammaMarket(o.polySlug, o.team);
+        const baseG = gammaBaselineForDirection(foundG, o.team);
+        if (typeof baseG.marketProb === "number") live = Math.round(baseG.marketProb * 100);
+      } else { skipped++; continue; }
+      if (live === null || live <= 0 || live >= 100) { failed++; continue; }
+      const vegas = typeof o.lastVegasProb === "number" ? o.lastVegasProb : o.vegasProb;
+      o.lastPolyPrice = live;
+      if (typeof vegas === "number") o.lastEdgeNet = Math.round((vegas - live) * 10) / 10;
+      o.pricedAt = new Date().toISOString();
+      repriced++;
+    } catch (e) { failed++; }
+  }
+  if (repriced) await env.SIGNALS_CACHE.put("edge_opportunities", JSON.stringify(opps), { expirationTtl: 7 * 24 * 3600 });
+  const summary = { at: now, open: open.length, repriced, failed, skipped };
+  await env.SIGNALS_CACHE.put("edge_reprice_last", JSON.stringify(summary), { expirationTtl: 3600 });
   return summary;
 }
 
@@ -6160,6 +6204,7 @@ export default {
       if (path === "/edge/opportunities") {
         const opps = await env.SIGNALS_CACHE.get("edge_opportunities", { type: "json" }) || [];
         const lastScan = await env.SIGNALS_CACHE.get("edge_scan_last", { type: "json" });
+        const lastPrice = await env.SIGNALS_CACHE.get("edge_reprice_last", { type: "json" });
         const open = opps.filter(o => !o.outcome);
         const settled = opps.filter(o => o.outcome === "WIN" || o.outcome === "LOSS");
         const wins = settled.filter(o => o.outcome === "WIN").length;
@@ -6178,6 +6223,7 @@ export default {
           settledCount: settled.length,
           winRate: settled.length ? Math.round((wins / settled.length) * 100) : null,
           lastScan,
+          lastPrice,
           opportunities: opps.slice(0, 100)
         });
       }
@@ -7304,6 +7350,11 @@ export default {
         console.error("Edge scan error:", e.message);
         cronStatus.edgeScan = { error: e.message };
       }
+      // Re-price the open edges' venue side from the free books every run
+      // (the scan above is throttled for Odds API credits; the pages show
+      // lastPolyPrice / lastEdgeNet, the entry stays frozen).
+      try { cronStatus.edgeReprice = await repriceEdgeOpportunities(env); }
+      catch (e) { cronStatus.edgeReprice = { error: e.message }; }
       // CREW HUNT: when the operator has given the Agent Crew an order, price
       // that sport's whole pregame slate vs the books, debate the biggest gaps,
       // and queue picks for the auto-trader below (self-throttled ~15 min).

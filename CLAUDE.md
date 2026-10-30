@@ -243,6 +243,16 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   name). The edge scanner pauses under 150 credits remaining (`crew.oddsApi`
   in the snapshot shows the count); the Oct 29 2026 key read 48 of 500 (free
   tier) until the owner renewed the 20k plan.
+  The sports edge scan (`scanEdges`, KV `edge_opportunities`) is throttled
+  to ~14 min for credits and FREEZES each row's entry (polyPrice / edgeNet /
+  vegasProb) at detection so settlement pays at the booked price; since Oct
+  30 2026 `repriceEdgeOpportunities` runs every 5-min cron and refreshes the
+  open pregame rows' venue side from the free books (Gamma for global,
+  the US gateway's top of book on the side taken via `usLong` for US rows)
+  into `lastPolyPrice` / `lastEdgeNet` / `pricedAt`
+  (`cronStatus.lastRun.edgeReprice`, route field `lastPrice`). The pages
+  show that live view and keep the entry as "booked at" (frontend
+  `src/lib/edges.js`).
 - `src/wallet-ledger.js` — point-in-time wallet skill in D1 (`signal_wallets`
   joined to `signals_log`): excess = win rate minus average entry price over a
   wallet's settled bets, trusted from `LEDGER_MIN_N` (10). `GET /wallets/ledger`
