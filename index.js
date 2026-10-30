@@ -4166,13 +4166,20 @@ async function repriceEdgeOpportunities(env, { max = EDGE_REPRICE_MAX } = {}) {
   // The books' side comes from the odds cache the scan already paid for (no
   // credits): a line refreshed every ~15 min beats one frozen at detection,
   // and a game missing from the cache means its line was pulled.
+  // The last pull of the sport's lines (odds.js keeps it 6h with its fetch
+  // time) so a line is there between scans; the short cache is the fallback.
   const oddsCache = new Map();
   const cachedOdds = async (sport) => {
     if (oddsCache.has(sport)) return oddsCache.get(sport);
     const key = SPORT_KEY_MAP[sport];
-    let data; try { data = key ? await env.SIGNALS_CACHE.get(`odds_lines:${key}:h2h,spreads`, { type: "json" }) : undefined; } catch (e) { data = undefined; }
-    oddsCache.set(sport, Array.isArray(data) ? data : undefined);
-    return oddsCache.get(sport);
+    let out;
+    try {
+      const last = key ? await env.SIGNALS_CACHE.get(`odds_lines:${key}:h2h,spreads:last`, { type: "json" }) : null;
+      if (last && Array.isArray(last.data)) out = { at: last.at || null, data: last.data };
+      else { const data = key ? await env.SIGNALS_CACHE.get(`odds_lines:${key}:h2h,spreads`, { type: "json" }) : null; if (Array.isArray(data)) out = { at: null, data }; }
+    } catch (e) { out = undefined; }
+    oddsCache.set(sport, out);
+    return out;
   };
   let linesRefreshed = 0, linesMissing = 0;
   const liveEdgeOf = (o) => (typeof o.lastEdgeNet === "number" ? o.lastEdgeNet : o.edgeNet) || 0;
@@ -4185,10 +4192,11 @@ async function repriceEdgeOpportunities(env, { max = EDGE_REPRICE_MAX } = {}) {
       const odds = await cachedOdds(o.sport);
       if (odds) {
         const eventId = String(o.id || "").split(":")[1];
-        const game = odds.find(g => g && g.id === eventId);
+        const game = odds.data.find(g => g && g.id === eventId);
         const line = game ? devigH2H(game) : null;
         const prob = line ? (o.side === "home" ? line.home : line.away) : null;
-        if (typeof prob === "number") { o.lastVegasProb = prob; o.lineUpdatedAt = line.updatedAt; o.lineCheckedAt = new Date().toISOString(); o.lineMissing = false; linesRefreshed++; }
+        // lineCheckedAt is the PULL's time (the line was in the books' feed then), not this cron's
+        if (typeof prob === "number") { o.lastVegasProb = prob; o.lineUpdatedAt = line.updatedAt; o.lineCheckedAt = odds.at || new Date().toISOString(); o.lineMissing = false; linesRefreshed++; }
         else { o.lineMissing = true; linesMissing++; }
       }
       // the venue side

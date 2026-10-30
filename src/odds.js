@@ -165,6 +165,13 @@ async function cachedOddsFetch(env, cacheKey, url, ttlSeconds) {
   var data = await response.json();
   if (env.SIGNALS_CACHE && data) {
     try { await env.SIGNALS_CACHE.put(cacheKey, JSON.stringify(data), { expirationTtl: ttlSeconds }); } catch (e) { /* best-effort */ }
+    // The last pull of each lines feed, with its time, outlives the short
+    // cache (6h): the edge re-price reads a game's line from it between
+    // scans and reports how old that pull is, instead of finding nothing in
+    // the minute after the cache expires or during the credit-saver hour.
+    if (cacheKey.indexOf("odds_lines:") === 0) {
+      try { await env.SIGNALS_CACHE.put(cacheKey + ":last", JSON.stringify({ at: status.at, data: data }), { expirationTtl: 6 * 3600 }); } catch (e) { /* best-effort */ }
+    }
   }
   return data;
 }
