@@ -15,9 +15,9 @@ on:
         required: false
         default: ""
       action:
-        description: "add | pause | resume | remove"
+        description: "follow | copy | pause | resume | remove (follow tracks it, copy also paper-copies its bets)"
         required: true
-        default: "add"
+        default: "follow"
 
 jobs:
   copy-wallet:
@@ -34,13 +34,14 @@ jobs:
           if [ -z "$ADMIN_TOKEN" ]; then echo "::error::ADMIN_TOKEN repo secret is not set"; exit 1; fi
           BASE="https://polymarket-scanner.connord138.workers.dev"
           case "$ACTION" in
-            add)    PATH_="/agents/copy/wallets"; BODY=$(jq -n --arg a "$ADDRESS" --arg n "$NICKNAME" '{address:$a, nickname:$n}') ;;
+            follow) PATH_="/agents/copy/wallets"; BODY=$(jq -n --arg a "$ADDRESS" --arg n "$NICKNAME" '{address:$a, nickname:$n, mode:"follow"}') ;;
+            copy|add) PATH_="/agents/copy/wallets"; BODY=$(jq -n --arg a "$ADDRESS" --arg n "$NICKNAME" '{address:$a, nickname:$n, mode:"copy"}') ;;
             remove) PATH_="/agents/copy/wallets/remove"; BODY=$(jq -n --arg a "$ADDRESS" '{address:$a}') ;;
             pause)  PATH_="/agents/copy/wallets/toggle"; BODY=$(jq -n --arg a "$ADDRESS" '{address:$a, enabled:false}') ;;
             resume) PATH_="/agents/copy/wallets/toggle"; BODY=$(jq -n --arg a "$ADDRESS" '{address:$a, enabled:true}') ;;
-            *) echo "::error::action must be add, pause, resume or remove"; exit 1 ;;
+            *) echo "::error::action must be follow, copy, pause, resume or remove"; exit 1 ;;
           esac
           code=$(curl -sS -o /tmp/out.json -w "%{http_code}" -X POST -H "Authorization: Bearer ${ADMIN_TOKEN}" -H "Content-Type: application/json" --data "$BODY" "$BASE$PATH_")
           echo "HTTP $code"
-          jq '{success, error, wallets: [.wallets[]? | {address, nickname, enabled, addedAt}]}' /tmp/out.json || cat /tmp/out.json
+          jq '{success, error, wallets: [.wallets[]? | {address, nickname, mode, enabled, addedAt}]}' /tmp/out.json || cat /tmp/out.json
           [ "$code" = "200" ]

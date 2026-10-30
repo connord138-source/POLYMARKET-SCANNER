@@ -67,11 +67,17 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   Anthropic account (`INVESTIGATION_DAILY_USD`, $1 since Oct 2026). ESPN only
   serves DraftKings odds to US clients, so the page computes the DraftKings
   board in the browser and POSTs it to `/agents/crew/dk-board`.
-- `src/copy.js` — copy a whale (Oct 30 2026): the operator feeds the agent a
-  wallet (`POST /agents/copy/wallets`, admin; the Copy a whale page or
-  `.github/workflows/copy-wallet.yml`); each 5-min cron (`pollCopyWallets`,
-  `cronStatus.copy`) reads the wallet's newest data-api trades and queues
-  every fresh BUY of `copyMinWhaleUsd` ($500) or more; `enterCopyPicks` in
+- `src/copy.js` — followed wallets and copy a whale (Oct 30 2026): one list
+  (`copy_wallets`), each wallet in mode `follow` (tracked: its bets as they
+  happen in `copy_recent:<addr>`, Polymarket's book, and the P&L since it was
+  added via `bookAtAdd`) or `copy` (all that, and paper copies). Added by
+  `POST /agents/copy/wallets` (admin; the Followed wallets page, the Follow /
+  Copy buttons on the wallet modal and lookup page, or
+  `.github/workflows/copy-wallet.yml`); `POST /agents/copy/wallets/mode`
+  flips a wallet (to copy starts the copy clock now). Each 5-min cron
+  (`pollCopyWallets`, `cronStatus.copy`) reads every followed wallet's newest
+  data-api trades; for a copied wallet it queues each fresh BUY of
+  `copyMinWhaleUsd` ($500) or more; `enterCopyPicks` in
   autotrader.js fills it at the live Gamma price in its own lane
   (`strategySource 'whale_copy'`, `copyBetSize` $5 paper, `copyMaxOpen` 10,
   `copyMaxPerDay` 10, skipped when the price ran `copyMaxSlipPts` above what

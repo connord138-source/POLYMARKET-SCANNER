@@ -1,5 +1,5 @@
 // Copy-a-whale lane: pick building, queue merging, the ledger. Run with: node test/copy.test.mjs
-import { picksFromActivity, mergePicks, copyLedger, isWalletAddress, addCopyWallet, pollCopyWallets, listCopyWallets } from "../src/copy.js";
+import { picksFromActivity, mergePicks, copyLedger, isWalletAddress, addCopyWallet, pollCopyWallets, listCopyWallets, setCopyWalletMode, modeOf } from "../src/copy.js";
 let pass = 0, fail = 0;
 const check = (n, c, x) => { if (c) pass++; else { fail++; console.error("FAIL:", n, x ?? ""); } };
 const kv = () => { const m = new Map(); return { get: async (k) => (m.has(k) ? JSON.parse(m.get(k)) : null), put: async (k, v) => { m.set(k, v); }, _m: m }; };
@@ -35,16 +35,24 @@ check("ledger per wallet and total", led.perWallet["0xa"].wins === 1 && led.perW
 
 // add + poll against a fake feed
 const env = { SIGNALS_CACHE: kv() };
-const add = await addCopyWallet(env, { address: W, nickname: "heater" }, now - 20 * 60e3);
-check("add: lowercased, enabled, starts from now", add.ok && add.wallet.address === W.toLowerCase() && add.wallet.enabled && add.wallet.lastSeenTs === now - 20 * 60e3, add);
+const add = await addCopyWallet(env, { address: W, nickname: "heater" }, now - 20 * 60e3, { officialBook: async () => ({ lifetime: 580358, pnl30d: 158111, at: "2026-10-29T23:00:00Z" }) });
+check("add: lowercased, enabled, follow-only by default, starts from now, book marked", add.ok && add.wallet.address === W.toLowerCase() && add.wallet.enabled && add.wallet.mode === "follow" && add.wallet.lastSeenTs === now - 20 * 60e3 && add.wallet.bookAtAdd.lifetime === 580358, add);
 check("add: duplicate refused", (await addCopyWallet(env, { address: W })).ok === false);
+check("entries from before modes count as copy", modeOf({ address: "0xa" }) === "copy" && modeOf({ mode: "follow" }) === "follow");
 const fakeFetch = async () => ({ ok: true, json: async () => acts });
 const stat = await pollCopyWallets(env, { copyMinWhaleUsd: 500 }, now, fakeFetch);
 const queue = JSON.parse(env.SIGNALS_CACHE._m.get("copy_picks"));
 const wl = await listCopyWallets(env);
-check("poll: one pick queued with the nickname, wallet advanced to the newest trade", stat.polled === 1 && stat.queued === 1 && queue.length === 1 && queue[0].nickname === "heater" && wl[0].lastSeenTs === t(1) * 1000 && wl[0].queued === 1, { stat, queue, wl });
-const stat2 = await pollCopyWallets(env, { copyMinWhaleUsd: 500 }, now + 60e3, fakeFetch);
-check("poll again: nothing new", stat2.queued === 0 && JSON.parse(env.SIGNALS_CACHE._m.get("copy_picks")).length === 1);
+const recent = JSON.parse(env.SIGNALS_CACHE._m.get("copy_recent:" + W.toLowerCase()));
+check("poll a followed wallet: the bet is recorded, nothing queued, wallet advanced", stat.polled === 1 && stat.seen === 1 && stat.queued === 0 && queue.length === 0 && recent.length === 1 && recent[0].outcome === "Karmine Corp" && wl[0].lastSeenTs === t(1) * 1000 && wl[0].seen === 1, { stat, queue, wl, recent });
+const flip = await setCopyWalletMode(env, W, "copy", now - 10 * 60e3);
+check("flip to copy: the clock never moves backwards, nothing replayed", flip.ok && flip.wallet.mode === "copy" && flip.wallet.lastSeenTs === t(1) * 1000, flip);
+const acts2 = [...acts, { type: "TRADE", side: "BUY", slug: "nba-gsw-min-2026-10-30", title: "Warriors vs. Timberwolves", outcome: "Warriors", usdcSize: "4000", price: "0.52", timestamp: t(0.5) }];
+const stat2 = await pollCopyWallets(env, { copyMinWhaleUsd: 500 }, now + 60e3, async () => ({ ok: true, json: async () => acts2 }));
+const queue2 = JSON.parse(env.SIGNALS_CACHE._m.get("copy_picks"));
+check("poll a copied wallet: the new bet is queued with the nickname, the old one is not replayed", stat2.queued === 1 && queue2.length === 1 && queue2[0].outcome === "Warriors" && queue2[0].nickname === "heater", { stat2, queue2 });
+const back = await setCopyWalletMode(env, W, "follow", now + 120e3);
+check("flip back to follow: queue cleared", back.ok && JSON.parse(env.SIGNALS_CACHE._m.get("copy_picks")).length === 0);
 
 console.log(`copy: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
