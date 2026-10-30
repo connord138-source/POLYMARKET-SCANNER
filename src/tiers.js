@@ -1,3 +1,5 @@
+import { maskWhaleSkill } from "./signal-skill.js";
+const maskAddr = (w) => (w ? String(w).slice(0, 6) + "…" : w);
 // Plans and what each unlocks. The worker is the source of truth: the
 // frontend reads /me and mirrors these for the paywall, but every gated
 // endpoint checks here. Prices are display values; Stripe prices are the
@@ -67,7 +69,8 @@ export function degradeFor(kind, data, plan, nowMs = Date.now()) {
   if (kind === "scan" && Array.isArray(data.signals)) {
     const cutoff = nowMs - (lim.signalsDelayMin || 0) * 60e3;
     const delayed = data.signals.filter(s => Date.parse(s.detectedAt || s.lastTradeTime || 0) <= cutoff).sort((a, b) => (b.score || 0) - (a.score || 0)).slice(0, lim.signalsMax || 5)
-      .map(s => ({ ...s, topTrades: (s.topTrades || []).map(t => ({ ...t, wallet: t.wallet ? t.wallet.slice(0, 6) + "…" : "" })) }));
+      .map(s => ({ ...s, topTrades: (s.topTrades || []).map(t => ({ ...t, wallet: t.wallet ? t.wallet.slice(0, 6) + "…" : "" })),
+        whaleSkill: maskWhaleSkill(s.whaleSkill, maskAddr), winningWalletInfo: s.winningWalletInfo ? { ...s.winningWalletInfo, wallet: maskAddr(s.winningWalletInfo.wallet) } : s.winningWalletInfo }));
     return { ...data, signals: delayed, access: { plan, degraded: true, delayMin: lim.signalsDelayMin, max: lim.signalsMax, hidden: Math.max(0, data.signals.length - delayed.length) } };
   }
   if (kind === "cryptoFv" && Array.isArray(data.rows)) {

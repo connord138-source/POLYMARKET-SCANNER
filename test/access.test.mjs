@@ -107,10 +107,13 @@ check("policy: scan degrades for free, crew orders need pro, api needs desk, hea
 }
 {
   const t0 = Date.parse("2026-10-16T12:00:00Z");
-  const sig = (m, s) => ({ marketSlug: m, score: s, detectedAt: new Date(t0 - m * 60e3).toISOString(), topTrades: [{ wallet: "0xabcdef1234", amount: 1 }] });
+  const sig = (m, s) => ({ marketSlug: m, score: s, detectedAt: new Date(t0 - m * 60e3).toISOString(), topTrades: [{ wallet: "0xabcdef1234", amount: 1 }],
+    whaleSkill: { call: "proven", best: { wallet: "0xabcdef1234", usd: 1, skill: { n: 20, excess: 9 } }, worst: null, biggest: { wallet: "0xabcdef1234", usd: 1 }, thin: null, wallets: [{ wallet: "0xabcdef1234", usd: 1, skill: { n: 20, excess: 9 } }] },
+    winningWalletInfo: { wallet: "0xabcdef1234", record: "20 settled bets, +9 pts over price" } });
   const scan = { success: true, signals: [sig(5, 99), sig(45, 50), sig(60, 90), sig(90, 10), sig(120, 20), sig(200, 30), sig(300, 40), sig(400, 60)] };
   const d = degradeFor("scan", scan, "free", t0);
   check("degrade scan (free): 30-min delay, top 5 by score, wallets masked, counts hidden", d.access.degraded && d.signals.length === 5 && d.signals.every(s => Date.parse(s.detectedAt) <= t0 - 30 * 60e3) && d.signals[0].score === 90 && d.signals[0].topTrades[0].wallet === "0xabcd…" && d.access.hidden === 3, JSON.stringify(d.access));
+  check("degrade scan (free): whale skill addresses masked, the call kept", d.signals[0].whaleSkill.call === "proven" && d.signals[0].whaleSkill.best.wallet === "0xabcd…" && d.signals[0].whaleSkill.wallets[0].wallet === "0xabcd…" && d.signals[0].whaleSkill.biggest.wallet === "0xabcd…" && d.signals[0].winningWalletInfo.wallet === "0xabcd…" && d.signals[0].whaleSkill.best.skill.excess === 9, JSON.stringify(d.signals[0].whaleSkill));
   check("degrade scan (pro): untouched", degradeFor("scan", scan, "pro", t0) === scan);
   const fv = degradeFor("cryptoFv", { rows: Array.from({ length: 40 }, (_, i) => ({ i })) }, "free");
   check("degrade crypto lab (free): 12 rows", fv.rows.length === 12 && fv.access.hidden === 28);
