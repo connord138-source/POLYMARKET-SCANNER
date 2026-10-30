@@ -1,5 +1,5 @@
 // The proven record behind a whale signal. Run with: node test/signal-skill.test.mjs
-import { walletSkillMany, onChainSkillMany, skillRows, whaleCall, annotateSignalWalletSkill, maskWhaleSkill, PROVEN_PTS, LOSER_PTS } from "../src/signal-skill.js";
+import { walletSkillMany, onChainSkillMany, skillRows, whaleCall, annotateSignalWalletSkill, maskWhaleSkill, signalWalletsByMoney, PROVEN_PTS, LOSER_PTS } from "../src/signal-skill.js";
 let pass = 0, fail = 0;
 const check = (n, c, x) => { if (c) pass++; else { fail++; console.error("FAIL:", n, x ?? ""); } };
 const row = (n, wr, px, source = 'signals') => ({ n, winRate: wr, avgPrice: px, excess: Math.round((wr - px) * 10) / 10, source });
@@ -36,14 +36,15 @@ const row = (n, wr, px, source = 'signals') => ({ n, winRate: wr, avgPrice: px, 
   const ledgerRows = { "0xaa": { wallet: "0xaa", n: 25, wr: 60, px: 50, excess: 10 }, "0xcc": { wallet: "0xcc", n: 12, wr: 40, px: 52, excess: -12 }, "0xzz": { wallet: "0xzz", n: 3, wr: 100, px: 30, excess: 70 } };
   const env = {
     DB: { prepare: (sql) => ({ bind: (...a) => ({ all: async () => { queries.push(a.length); return { results: a.map(w => ledgerRows[w]).filter(Boolean) }; } }) }) },
-    SIGNALS_CACHE: { get: async (k) => { kvReads.push(k); if (k === "wallet_onchain_index") return { "0xbb": { at: "x", v: 3 }, "0xqq": { at: "x", v: 3 } }; if (k === "wallet_onchain:0xbb") return { skill: { n: 30, winRate: 58, avgPrice: 47, excess: 11 }, totalPnL: 1200, windowDays: 20 }; return null; } },
+    SIGNALS_CACHE: { get: async (k) => { kvReads.push(k); if (k === "wallet_onchain_index") return { "0xaa": { at: "x", v: 3 }, "0xbb": { at: "x", v: 3 }, "0xqq": { at: "x", v: 3 } }; if (k === "wallet_onchain:0xbb") return { skill: { n: 30, winRate: 58, avgPrice: 47, excess: 11 }, totalPnL: 1200, windowDays: 20 }; return null; } },
   };
   const many = Array.from({ length: 130 }, (_, i) => `0x${String(i).padStart(3, "0")}`);
   await walletSkillMany(env, many);
   check("ledger: 130 wallets -> 3 chunked queries", queries.length === 3 && queries[0] === 60 && queries[2] === 10, JSON.stringify(queries));
   queries.length = 0;
   const chain = await onChainSkillMany(env, ["0xaa", "0xbb", "0xcc", "0xqq"]);
-  check("on-chain: only indexed wallets are read, a record without skill is skipped", chain.size === 1 && chain.get("0xbb").source === 'onchain' && kvReads.filter(k => k.startsWith("wallet_onchain:")).length === 2, JSON.stringify(kvReads));
+  check("on-chain: only indexed wallets are read, a record without skill is skipped", chain.size === 1 && chain.get("0xbb").source === 'onchain' && kvReads.filter(k => k.startsWith("wallet_onchain:")).length === 3, JSON.stringify(kvReads));
+  kvReads.length = 0;
   const signals = [
     { id: "s1", topTrades: [{ wallet: "0xAA", amount: 50000 }, { wallet: "0xBB", amount: 9000 }], wallets: ["0xzz"] },
     { id: "s2", topTrades: [{ wallet: "0xCC", amount: 20000 }, { wallet: "0xAA", amount: 1000 }] },
@@ -52,6 +53,13 @@ const row = (n, wr, px, source = 'signals') => ({ n, winRate: wr, avgPrice: px, 
   const st = await annotateSignalWalletSkill(env, signals);
   const [s1, s2, s3] = signals;
   check("annotate: stats", st.annotated === 3 && st.wallets === 4 && st.ledger === 3 && st.onchain === 1 && st.proven === 2 && st.fades === 1, JSON.stringify(st));
+  check("annotate: the on-chain book is read only for wallets the ledger does not trust (0xaa skipped, 0xbb and 0xzz asked)", !kvReads.includes("wallet_onchain:0xaa") && kvReads.includes("wallet_onchain:0xbb") && !kvReads.includes("wallet_onchain:0xcc"), JSON.stringify(kvReads));
+  const byMoney = signalWalletsByMoney([
+    { topTrades: [{ wallet: "0xAA", amount: 500 }, { wallet: "0xBB", amount: 9000 }] },
+    { topTrades: [{ wallet: "0xaa", amount: 50000 }], wallets: ["0xdd"] },
+    { topTrades: [{ wallet: "0xCC", amount: 20000 }] },
+  ]);
+  check("refresh queue: one entry per wallet at its biggest stake, largest first, bare wallets last, capped", byMoney.join(",") === "0xaa,0xcc,0xbb,0xdd" && signalWalletsByMoney([{ topTrades: [{ wallet: "a", amount: 1 }, { wallet: "b", amount: 2 }] }], 1).join(",") === "b" && signalWalletsByMoney(null).length === 0, JSON.stringify(byMoney));
   check("annotate: s1 proven via the on-chain wallet, legacy flags set on the trades and the signal",
     s1.whaleSkill.call === 'proven' && s1.whaleSkill.best.wallet === "0xbb" && s1.hasWinningWallet === true && /30 settled bets, \+11 pts/.test(s1.winningWalletInfo.record) && s1.winningWalletInfo.source === 'onchain'
     && s1.topTrades[0].skill.excess === 10 && s1.topTrades[0].isWinner === true && s1.topTrades[1].isWinner === true && s1.topTrades[1].winnerInfo.n === 30, JSON.stringify(s1.whaleSkill));

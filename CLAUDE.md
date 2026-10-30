@@ -262,10 +262,16 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   when the biggest wallet is a trusted loser at -8 or worse), plus the legacy
   `hasWinningWallet` / `winningWalletInfo` / `topTrades[].isWinner` flags
   the pages read, which the scan route had never set. One chunked D1 query
-  per scan, KV reads bounded by `wallet_onchain_index`; never fatal. The
-  Free view masks the addresses (`maskWhaleSkill` in tiers.js). Display
-  only: the auto-trader's own wallet gate is untouched. The frontend's
-  `signalVerdict` turns the call into the card's label and sentence.
+  per scan, the on-chain KV reads only for wallets the ledger does not
+  trust, bounded by `wallet_onchain_index`; never fatal. The Free view masks
+  the addresses (`maskWhaleSkill` in tiers.js). Display only: the
+  auto-trader's own wallet gate is untouched. The frontend's `signalVerdict`
+  turns the call into the card's label and sentence. The on-chain refresher
+  (`refreshOnChainSkill`, 6 wallets per 5-min cron) queues the wallets
+  behind the current signals too (`signalWalletsByMoney`, KV `signals`,
+  largest stake first, 60 max, 4 slots a run after the copied wallets, the
+  ranked list fills the rest), so a whale's own record backs the call within
+  hours of it appearing; `cronStatus.lastRun.onChainSkill.signalWallets`.
 - `src/wallet-book.js` — a wallet's recent book rebuilt from its last 500
   data-api activities plus the positions on file (`rebuildWalletBook`, pure;
   `getWalletPnL` in index.js fetches and adds Polymarket's own book from
