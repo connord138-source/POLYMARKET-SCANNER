@@ -120,6 +120,53 @@ export async function setCopyWalletEnabled(env, address, enabled, nowMs = Date.n
 // grouped by market + outcome (a whale fills in several clips), kept at
 // $minUsd or more and no older than maxAgeMin, with the wallet's
 // share-weighted average price and the newest clip's time.
+// Copy settings the Followed wallets page can change (admin): the autotrader
+// config keys the lane reads, each with a floor and a ceiling. The lane is
+// paper, so these shape the paper record; they carry over unchanged if the
+// lane is ever switched live (the operator's call, not this module's).
+export const COPY_SETTINGS = {
+  betSize:     { key: 'copyBetSize',     min: 1, max: 500,     cents: true, label: 'stake per copy ($)' },
+  minWhaleUsd: { key: 'copyMinWhaleUsd', min: 0, max: 1000000, label: 'smallest bet to copy ($)' },
+  maxOpen:     { key: 'copyMaxOpen',     min: 1, max: 50,      label: 'open copies cap' },
+  maxPerDay:   { key: 'copyMaxPerDay',   min: 1, max: 100,     label: 'copies per day' },
+  maxSlipPts:  { key: 'copyMaxSlipPts',  min: 0, max: 30,      label: 'max price slip (cents)' },
+  maxAgeMin:   { key: 'copyMaxAgeMin',   min: 1, max: 1440,    label: 'max bet age (minutes)' },
+};
+// Pure: a page body { betSize, minWhaleUsd, ..., entries } -> the config
+// updates to apply, or the first field that is out of range.
+export function copySettingsUpdates(body = {}) {
+  const updates = {};
+  for (const [name, spec] of Object.entries(COPY_SETTINGS)) {
+    const raw = body[name];
+    if (raw === undefined || raw === null || raw === '') continue;
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return { ok: false, error: `${spec.label}: not a number` };
+    if (n < spec.min || n > spec.max) return { ok: false, error: `${spec.label}: ${spec.min} to ${spec.max}` };
+    updates[spec.key] = spec.cents ? Math.round(n * 100) / 100 : Math.round(n);
+  }
+  if (typeof body.entries === 'boolean') updates.copyEntries = body.entries;
+  if (!Object.keys(updates).length) return { ok: false, error: 'Nothing to change' };
+  return { ok: true, updates };
+}
+
+// A wallet's own stake per copy, in place of the lane default (null clears
+// it). Carried on each pick it queues from then on; open copies keep theirs.
+export async function setCopyWalletSize(env, address, betSize, nowMs = Date.now()) {
+  const a = norm(address);
+  const list = await listCopyWallets(env);
+  const w = list.find(x => x.address === a);
+  if (!w) return { ok: false, error: 'Not on the list' };
+  if (betSize === null || betSize === undefined || betSize === '' || Number(betSize) === 0) delete w.betSize;
+  else {
+    const n = Number(betSize); const spec = COPY_SETTINGS.betSize;
+    if (!Number.isFinite(n) || n < spec.min || n > spec.max) return { ok: false, error: `stake per copy: $${spec.min} to $${spec.max}` };
+    w.betSize = Math.round(n * 100) / 100;
+  }
+  await kvPut(env, COPY_KEYS.WALLETS, list);
+  await appendCopyLog(env, { type: 'sized', wallet: a, nickname: w.nickname, betSize: w.betSize || null }, nowMs);
+  return { ok: true, wallet: w };
+}
+
 export function picksFromActivity(wallet, acts, sinceTs = 0, { minUsd = 500, nowMs = Date.now(), maxAgeMin = 60 } = {}) {
   const w = norm(wallet);
   const groups = new Map();
@@ -198,7 +245,7 @@ export async function pollCopyWallets(env, config = {}, nowMs = Date.now(), fetc
       if (seen.length) w.lastTradeAt = new Date(Math.max(...seen.map(p => p.lastTs))).toISOString();
       if (modeOf(w) === 'copy') {
         const fresh = seen.filter(p => nowMs - p.lastTs <= (config.copyMaxAgeMin ?? 60) * 60e3);
-        const merged = mergePicks(picks, fresh.map(p => ({ ...p, nickname: w.nickname || null })), entered);
+        const merged = mergePicks(picks, fresh.map(p => ({ ...p, nickname: w.nickname || null, betSize: w.betSize > 0 ? w.betSize : null })), entered);
         picks = merged.queue;
         stat.queued += merged.added;
         w.queued = (w.queued || 0) + merged.added;
@@ -282,6 +329,7 @@ export async function getCopyState(env, deps, nowMs = Date.now()) {
       betSize: config.copyBetSize ?? 5, maxOpen: config.copyMaxOpen ?? 10, maxPerDay: config.copyMaxPerDay ?? 10,
       minWhaleUsd: config.copyMinWhaleUsd ?? 500, maxSlipPts: config.copyMaxSlipPts ?? 4, maxAgeMin: config.copyMaxAgeMin ?? 60,
       entries: config.copyEntries !== false, maxWallets: COPY_MAX_WALLETS,
+      limits: Object.fromEntries(Object.entries(COPY_SETTINGS).map(([k, v]) => [k, { min: v.min, max: v.max }])),
     },
     fetchedAt: new Date(nowMs).toISOString(),
   };

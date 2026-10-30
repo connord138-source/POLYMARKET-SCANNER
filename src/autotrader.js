@@ -3096,7 +3096,8 @@ async function enterCopyPicks(env, config, dailyStats, stillOpen, results) {
     if (now - (pick.lastTs || 0) > maxAgeMs) { skip('too old'); entered.add(pick.id); continue; }
     if ((dailyStats.copyOpened || 0) >= maxPerDay) { skip('copy daily cap'); remaining.push(pick); continue; }
     if (stillOpen.some(p => p.marketSlug === pick.marketSlug)) { skip('already holding market'); entered.add(pick.id); continue; }
-    const size = Math.round((config.copyBetSize ?? 5) * 100) / 100;
+    // The wallet's own stake when it has one (set on the Followed wallets page), else the lane default.
+    const size = Math.round((pick.betSize > 0 ? pick.betSize : (config.copyBetSize ?? 5)) * 100) / 100;
     if (config.maxDailyTrades > 0 && dailyStats.tradesOpened >= config.maxDailyTrades) { skip('daily trade cap'); remaining.push(pick); continue; }
     if (config.maxDailySpend > 0 && dailyStats.totalSpent + size > config.maxDailySpend) { skip('daily spend cap'); remaining.push(pick); continue; }
     if (laneOpenCap(config, 'whale_copy') > 0 && laneOpenCount(stillOpen, 'whale_copy') >= laneOpenCap(config, 'whale_copy')) { skip('max open positions'); remaining.push(pick); continue; }

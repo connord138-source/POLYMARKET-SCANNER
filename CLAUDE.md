@@ -86,7 +86,14 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   copied from the moment it is added; its history is not replayed. `GET
   /agents/copy` (snapshot key `copy`) carries each wallet's record, the
   ledger's skill row and Polymarket's book (the on-chain refresher pulls
-  copied wallets first). Paper only; the live flip is the operator's.
+  copied wallets first). Amounts (Oct 30 2026): `POST /agents/copy/settings` writes the lane's
+  copy* config keys through `copySettingsUpdates` (stake default, smallest
+  bet to copy, caps, slip, age; floors/ceilings in `COPY_SETTINGS`), and
+  `POST /agents/copy/wallets/size` gives one wallet its own stake
+  (`betSize`, carried on the picks it queues; `enterCopyPicks` uses it over
+  `copyBetSize`). Both edited on the Followed wallets page (admin), which
+  sits in the sidebar's Follow the money group and opens the wallet P&L
+  card from each row. Paper only; the live flip is the operator's.
 - `src/execution.js` — execution shadow ledger: every paper entry records the
   live CLOB book + Gamma `feeSchedule` and tracks a taker fill (ask + fee) and
   a resting-bid maker fill (filled only if the tape prints at/below the bid
