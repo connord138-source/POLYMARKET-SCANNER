@@ -186,6 +186,18 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   ticker spot and is flagged `stale` instead of dropping out. Calibration
   Oct 2026: median |gap| 1.4c on liquid BTC contracts; far-dated tails trade
   7-12c above the lognormal — a tail gap is a model warning, not an edge.
+- `src/kalshi-crypto.js` — the US venue for the Crypto Lab (Oct 30 2026).
+  Polymarket US lists sports only, so a US client trades a crypto view on
+  Kalshi: `KX{BTC,ETH,SOL}D` ("BTC price on Oct 30 at 5pm EDT?", one event
+  an hour, $500 strikes, the 12am/5pm events open a day ahead) matches
+  Polymarket's "above/below $X on <date>" (noon ET; the noon event itself
+  once it opens, else the nearest open hour, `settleHours` stated), and
+  `KX..MAXMON/MINMON` (monthly one-touch, month end) matches "reach/dip to
+  $X in <month>". `getUsBoard` (KV `crypto_us_board`, 10 min, stale kept
+  6h; public endpoints, signed when Kalshi keys exist) + pure `matchUsVenue`
+  / `attachUsVenue`; every `/crypto/fairvalue` row carries `us` (ticker,
+  strike, side, match same|near, settles, Kalshi's yes bid/ask) or null, the
+  blob `us.listed`. Prices come back as `*_dollars`, volume as `*_fp`.
 - `src/kalshi.js` — signed Kalshi API client (Ed25519 or RSA-PSS over
   `timestamp + METHOD + /trade-api/v2/path`, query stripped). Secrets
   `KALSHI_API_KEY_ID` + `KALSHI_PRIVATE_KEY` (PEM) are pushed by
