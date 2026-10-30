@@ -4144,10 +4144,37 @@ async function scanEdges(env) {
 // books' probability keeps the scan's 14-minute cadence (Odds API credits),
 // so lastEdgeNet is the latest known line against the live price.
 var EDGE_REPRICE_MAX = 40;
+// Pure: a game's devigged moneyline from the first preferred book carrying an
+// h2h market (the comparison's own method), with the book's update time.
+function devigH2H(game) {
+  let h2h = null, updatedAt = null;
+  for (const k of ['fanduel', 'draftkings', 'betmgm']) {
+    const b = (game.bookmakers || []).find(x => x.key === k);
+    const m = b && (b.markets || []).find(x => x.key === 'h2h');
+    if (m) { h2h = m.outcomes; updatedAt = m.last_update || b.last_update || null; break; }
+  }
+  if (!h2h) return null;
+  const hA = (h2h.find(x => x.name === game.home_team) || {}).price, aA = (h2h.find(x => x.name === game.away_team) || {}).price;
+  const rh = hA != null ? americanToProb(hA) : null, ra = aA != null ? americanToProb(aA) : null;
+  if (rh !== null && ra !== null && rh + ra > 0) return { home: Math.round(rh / (rh + ra) * 100), away: Math.round(ra / (rh + ra) * 100), updatedAt };
+  return { home: rh !== null ? Math.round(rh * 100) : null, away: ra !== null ? Math.round(ra * 100) : null, updatedAt };
+}
 async function repriceEdgeOpportunities(env, { max = EDGE_REPRICE_MAX } = {}) {
   if (!env.SIGNALS_CACHE) return { skipped: "no KV" };
   const opps = await env.SIGNALS_CACHE.get("edge_opportunities", { type: "json" }) || [];
   const now = Date.now();
+  // The books' side comes from the odds cache the scan already paid for (no
+  // credits): a line refreshed every ~15 min beats one frozen at detection,
+  // and a game missing from the cache means its line was pulled.
+  const oddsCache = new Map();
+  const cachedOdds = async (sport) => {
+    if (oddsCache.has(sport)) return oddsCache.get(sport);
+    const key = SPORT_KEY_MAP[sport];
+    let data; try { data = key ? await env.SIGNALS_CACHE.get(`odds_lines:${key}:h2h,spreads`, { type: "json" }) : undefined; } catch (e) { data = undefined; }
+    oddsCache.set(sport, Array.isArray(data) ? data : undefined);
+    return oddsCache.get(sport);
+  };
+  let linesRefreshed = 0, linesMissing = 0;
   const liveEdgeOf = (o) => (typeof o.lastEdgeNet === "number" ? o.lastEdgeNet : o.edgeNet) || 0;
   const open = opps.filter(o => !o.outcome && o.commenceTime && new Date(o.commenceTime).getTime() > now)
     .sort((a, b) => liveEdgeOf(b) - liveEdgeOf(a)).slice(0, max);
@@ -4166,6 +4193,15 @@ async function repriceEdgeOpportunities(env, { max = EDGE_REPRICE_MAX } = {}) {
         if (typeof baseG.marketProb === "number") live = Math.round(baseG.marketProb * 100);
       } else { skipped++; continue; }
       if (live === null || live <= 0 || live >= 100) { failed++; continue; }
+      const odds = await cachedOdds(o.sport);
+      if (odds) {
+        const eventId = String(o.id || "").split(":")[1];
+        const game = odds.find(g => g && g.id === eventId);
+        const line = game ? devigH2H(game) : null;
+        const prob = line ? (o.side === "home" ? line.home : line.away) : null;
+        if (typeof prob === "number") { o.lastVegasProb = prob; o.lineUpdatedAt = line.updatedAt; o.lineCheckedAt = new Date().toISOString(); o.lineMissing = false; linesRefreshed++; }
+        else { o.lineMissing = true; linesMissing++; }
+      }
       const vegas = typeof o.lastVegasProb === "number" ? o.lastVegasProb : o.vegasProb;
       o.lastPolyPrice = live;
       if (typeof vegas === "number") o.lastEdgeNet = Math.round((vegas - live) * 10) / 10;
@@ -4174,7 +4210,7 @@ async function repriceEdgeOpportunities(env, { max = EDGE_REPRICE_MAX } = {}) {
     } catch (e) { failed++; }
   }
   if (repriced) await env.SIGNALS_CACHE.put("edge_opportunities", JSON.stringify(opps), { expirationTtl: 7 * 24 * 3600 });
-  const summary = { at: now, open: open.length, repriced, failed, skipped };
+  const summary = { at: now, open: open.length, repriced, failed, skipped, linesRefreshed, linesMissing };
   await env.SIGNALS_CACHE.put("edge_reprice_last", JSON.stringify(summary), { expirationTtl: 3600 });
   return summary;
 }
