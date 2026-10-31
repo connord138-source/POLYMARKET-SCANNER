@@ -24,7 +24,7 @@ import { runForge, maybeRunForge, getForgeReport } from "./src/forge.js";
 import { logSignalWallets, backfillWalletLedger, topWallets, buildWalletLeaderboard, walletSkill, onChainSkill, walletsFromSignal, LEDGER_MIN_N } from "./src/wallet-ledger.js";
 import { rebuildWalletBook } from "./src/wallet-book.js";
 import { annotateSignalWalletSkill, signalWalletsByMoney } from "./src/signal-skill.js";
-import { pollCopyWallets, getCopyState, addCopyWallet, removeCopyWallet, setCopyWalletEnabled, setCopyWalletMode, listCopyWallets, modeOf as copyModeOf, setCopyWalletSize, copySettingsUpdates } from "./src/copy.js";
+import { pollCopyWallets, getCopyState, addCopyWallet, removeCopyWallet, setCopyWalletEnabled, setCopyWalletMode, listCopyWallets, modeOf as copyModeOf, setCopyWalletSize, copySettingsUpdates, getUnseenBets, markCopySeen } from "./src/copy.js";
 import { trackSpeed, updateSpeed, speedReport } from "./src/speed.js";
 import { buildAgentHub } from "./src/agent-hub.js";
 import { handleCrewOrder, runCrewHunt, getCrewState, saveBrowserDkBoard, answerPendingCrewChat } from "./src/crew.js";
@@ -3648,6 +3648,14 @@ function atJson(data, status) {
 // sign-in frontend ships. Admin-token requests always bypass the gate.
 const gateEnabled = (env) => String(env.AUTH_GATE || "").toLowerCase() === "on";
 
+// The member behind a request for per-member state: the operator's token is
+// one member ("admin"), a signed-in user is its id, anyone else null.
+async function viewerId(request, env) {
+  if (isAdminAuthorized(request, env)) return "admin";
+  const user = await getUser(request, env).catch(() => null);
+  return user ? user.id : null;
+}
+
 // Resolve the viewer for a gated route. -> { plan, user, policy } or a Response (401/402).
 async function resolveViewer(request, env, path) {
   const policy = policyFor(path, request.method);
@@ -3671,7 +3679,7 @@ function requiresAdmin(path, url, method) {
   if (path.startsWith("/autotrader") && method === "POST") return true;
   if (path.startsWith("/forge") && method === "POST") return true;      // /forge/run spends D1 reads
   if (path.startsWith("/agents/crew") && method === "POST") return true; // crew orders steer paper bets
-  if (path.startsWith("/agents/copy") && method === "POST") return true; // which wallets the bot copies
+  if (path.startsWith("/agents/copy") && method === "POST" && path !== "/agents/copy/seen") return true; // which wallets the bot copies (the seen mark is per member)
   if (path === "/waitlist" && method === "GET") return true;        // lists sign-up emails (PII); POST stays public
   if (path === "/crypto/fairvalue" && url.searchParams.get("refresh")) return true; // forces 12 upstream fetches
   if (path.startsWith("/admin")) return true;                       // /admin/ping, /admin/reprocess-wallets, ...
@@ -5132,6 +5140,21 @@ export default {
       // a wallet is the operator's (admin).
       if (path === "/agents/copy" && request.method === "GET") {
         return atJson(await getCopyState(env, { getTradeHistory, getOpenPositions, getAutotraderConfig, walletSkill }));
+      }
+      // The followed wallets' bets this member has not looked at yet, and the
+      // mark that clears them (the sign-in alert, the sidebar badge and the
+      // NEW tags on the Followed wallets page). Per member; a member who never
+      // looked is told about the last day.
+      if (path === "/agents/copy/unseen" && request.method === "GET") {
+        const who = await viewerId(request, env);
+        if (!who) return atJson({ success: false, error: "sign_in_required" }, 401);
+        return atJson(await getUnseenBets(env, who));
+      }
+      if (path === "/agents/copy/seen" && request.method === "POST") {
+        const who = await viewerId(request, env);
+        if (!who) return atJson({ success: false, error: "sign_in_required" }, 401);
+        const body = await request.json().catch(() => ({}));
+        return atJson({ success: true, seen: await markCopySeen(env, who, body && body.at) });
       }
       if (path === "/agents/copy/wallets" && request.method === "POST") {
         const body = await request.json().catch(() => ({}));

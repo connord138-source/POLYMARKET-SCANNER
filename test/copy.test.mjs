@@ -1,5 +1,5 @@
 // Copy-a-whale lane: pick building, queue merging, the ledger. Run with: node test/copy.test.mjs
-import { picksFromActivity, mergePicks, copyLedger, isWalletAddress, addCopyWallet, pollCopyWallets, listCopyWallets, setCopyWalletMode, modeOf, copySettingsUpdates, setCopyWalletSize } from "../src/copy.js";
+import { picksFromActivity, mergePicks, copyLedger, isWalletAddress, addCopyWallet, pollCopyWallets, listCopyWallets, setCopyWalletMode, modeOf, copySettingsUpdates, setCopyWalletSize, unseenBets, getUnseenBets, markCopySeen, UNSEEN_FIRST_LOOK_H } from "../src/copy.js";
 let pass = 0, fail = 0;
 const check = (n, c, x) => { if (c) pass++; else { fail++; console.error("FAIL:", n, x ?? ""); } };
 const kv = () => { const m = new Map(); return { get: async (k) => (m.has(k) ? JSON.parse(m.get(k)) : null), put: async (k, v) => { m.set(k, v); }, _m: m }; };
@@ -74,5 +74,33 @@ check("size: cleared back to the lane default", cleared.ok && cleared.wallet.bet
 const sizedLog = JSON.parse(env2.SIGNALS_CACHE._m.get("copy_log")).filter(e => e.type === "sized");
 check("size: logged both ways", sizedLog.length === 2 && sizedLog[0].betSize === 25 && sizedLog[1].betSize === null, sizedLog);
 
+// ---------- what a member has not seen yet ----------
+{
+  check("poll: a recorded bet carries when the poller found it", recent[0].foundAt === new Date(now).toISOString(), recent[0]);
+  const A = "0x" + "a".repeat(40), B = "0x" + "b".repeat(40);
+  const T0 = Date.parse("2026-10-31T12:00:00Z");
+  const wallets = [{ address: A, nickname: "Ace", mode: "follow", enabled: true }, { address: B, nickname: "", mode: "copy", enabled: true }];
+  const recents = {
+    [A]: [{ id: "a1", title: "Lakers vs. Celtics", outcome: "Lakers", usd: 1200, price: 44, at: new Date(T0 - 3 * 3600e3).toISOString(), foundAt: new Date(T0 - 2 * 3600e3).toISOString() },
+          { id: "a2", title: "Old one", outcome: "Yes", usd: 900, price: 60, at: new Date(T0 - 30 * 3600e3).toISOString(), foundAt: new Date(T0 - 29 * 3600e3).toISOString() },
+          { id: "a0", title: "Legacy row without foundAt", outcome: "No", usd: 700, price: 30, at: new Date(T0 - 1 * 3600e3).toISOString() }],
+    [B]: [{ id: "b1", title: "BTC above 100k", outcome: "Yes", usd: 2500, price: 52, at: new Date(T0 - 10 * 3600e3).toISOString(), foundAt: new Date(T0 - 20 * 60e3).toISOString() }],
+  };
+  const u = unseenBets(wallets, recents, T0 - 24 * 3600e3);
+  check("unseen: bets found after the mark, newest found first, the legacy row read by its trade time, the old one left out", u.count === 3 && u.bets.map(b => b.id).join() === "b1,a0,a1" && u.wallets === 2 && u.usd === 4400 && u.perWallet[A] === 2 && u.perWallet[B] === 1 && u.newestAt === recents[B][0].foundAt && u.bets[0].nickname === null && u.bets[0].mode === "copy" && u.bets[2].nickname === "Ace", JSON.stringify(u));
+  check("unseen: a bet found minutes after the member looked is still new to them (foundAt beats the trade time)", unseenBets(wallets, recents, T0 - 90 * 60e3).bets.map(b => b.id).join() === "b1,a0" && unseenBets(wallets, recents, T0).count === 0);
+  check("unseen: max rows", unseenBets(wallets, recents, 0, { max: 1 }).bets.length === 1 && unseenBets(wallets, recents, 0).count === 4);
+  // KV round trip: the first look covers the last day; the mark clears it; a mark in the future is clamped to now
+  const kv = new Map();
+  const env = { SIGNALS_CACHE: { get: async (k) => (kv.has(k) ? JSON.parse(kv.get(k)) : null), put: async (k, v) => { kv.set(k, v); } } };
+  kv.set("copy_wallets", JSON.stringify(wallets)); kv.set("copy_recent:" + A, JSON.stringify(recents[A])); kv.set("copy_recent:" + B, JSON.stringify(recents[B]));
+  const first = await getUnseenBets(env, "u1", T0);
+  check("unseen: first look = the last 24h, flagged firstLook", first.firstLook && first.seenAt === null && first.count === 3 && first.since === new Date(T0 - UNSEEN_FIRST_LOOK_H * 3600e3).toISOString(), JSON.stringify({ ...first, bets: first.bets.length }));
+  const mark = await markCopySeen(env, "u1", new Date(T0 + 3600e3).toISOString(), T0);
+  const after = await getUnseenBets(env, "u1", T0 + 60e3);
+  check("unseen: the mark is per member, clamped to now, and clears the list; another member still sees theirs", mark.at === new Date(T0).toISOString() && after.count === 0 && !after.firstLook && after.seenAt === mark.at && (await getUnseenBets(env, "u2", T0)).count === 3, JSON.stringify({ mark, after: { ...after, bets: after.bets.length } }));
+  kv.set("copy_recent:" + A, JSON.stringify([...recents[A], { id: "a9", title: "Fresh", outcome: "Yes", usd: 600, price: 50, at: new Date(T0 - 5 * 60e3).toISOString(), foundAt: new Date(T0 + 5 * 60e3).toISOString() }]));
+  check("unseen: a bet the poller finds after the mark shows up, even though it traded before it", (await getUnseenBets(env, "u1", T0 + 10 * 60e3)).bets.map(b => b.id).join() === "a9");
+}
 console.log(`copy: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

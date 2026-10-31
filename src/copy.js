@@ -29,7 +29,10 @@ export const COPY_KEYS = {
   PICKS: 'copy_picks',       // queued picks awaiting entry
   ENTERED: 'copy_entered',   // pick ids entered or skipped for good
   LOG: 'copy_log',           // recent events for the page
+  SEEN: 'copy_seen:',        // + member id: when that member last looked at the followed wallets' bets
 };
+export const UNSEEN_FIRST_LOOK_H = 24;   // a member who never looked is told about the last day, not the whole book
+export const UNSEEN_MAX = 60;
 export const COPY_MAX_WALLETS = 12;
 const POLY_DATA_API = 'https://data-api.polymarket.com';
 
@@ -235,7 +238,7 @@ export async function pollCopyWallets(env, config = {}, nowMs = Date.now(), fetc
       if (seen.length) {
         const recent = await kvJson(env, COPY_KEYS.RECENT + w.address, []);
         const ids = new Set(recent.map(r => r.id));
-        for (const p of seen) if (!ids.has(p.id)) recent.push({ id: p.id, marketSlug: p.marketSlug, eventSlug: p.eventSlug, title: p.title, outcome: p.outcome, usd: p.usd, price: p.price, at: new Date(p.lastTs).toISOString() });
+        for (const p of seen) if (!ids.has(p.id)) recent.push({ id: p.id, marketSlug: p.marketSlug, eventSlug: p.eventSlug, title: p.title, outcome: p.outcome, usd: p.usd, price: p.price, at: new Date(p.lastTs).toISOString(), foundAt: new Date(nowMs).toISOString() });
         await kvPut(env, COPY_KEYS.RECENT + w.address, recent.slice(-15), 30 * 24 * 3600);
         for (const p of seen) await appendCopyLog(env, { type: 'seen', wallet: w.address, nickname: w.nickname, market: p.title, outcome: p.outcome, usd: p.usd, price: p.price }, nowMs);
       }
@@ -257,6 +260,52 @@ export async function pollCopyWallets(env, config = {}, nowMs = Date.now(), fetc
   const keep = picks.filter(p => nowMs - (p.lastTs || 0) < 6 * 3600e3);
   await kvPut(env, COPY_KEYS.PICKS, keep.slice(-100));
   return stat;
+}
+
+// ---------- what a member has not seen yet (Oct 31 2026) ----------
+// "Users should get an alert when they sign in and a tracked wallet has
+// placed bets they have not seen." Each member carries one mark, the time
+// they last looked at the followed wallets' bets; a bet counts as unseen
+// when the poller found it after that mark (foundAt, so a bet found minutes
+// after the member looked is still new to them). A member who never looked
+// is told about the last day only.
+const betTs = (b) => Date.parse(b.foundAt || b.at) || 0;
+
+// Pure: the followed wallets' bets found after `sinceMs`, newest first.
+export function unseenBets(wallets, recentByAddr, sinceMs, { max = UNSEEN_MAX } = {}) {
+  const rows = [];
+  for (const w of wallets || []) {
+    for (const b of (recentByAddr && recentByAddr[w.address]) || []) {
+      if (betTs(b) <= sinceMs) continue;
+      rows.push({ ...b, wallet: w.address, nickname: w.nickname || null, mode: modeOf(w) });
+    }
+  }
+  rows.sort((a, b) => betTs(b) - betTs(a));
+  const perWallet = {};
+  for (const r of rows) perWallet[r.wallet] = (perWallet[r.wallet] || 0) + 1;
+  return {
+    since: new Date(sinceMs).toISOString(), count: rows.length, wallets: Object.keys(perWallet).length,
+    usd: Math.round(rows.reduce((s, r) => s + (Number(r.usd) || 0), 0)),
+    newestAt: rows.length ? new Date(betTs(rows[0])).toISOString() : null,
+    bets: rows.slice(0, max), perWallet,
+  };
+}
+
+export async function getUnseenBets(env, memberId, nowMs = Date.now()) {
+  const [wallets, mark] = await Promise.all([listCopyWallets(env), kvJson(env, COPY_KEYS.SEEN + memberId, null)]);
+  const seenAt = mark && mark.at && Date.parse(mark.at) ? mark.at : null;
+  const sinceMs = seenAt ? Date.parse(seenAt) : nowMs - UNSEEN_FIRST_LOOK_H * 3600e3;
+  const recents = await Promise.all(wallets.map(w => kvJson(env, COPY_KEYS.RECENT + w.address, [])));
+  const byAddr = Object.fromEntries(wallets.map((w, i) => [w.address, recents[i]]));
+  return { success: true, ...unseenBets(wallets, byAddr, sinceMs), firstLook: !seenAt, seenAt, fetchedAt: new Date(nowMs).toISOString() };
+}
+
+// The member looked: everything found up to `at` (default now; never the future) is seen.
+export async function markCopySeen(env, memberId, at, nowMs = Date.now()) {
+  const t = at && Date.parse(at) ? Math.min(Date.parse(at), nowMs) : nowMs;
+  const mark = { at: new Date(t).toISOString() };
+  await kvPut(env, COPY_KEYS.SEEN + memberId, mark, 180 * 24 * 3600);
+  return mark;
 }
 
 // Pure: per-wallet and total copy record from the bot's ledger.
