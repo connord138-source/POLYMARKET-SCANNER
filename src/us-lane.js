@@ -158,6 +158,10 @@ const markPnlC = (k, ev, m) => (k in RT_HORIZONS ? rtPnlC({ side: ev.side, px: e
 export function summarizeUsLane(events, { tradableQty = TRADABLE_QTY } = {}) {
   const mk = () => ({ n: 0, buy: 0, sell: 0, edgeSumC: 0, qtySum: 0, qtyN: 0, qtys: [], pxSum: 0, marks: mkMarks(), tradable: { n: 0, pxSum: 0, marks: mkMarks() } });
   const all = mk(), bySport = {};
+  // The Kalshi-quoted window: the events where the next-sample hedge (kh1)
+  // exists, so kh1 can be read against x5 on the SAME events, and which
+  // games carry it (one game dominating is a stale-US-quote artefact).
+  const kq = mk(), kqSport = {}, kqGames = new Map();
   const addMarks = (marks, ev, usd) => {
     for (const k of Object.keys(marks)) {
       const m = ev[k]; if (m == null) continue;
@@ -173,7 +177,16 @@ export function summarizeUsLane(events, { tradableQty = TRADABLE_QTY } = {}) {
     addMarks(s.marks, ev, false);
     if (ev.qty != null && ev.qty >= tradableQty) { s.tradable.n++; s.tradable.pxSum += ev.px; addMarks(s.tradable.marks, ev, true); }
   };
-  for (const ev of events || []) { add(all, ev); add(bySport[ev.sport] || (bySport[ev.sport] = mk()), ev); }
+  for (const ev of events || []) {
+    add(all, ev); add(bySport[ev.sport] || (bySport[ev.sport] = mk()), ev);
+    if (ev.kh1 != null && ev.kh1 >= 0) {
+      add(kq, ev);
+      kqSport[ev.sport] = (kqSport[ev.sport] || 0) + 1;
+      const gk = `${ev.sport}|${ev.game}`;
+      const g = kqGames.get(gk) || kqGames.set(gk, { game: gk, n: 0, sumC: 0, tradable: 0 }).get(gk);
+      g.n++; g.sumC += markPnlC('kh1', ev, ev.kh1); if (ev.qty != null && ev.qty >= tradableQty) g.tradable++;
+    }
+  }
   const finishMarks = (marks, avgPx, usd) => Object.fromEntries(Object.entries(marks).map(([k, m]) => [k, { n: m.n, avgC: m.n ? r2(m.sumC / m.n) : null, hitRate: m.n ? r2(m.hits / m.n) : null, noData: m.noData, roiPct: m.n && avgPx ? r2((m.sumC / m.n) / (avgPx * 100) * 100) : null, ...(usd ? { usd: r2(m.usdSum) } : {}) }]));
   const finish = (s) => {
     const o = { n: s.n, buy: s.buy, sell: s.sell, avgEdgeC: s.n ? r2(s.edgeSumC / s.n) : null, avgPx: s.n ? r4(s.pxSum / s.n) : null, avgQty: s.qtyN ? Math.round(s.qtySum / s.qtyN) : null, medQty: null };
@@ -185,6 +198,13 @@ export function summarizeUsLane(events, { tradableQty = TRADABLE_QTY } = {}) {
   };
   const out = { all: finish(all), bySport: {} };
   for (const [k, v] of Object.entries(bySport)) out.bySport[k] = finish(v);
+  const kqOut = finish(kq);
+  const pick = (m) => Object.fromEntries(['x5', 'x15', 'settle', 'kh0', 'kh1'].map(k => [k, m[k]]));
+  out.kalshiQuoted = {
+    n: kqOut.n, share: all.n ? r2(kqOut.n / all.n) : null, bySport: kqSport,
+    marks: pick(kqOut.marks), tradable: { n: kqOut.tradable.n, share: kqOut.tradable.share, marks: pick(kqOut.tradable.marks) },
+    games: [...kqGames.values()].sort((a, b) => b.n - a.n).slice(0, 6).map(g => ({ game: g.game, n: g.n, share: kqOut.n ? r2(g.n / kqOut.n) : null, tradable: g.tradable, avgKh1C: r2(g.sumC / g.n) })),
+  };
   return out;
 }
 
@@ -287,6 +307,6 @@ export async function usLaneReport(env, { hours = 168, recent = 20, nowMs = Date
   let prev = null; try { prev = await env.SIGNALS_CACHE.get(US_LANE_KEYS.PREV, { type: 'json' }); } catch (e) {}
   return {
     success: true, hours, events: rows.length, legs, games, ...sum, recent: rec, prevAt: prev && prev.at ? new Date(prev.at).toISOString() : null,
-    read: `Paper only: each event is a hypothetical taker fill on Polymarket US at the sampled quote (px, qty = shares shown at that price; one event per game minute, on the leg the US instrument quotes). tradable = the subset with at least ${TRADABLE_QTY} shares shown (usd = dollars on the shown size, capped at 1000 shares) in a minute where global Polymarket's mid moved >= 3c and the US quote was still crossable after the ${US_TAKER_RATE * 100}% x p(1-p) taker fee (edgeC = cents of edge at entry). marks.* = cents per share after the entry fee, marked at global Polymarket's mid 1/5/15/60 minutes later and at the end of the game (final), and at settlement (0/1); exit fees and the US spread are not charged on those. marks.x5 / marks.x15 are the round trip: closed on the Polymarket US book 5 / 15 minutes later (the bid for a buy, the ask for a sell, so the spread is paid) with the exit taker fee charged too - what a scalping lane would actually have booked. roiPct = avg mark pnl / avg entry price. noData = horizon passed with no sample. marks.kh0 / marks.kh1 are the Kalshi hedge (Oct 30 2026): the same leg sold on Kalshi at its bid (for a buy) or bought at its ask (for a sell) as a taker, priced in the event minute (kh0) or at the next sample (kh1, the honest one: the US leg first, Kalshi a minute later); the US entry fee and Kalshi's taker fee are charged and the position is then locked whatever the game does, so this is what a two-venue, US-legal lane would book per share (Kalshi sizes are not sampled; usd uses the US shown size; noData = Kalshi not quoted there). Decision rule (docs/PROFIT-AVENUES.md Part 2): after ~200 events, a Polymarket US lane is worth building only if the round trip (x5 or x15) is positive on the tradable subset with a hit rate above 50%, or settle is; a Kalshi-hedged lane only if kh1 is positive on the tradable subset at a hit rate above 50% over ~200 events with a Kalshi quote, and it beats x5; the real-money flip stays the operator's call.`,
+    read: `Paper only: each event is a hypothetical taker fill on Polymarket US at the sampled quote (px, qty = shares shown at that price; one event per game minute, on the leg the US instrument quotes). tradable = the subset with at least ${TRADABLE_QTY} shares shown (usd = dollars on the shown size, capped at 1000 shares) in a minute where global Polymarket's mid moved >= 3c and the US quote was still crossable after the ${US_TAKER_RATE * 100}% x p(1-p) taker fee (edgeC = cents of edge at entry). marks.* = cents per share after the entry fee, marked at global Polymarket's mid 1/5/15/60 minutes later and at the end of the game (final), and at settlement (0/1); exit fees and the US spread are not charged on those. marks.x5 / marks.x15 are the round trip: closed on the Polymarket US book 5 / 15 minutes later (the bid for a buy, the ask for a sell, so the spread is paid) with the exit taker fee charged too - what a scalping lane would actually have booked. roiPct = avg mark pnl / avg entry price. noData = horizon passed with no sample. marks.kh0 / marks.kh1 are the Kalshi hedge (Oct 30 2026): the same leg sold on Kalshi at its bid (for a buy) or bought at its ask (for a sell) as a taker, priced in the event minute (kh0) or at the next sample (kh1, the honest one: the US leg first, Kalshi a minute later); the US entry fee and Kalshi's taker fee are charged and the position is then locked whatever the game does, so this is what a two-venue, US-legal lane would book per share (Kalshi sizes are not sampled; usd uses the US shown size; noData = Kalshi not quoted there). kalshiQuoted = the events with a kh1 mark, so kh1 can be read against x5 / settle on the same events (all and tradable), with the games carrying most of them (one game holding a third or more is a stale-quote artefact, not a lane). Decision rule (docs/PROFIT-AVENUES.md Part 2): after ~200 events, a Polymarket US lane is worth building only if the round trip (x5 or x15) is positive on the tradable subset with a hit rate above 50%, or settle is; a Kalshi-hedged lane only if kh1 is positive on the tradable subset at a hit rate above 50% over ~200 events with a Kalshi quote, and it beats x5; the real-money flip stays the operator's call.`,
   };
 }
