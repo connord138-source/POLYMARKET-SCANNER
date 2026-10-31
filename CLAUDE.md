@@ -50,6 +50,17 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   lane counts only its own positions against `maxOpenPositions`; Forge has
   `forgeMaxOpen` (10) and Crew `crewMaxOpen` (10). The cap used to be shared
   and Forge's long-dated holds starved the main lane.
+  Lane switches (Oct 31 2026, owner's "set the autotrader to wallet copy
+  trades only, or copy trades along with crew trades"): `signalEntries`
+  (the whale-signal lane and its Vegas-edge promotions; the main signal loop
+  is skipped and `skipReasons['Whale-signal lane paused (lanes)']` counts
+  the signals), `crewHuntEntries`, `copyEntries`, `forgeLaneEnabled`;
+  `processSignals` reports `results.lanes`. Exits always run. The Auto-trader
+  Config tab's LANES card edits them with COPY ONLY / COPY + CREW /
+  EVERYTHING presets. The live executor still carries the main lane only
+  (`enqueueIntent` on main-lane entries and exits); a copy-only real-money
+  lane would need the copy lane's entries routed through the executor, and
+  Polymarket US lists sports only, so most copied bets would be unroutable.
 - `src/at-learning.js` — confidence scoring (`calculateConfidence`),
   factor stats, combos, pattern discovery.
 - `src/crew.js` — Agent Crew orders (chat box on the Agent Crew page):
@@ -121,6 +132,19 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   `copyBetSize`). Both edited on the Followed wallets page (admin), which
   sits in the sidebar's Follow the money group and opens the wallet P&L
   card from each row. Paper only; the live flip is the operator's.
+  Unseen bets (Oct 31 2026, "users should get an alert when they sign in and
+  a tracked wallet has placed bets they have not seen"): each recent entry
+  carries `foundAt` (the poll that found it); `GET /agents/copy/unseen`
+  (per member: the admin token is member "admin", a Supabase user its id;
+  401 otherwise) lists the bets found after the member's mark (KV
+  `copy_seen:<member>`, `getUnseenBets`; a member who never looked gets the
+  last `UNSEEN_FIRST_LOOK_H` 24h, `firstLook`), newest first with
+  `count`/`wallets`/`usd`/`newestAt`/`perWallet`; `POST /agents/copy/seen`
+  (`markCopySeen`, body `at` = the read the member saw, clamped to now; the
+  one POST under /agents/copy that needs no admin token) clears it. The
+  frontend's `useUnseenBets` feeds the sign-in toast (`UnseenBetsAlert` in
+  Layout, told once per browser session per `newestAt`), the sidebar badge
+  on Followed wallets, and that page's NEW tags, which mark seen on open.
 - `src/execution.js` — execution shadow ledger: every paper entry records the
   live CLOB book + Gamma `feeSchedule` and tracks a taker fill (ask + fee) and
   a resting-bid maker fill (filled only if the tape prints at/below the bid
