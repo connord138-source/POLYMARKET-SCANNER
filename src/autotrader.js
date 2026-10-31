@@ -3020,12 +3020,14 @@ async function enterCrewPicks(env, config, dailyStats, stillOpen, results) {
     const liveEdge = Math.round((pick.vegasProb - q.buy) * 10) / 10;
     if (q.buy <= 3 || q.buy >= 97 || liveEdge < (pick.minEdge ?? config.crewMinEdge ?? 3)) { skip('edge gone at live price'); remaining.push(pick); continue; }
 
+    const name = pick.label || pick.team;   // a player prop reads "Chris Godwin Jr. over 39.5 rec yds"; its outcome label is Over/Yes
+    const isProp = pick.kind === 'prop';
     const position = {
       id: `at_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       marketSlug: pick.marketSlug,
-      marketTitle: `${pick.game} — ${pick.team}`,
+      marketTitle: `${pick.game} — ${name}`,
       marketType: 'sports',
-      signalSubType: 'moneyline',
+      signalSubType: isProp ? 'player_prop' : 'moneyline',
       direction: pick.team,
       directionRaw: pick.team,
       whaleAction: 'BUY',
@@ -3058,10 +3060,10 @@ async function enterCrewPicks(env, config, dailyStats, stillOpen, results) {
       size,
       entryPrice: q.buy,
       walletTier: 'CREW',
-      reason: `Crew pick: ${pick.team} ${q.buy}¢ vs books ${pick.vegasProb}% (+${liveEdge}), ${verdictWord} — hold to resolution`,
+      reason: `Crew pick: ${name} ${q.buy}¢ vs books ${pick.vegasProb}% (+${liveEdge}), ${verdictWord} — hold to resolution`,
       marketCategory: 'sports_binary',
     });
-    await appendCrewChat(env, 'crew', `Placed: ${pick.team} moneyline @ ${q.buy}¢, $${size.toFixed(2)} paper (books ${pick.vegasProb}%, +${liveEdge} pts, ${verdictWord}).`);
+    await appendCrewChat(env, 'crew', `Placed: ${name}${isProp ? ' (player prop)' : ' moneyline'} @ ${q.buy}¢, $${size.toFixed(2)} paper (books ${pick.vegasProb}%, +${liveEdge} pts, ${verdictWord}).`);
   }
 
   try {

@@ -67,6 +67,33 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   Anthropic account (`INVESTIGATION_DAILY_USD`, $1 since Oct 2026). ESPN only
   serves DraftKings odds to US clients, so the page computes the DraftKings
   board in the browser and POSTs it to `/agents/crew/dk-board`.
+- `src/props.js` — player props (Oct 31 2026, owner's "track every possible
+  prop for the best edge" and "ensure it's tracking player props for sports
+  where Polymarket does have the props"). While a crew order is active each
+  hunt runs `propsSweep` per ordered sport: the soonest `PROPS_MAX_GAMES` (10)
+  games' player props from the US books through The Odds API
+  (`/sports/{sport}/events/{id}/odds`, `PROP_MARKETS` per sport family, one
+  credit per market per game, KV `odds_props:<event>` for `PROPS_TTL_S` 1h;
+  the event list is free). `propFairs` devigs every book's two-sided quote on
+  the same exact line and averages the books quoting it (`PROPS_MIN_BOOKS` 2);
+  a one-way market (anytime TD "Yes") gets the lowest implied price as its
+  fair, flagged `oneSided` (cut included, so compared but never paper-bet).
+  Two boards from that fair: line shopping (`propRowsFromEvent`, best price
+  per side scored per $100 like the DraftKings board; nothing settles) and
+  Polymarket's own props (`fetchPolyProps` by Gamma `sports_market_types` per
+  `POLY_PROP_TYPES`: NFL passing/rushing/receiving yards, receptions, pass TDs,
+  anytime TD; NBA points, rebounds, assists, threes; CFB/NHL/MLB/WNBA/CBB list
+  none) matched by stat + normalized player name + exact line (`polyPropRows`;
+  a different line is `lineMismatch`), priced at the ask (`polyQuote`), edge =
+  fair - ask. In crew.js a prop gap at the order's min edge that is not thin
+  (`PROP_MAX_SPREAD` 10c) or one-sided joins the council after the moneylines
+  (`PROP_DEBATE_TOP` 3, `kind: 'prop'`, readable `label`), queues with the
+  label and is paper-entered by `enterCrewPicks` as `signalSubType
+  'player_prop'` (outcome check against Over/Yes). `hunt.props` (`bySport`,
+  `rows`, `poly.rows`) feeds the Prop board on the Agent Crew page, the chat
+  report (`propsReportLine`) and the chief's state (`playerProps`). The pass
+  pauses under `PROPS_CREDIT_FLOOR` (2500) credits and never marks the shared
+  odds feed down on a prop-market error.
 - `src/copy.js` — followed wallets and copy a whale (Oct 30 2026): one list
   (`copy_wallets`), each wallet in mode `follow` (tracked: its bets as they
   happen in `copy_recent:<addr>`, Polymarket's book, and the P&L since it was
