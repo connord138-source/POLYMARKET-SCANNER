@@ -32,6 +32,7 @@ import { settleDkPicks } from "./src/dk-picks.js";
 import { collectBooks, MM_SCHEMA } from "./src/mm-collector.js";
 import { sampleXvenue, xvenueReport, XV_SCHEMA, usTopOfBook } from "./src/xvenue.js";
 import { US_LANE_SCHEMA, recordUsLaneEvents, markUsLaneEvents, settleUsLaneEvents, usLaneReport } from "./src/us-lane.js";
+import { SCALP_SCHEMA, runScalpLane, scalpReport, setScalpHalt } from "./src/scalp.js";
 import { getExecReport } from "./src/execution.js";
 import { runExecutor, getExecutorReport, setHalt } from "./src/executor.js";
 import { getCryptoFairValue, refreshCryptoFairValue, annotateCryptoFairValue } from "./src/crypto-fv.js";
@@ -1090,6 +1091,7 @@ var SCHEMA_MIGRATIONS = [
   ...MM_SCHEMA,
   ...XV_SCHEMA,                                               // migrations/0008_xvenue_quotes.sql (Kalshi vs Polymarket live quotes)                                               // migrations/0007_mm_books.sql (market-making depth snapshots)
   ...US_LANE_SCHEMA,                                          // migrations/0009_us_lane_events.sql (Polymarket US stale-quote paper lane)
+  ...SCALP_SCHEMA,                                            // migrations/0012_scalp_trades.sql (Polymarket US stale-quote scalp lane)
 ];
 var schemaEnsured = false;
 async function ensureSchema(env) {
@@ -3680,6 +3682,7 @@ function requiresAdmin(path, url, method) {
   if (path.startsWith("/forge") && method === "POST") return true;      // /forge/run spends D1 reads
   if (path.startsWith("/agents/crew") && method === "POST") return true; // crew orders steer paper bets
   if (path.startsWith("/agents/copy") && method === "POST" && path !== "/agents/copy/seen") return true; // which wallets the bot copies (the seen mark is per member)
+  if (path === "/xvenue/scalp/halt") return true;                   // the scalp lane's kill switch
   if (path === "/waitlist" && method === "GET") return true;        // lists sign-up emails (PII); POST stays public
   if (path === "/crypto/fairvalue" && url.searchParams.get("refresh")) return true; // forces 12 upstream fetches
   if (path.startsWith("/admin")) return true;                       // /admin/ping, /admin/reprocess-wallets, ...
@@ -5328,6 +5331,15 @@ export default {
       if (path === "/xvenue/uslane" && request.method === "GET") {
         const hours = Math.min(14 * 24, Math.max(1, parseInt(url.searchParams.get("hours") || "168", 10) || 168));
         return atJson(await usLaneReport(env, { hours }));
+      }
+      // The scalp lane (src/scalp.js): mode, settings, open scalps, today, the record; the kill switch.
+      if (path === "/xvenue/scalp" && request.method === "GET") {
+        const hours = Math.min(30 * 24, Math.max(1, parseInt(url.searchParams.get("hours") || "168", 10) || 168));
+        return atJson(await scalpReport(env, await getAutotraderConfig(env), { hours }));
+      }
+      if (path === "/xvenue/scalp/halt" && request.method === "POST") {
+        const body = await request.json().catch(() => ({}));
+        return atJson({ success: true, halt: await setScalpHalt(env, body.on !== false, body.why || 'operator') });
       }
       if (path === "/autotrader/positions") {
         const positions = await getOpenPositions(env);
@@ -7224,7 +7236,16 @@ export default {
     if (event && event.cron === "* * * * *") {
       try {
         await ensureSchema(env);
-        const usLane = async (legs, now) => ({ ...(await recordUsLaneEvents(env, legs, now)), ...(await markUsLaneEvents(env, now)) });
+        // The paper lane logs this minute's stale US quotes, the marker fills older
+        // events' marks, and the scalp lane (src/scalp.js) acts on the same events.
+        const usLane = async (legs, now) => {
+          const rec = await recordUsLaneEvents(env, legs, now);
+          const marks = await markUsLaneEvents(env, now);
+          let scalp = null;
+          try { const s = await runScalpLane(env, { events: rec.list || [], legs, nowMs: now, config: await getAutotraderConfig(env) }); scalp = { mode: s.mode, entries: s.entries, exits: s.exits, open: s.open, halted: !!s.halted, skipped: s.skipped }; }
+          catch (e) { scalp = { error: String(e.message).slice(0, 80) }; }
+          return { events: rec.events, compared: rec.compared, ...marks, scalp };
+        };
         const r = await sampleXvenue(env, Date.now(), { afterSample: usLane });
         console.log("xvenue:", JSON.stringify(r).slice(0, 300));
       }

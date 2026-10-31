@@ -1,0 +1,134 @@
+// Polymarket US stale-quote scalp lane. Run with: node test/scalp.test.mjs
+import { runScalpLane, scalpReport, scalpEntryFor, scalpExitPrice, scalpPnl, scalpConfig, scalpModeFor, sanitizeScalpUpdates, summarizeScalps, setScalpHalt, SCALP_DEFAULTS, SCALP_KEYS } from "../src/scalp.js";
+import { rtPnlC } from "../src/us-lane.js";
+import { usFee } from "../src/xvenue.js";
+let pass = 0, fail = 0;
+const check = (n, c, x) => { if (c) pass++; else { fail++; console.error("FAIL:", n, x ?? ""); } };
+const kvStore = () => { const m = new Map(); return { m, get: async (k) => (m.has(k) ? JSON.parse(m.get(k)) : null), put: async (k, v) => { m.set(k, v); }, delete: async (k) => { m.delete(k); }, list: async ({ prefix } = {}) => ({ keys: [...m.keys()].filter(k => !prefix || k.startsWith(prefix)).map(name => ({ name })) }) }; };
+const COLS = ["id", "mode", "ts_entry", "ts_exit", "sport", "game", "team", "us_slug", "side", "entry_px", "exit_px", "shares", "usd", "fee_entry_usd", "fee_exit_usd", "pnl_c", "pnl_usd", "edge_c", "dp_c", "shown_qty", "hold_s", "exit_kind", "live", "order_id", "exit_order_id", "note"];
+const d1 = () => { const rows = []; return { rows, prepare: (sql) => ({ bind: (...args) => ({ run: async () => { if (/INSERT/.test(sql)) { const r = Object.fromEntries(COLS.map((c, i) => [c, args[i]])); const i = rows.findIndex(x => x.id === r.id); if (i >= 0) rows[i] = r; else rows.push(r); } return { success: true }; }, all: async () => ({ results: rows.filter(r => r.ts_entry >= args[0]).sort((a, b) => b.ts_entry - a.ts_entry) }) }), run: async () => ({ success: true }) }) }; };
+const mkEnv = (extra = {}) => ({ SIGNALS_CACHE: kvStore(), DB: d1(), ...extra });
+const T0 = Date.parse("2026-11-01T01:00:00Z");
+const leg = (bid, ask, extra = {}) => ({ ts: Math.floor(T0 / 1000), sport: "nba", game: "Lakers vs. Celtics", team: "Lakers", p_token: "tok", us_slug: "nba-lal-bos", us_long: true, p_bid: 0.45, p_ask: 0.46, us_bid: bid, us_ask: ask, us_bid_qty: 300, us_ask_qty: 300, ...extra });
+const ev = (extra = {}) => ({ ts: Math.floor(T0 / 1000), sport: "nba", game: "Lakers vs. Celtics", team: "Lakers", pToken: "tok", usSlug: "nba-lal-bos", pBid: 0.45, pAsk: 0.46, pMid: 0.455, dpC: 4, side: "buy", px: 0.40, qty: 300, fee: usFee(0.40), edgeC: 2.5, ...extra });
+
+// ---------- pure ----------
+{
+  const cfg = scalpConfig({});
+  check("config: defaults, dry by default", cfg.scalpMode === "dry" && cfg.scalpMaxUsd === 10 && cfg.scalpHoldMin === 5 && cfg.scalpMinQty === 50);
+  const d = scalpEntryFor(ev(), { cfg, open: [], day: {}, nowMs: T0 });
+  check("entry: $10 at 40c = 25 contracts long, fee on 25", d.ok && d.shares === 25 && d.side === "long" && d.usd === 10 && Math.abs(d.feeEntryUsd - usFee(0.4) * 25) < 0.01, d);
+  const sell = scalpEntryFor(ev({ side: "sell", px: 0.60, qty: 8 }), { cfg: { ...cfg, scalpMinQty: 1 }, open: [], day: {}, nowMs: T0 });
+  check("entry: a sell event buys the short at 1 - bid; size bounded by the shares shown", sell.ok && sell.side === "short" && sell.cost === 0.4 && sell.shares === 8 && sell.usd === 3.2, sell);
+  const reasons = [
+    [scalpEntryFor(ev({ usSlug: null }), { cfg }).reason, "no Polymarket US market"],
+    [scalpEntryFor(ev({ edgeC: 0.5 }), { cfg }).reason, "edge under 1c"],
+    [scalpEntryFor(ev({ qty: 20 }), { cfg }).reason, "under 50 shares shown"],
+    [scalpEntryFor(ev({ px: 0.03 }), { cfg }).reason, "price outside 5-95c"],
+    [scalpEntryFor(ev(), { cfg, open: [{ sport: "x", game: "a" }, { sport: "x", game: "b" }, { sport: "x", game: "c" }] }).reason, "max open scalps"],
+    [scalpEntryFor(ev(), { cfg, open: [{ sport: "nba", game: "Lakers vs. Celtics" }] }).reason, "already in this game"],
+    [scalpEntryFor(ev(), { cfg, day: { entries: 40 } }).reason, "daily scalp cap"],
+    [scalpEntryFor(ev(), { cfg, day: { pnlUsd: -15 } }).reason, "daily loss stop"],
+    [scalpEntryFor(ev(), { cfg: { ...cfg, scalpSports: ["nhl"] } }).reason, "sport not in the lane"],
+    [scalpEntryFor(ev({ qty: 60, px: 0.9 }), { cfg: { ...cfg, scalpMaxUsd: 0.5 } }).reason, "size below one contract"],
+  ];
+  check("entry: every gate names itself", reasons.every(([got, want]) => got === want), reasons.filter(([g, w]) => g !== w));
+  check("exit price: a buy closes at the bid, a sell at the ask, missing -> null", scalpExitPrice({ side: "buy" }, leg(0.43, 0.45)) === 0.43 && scalpExitPrice({ side: "sell" }, leg(0.43, 0.45)) === 0.45 && scalpExitPrice({ side: "buy" }, leg(null, 0.45)) === null && scalpExitPrice({ side: "buy" }, null) === null);
+  const p = scalpPnl({ side: "buy", px: 0.40, shares: 25 }, 0.44);
+  check("pnl: both fees, cents a share x shares", p && p.pnlC === rtPnlC({ side: "buy", px: 0.40, fee: usFee(0.40) }, 0.44) && Math.abs(p.pnlUsd - p.pnlC / 100 * 25) < 0.011, p);
+  const s = sanitizeScalpUpdates({ scalpMode: "live", scalpMaxUsd: "500", scalpMaxOpen: 0, scalpHoldMin: "x", scalpSports: ["NBA", "nhl"], bogus: 1, scalpMinEdgeC: 2 });
+  check("sanitize: clamped, bad numbers dropped, sports lowercased, unknown keys dropped", s.scalpMode === "live" && s.scalpMaxUsd === 200 && s.scalpMaxOpen === 1 && !("scalpHoldMin" in s) && s.scalpSports.join() === "nba,nhl" && !("bogus" in s) && s.scalpMinEdgeC === 2, s);
+  check("sanitize: a bad mode is dropped; an empty sports list means all", !("scalpMode" in sanitizeScalpUpdates({ scalpMode: "yolo" })) && sanitizeScalpUpdates({ scalpSports: [] }).scalpSports === null);
+  check("mode: off / dry / live needs the key", scalpModeFor({}, { scalpMode: "off" }).mode === "off" && scalpModeFor({}, { scalpMode: "live" }).mode === "dry" && /not on the worker/.test(scalpModeFor({}, { scalpMode: "live" }).liveBlocked) && scalpModeFor({ PMUS_KEY_ID: "k", PMUS_SECRET_KEY: "s" }, { scalpMode: "live" }).mode === "live");
+  const sum = summarizeScalps([{ sport: "nba", mode: "dry", exitKind: "x5", usd: 10, pnlUsd: 0.5, pnlC: 2, feeEntryUsd: 0.4, feeExitUsd: 0.4 }, { sport: "nba", mode: "dry", exitKind: "x5", usd: 10, pnlUsd: -0.3, pnlC: -1.2, feeEntryUsd: 0.4, feeExitUsd: 0.4 }, { sport: "nhl", mode: "live", exitKind: "settling", usd: 8, pnlUsd: null, pnlC: null }]);
+  check("summary: priced vs unpriced, hit rate, fees, by sport / kind / mode", sum.all.n === 3 && sum.all.priced === 2 && sum.all.wins === 1 && sum.all.hitRate === 0.5 && sum.all.pnlUsd === 0.2 && sum.all.feesUsd === 1.6 && sum.all.avgPnlC === 0.4 && sum.bySport.nhl.priced === 0 && sum.byKind.settling.n === 1 && sum.byMode.live.n === 1, sum);
+}
+
+// ---------- dry, end to end over the minutes ----------
+{
+  const env = mkEnv();
+  const cfg = {};
+  const m = (k) => T0 + k * 60e3;
+  const r1 = await runScalpLane(env, { events: [ev()], legs: [leg(0.40, 0.40)], nowMs: m(0), config: cfg });
+  const open1 = JSON.parse(env.SIGNALS_CACHE.m.get(SCALP_KEYS.OPEN));
+  check("dry minute 0: one scalp opened at the stale ask for 25 contracts, exit due in 5 min, nothing sent", r1.mode === "dry" && r1.entries === 1 && r1.open === 1 && open1.length === 1 && open1[0].px === 0.40 && open1[0].shares === 25 && open1[0].exitAtMs === m(5) && open1[0].live === false, r1);
+  const r2 = await runScalpLane(env, { events: [ev({ edgeC: 3 })], legs: [leg(0.43, 0.45)], nowMs: m(2), config: cfg });
+  const open2 = JSON.parse(env.SIGNALS_CACHE.m.get(SCALP_KEYS.OPEN));
+  check("dry minute 2: still holding, marked at the bid, the same game not entered twice", r2.entries === 0 && r2.skipped["already in this game"] === 1 && open2.length === 1 && open2[0].lastBid === 0.43 && open2[0].markC === rtPnlC({ side: "buy", px: 0.40, fee: usFee(0.40) }, 0.43), { r2, open2 });
+  const r5 = await runScalpLane(env, { events: [], legs: [leg(0.44, 0.46)], nowMs: m(5), config: cfg });
+  const open5 = JSON.parse(env.SIGNALS_CACHE.m.get(SCALP_KEYS.OPEN));
+  const want = scalpPnl({ side: "buy", px: 0.40, shares: 25 }, 0.44);
+  const row = env.DB.rows[0];
+  const day = JSON.parse(env.SIGNALS_CACHE.m.get(SCALP_KEYS.DAY + "2026-11-01"));
+  check("dry minute 5: closed at the bid, both fees, recorded in D1 and the day", r5.exits === 1 && open5.length === 0 && row && row.exit_kind === "x5" && row.exit_px === 0.44 && Math.abs(row.pnl_usd - want.pnlUsd) < 0.011 && row.pnl_c === want.pnlC && row.live === 0 && row.hold_s === 300 && day.exits === 1 && day.wins === 1 && Math.abs(day.pnlUsd - want.pnlUsd) < 0.011, { r5, row, day });
+  const rep = await scalpReport(env, cfg, { nowMs: m(6) });
+  check("report: mode, record from D1, today, nothing open, read text", rep.mode === "dry" && rep.all.n === 1 && rep.all.wins === 1 && rep.all.hitRate === 1 && rep.recent.length === 1 && rep.recent[0].exitKind === "x5" && rep.open.length === 0 && rep.today.entries === 1 && /kill switch/.test(rep.read), { all: rep.all, today: rep.today });
+  // no quote at the hold: wait the grace period, then close at the last quote seen
+  const env2 = mkEnv();
+  await runScalpLane(env2, { events: [ev()], legs: [leg(0.40, 0.40)], nowMs: m(0), config: cfg });
+  await runScalpLane(env2, { events: [], legs: [leg(0.42, 0.44)], nowMs: m(3), config: cfg });
+  const g1 = await runScalpLane(env2, { events: [], legs: [], nowMs: m(5), config: cfg });
+  const g2 = await runScalpLane(env2, { events: [], legs: [], nowMs: m(14), config: cfg });
+  const g3 = await runScalpLane(env2, { events: [], legs: [], nowMs: m(15), config: cfg });
+  check("dry, no quote at the hold: holds through the grace period, then closes at the last quote seen (late_last_quote)", g1.exits === 0 && g2.exits === 0 && g3.exits === 1 && env2.DB.rows[0].exit_kind === "late_last_quote" && env2.DB.rows[0].exit_px === 0.42, { g1, g2, g3, row: env2.DB.rows[0] });
+  // caps over a day: max open 3, one per game, daily cap, loss stop
+  const env3 = mkEnv();
+  const evs = ["a", "b", "c", "d"].map(g => ev({ game: `G${g}`, team: `T${g}`, usSlug: `s-${g}`, edgeC: 2 }));
+  const c1 = await runScalpLane(env3, { events: evs, legs: [], nowMs: m(0), config: cfg });
+  check("caps: three open at most, the fourth waits", c1.entries === 3 && c1.skipped["max open scalps"] === 1, c1);
+  const c2 = await runScalpLane(env3, { events: [ev({ game: "Gz", usSlug: "s-z" })], legs: [], nowMs: m(1), config: { scalpMaxPerDay: 3, scalpMaxOpen: 10 } });
+  check("caps: the daily cap counts the day's entries", c2.entries === 0 && c2.skipped["daily scalp cap"] === 1, c2);
+  env3.SIGNALS_CACHE.m.set(SCALP_KEYS.DAY + "2026-11-01", JSON.stringify({ date: "2026-11-01", entries: 1, exits: 1, wins: 0, pnlUsd: -16, feesUsd: 1 }));
+  const c3 = await runScalpLane(env3, { events: [ev({ game: "Gz", usSlug: "s-z" })], legs: [], nowMs: m(2), config: { scalpMaxOpen: 10 } });
+  check("caps: the day's loss stop", c3.entries === 0 && c3.skipped["daily loss stop"] === 1, c3);
+  // off, halt
+  const off = await runScalpLane(mkEnv(), { events: [ev()], legs: [], nowMs: m(0), config: { scalpMode: "off" } });
+  check("off: nothing happens, mode reported", off.mode === "off" && off.entries === 0);
+  const env4 = mkEnv(); await setScalpHalt(env4, true, "test");
+  const h = await runScalpLane(env4, { events: [ev()], legs: [], nowMs: m(0), config: cfg });
+  check("halt: no entries while halted, reported", h.entries === 0 && h.skipped["lane halted"] === 1 && h.halted === true, h);
+  const blocked = await runScalpLane(mkEnv(), { events: [], legs: [], nowMs: m(0), config: { scalpMode: "live" } });
+  check("live asked without the key: runs dry and says why", blocked.mode === "dry" && blocked.liveAsked && /not on the worker/.test(blocked.liveBlocked), blocked);
+}
+
+// ---------- live, against a fake venue ----------
+{
+  const calls = [];
+  const execs = (shares, px) => [{ lastShares: String(shares), lastPx: { value: String(px) }, commissionNotionalCollected: { value: "0.17" } }];
+  let closeMode = "ok";
+  const fetchImpl = async (url, init = {}) => {
+    const u = String(url); calls.push({ u, method: (init.method || "GET"), body: init.body ? JSON.parse(init.body) : null });
+    const json = (b, status = 200) => ({ ok: status < 400, status, json: async () => b, text: async () => JSON.stringify(b), headers: { get: () => null } });
+    if (/gateway\.polymarket\.us\/v1\/market\/slug\//.test(u)) return json({ market: { orderPriceMinTickSize: "0.01", minimumTradeQty: "1", status: "MARKET_STATUS_OPEN" } });
+    if (/\/v1\/portfolio\/positions/.test(u)) return json({ positions: { "nba-lal-bos": { netPositionDecimal: closeMode === "ok" ? "0" : "25" } } });   // after a refused close the contracts are still held
+    if (/\/v1\/orders$/.test(u)) return json({ id: "o-entry", executions: execs(25, 0.40) });
+    if (/\/v1\/order\/close-position/.test(u)) { if (closeMode === "ok") return json({ id: "o-exit", executions: execs(25, 0.44) }); if (closeMode === "closed") return json({ message: "market is closed" }, 400); return json({ message: "boom" }, 503); }
+    return json({}, 404);
+  };
+  const env = mkEnv({ PMUS_KEY_ID: "key-1", PMUS_SECRET_KEY: Buffer.alloc(32, 9).toString("base64") });
+  const cfg = { scalpMode: "live" };
+  const m = (k) => T0 + k * 60e3;
+  const r1 = await runScalpLane(env, { events: [ev()], legs: [leg(0.40, 0.40)], nowMs: m(0), config: cfg, fetchImpl });
+  const open1 = JSON.parse(env.SIGNALS_CACHE.m.get(SCALP_KEYS.OPEN));
+  const order = calls.find(c => /\/v1\/orders$/.test(c.u));
+  check("live entry: a FOK limit for 25 long contracts at 40c is sent and its fill recorded on the open scalp", r1.mode === "live" && r1.entries === 1 && open1.length === 1 && open1[0].live === true && open1[0].orderId === "o-entry" && open1[0].px === 0.40 && open1[0].shares === 25 && open1[0].feeEntryUsd === 0.17 && order && order.method === "POST" && order.body.marketSlug === "nba-lal-bos" && order.body.intent === "ORDER_INTENT_BUY_LONG" && order.body.price.value === "0.40" && order.body.quantity === 25 && order.body.tif === "TIME_IN_FORCE_FILL_OR_KILL", { r1, open1, order: order && order.body });
+  const r5 = await runScalpLane(env, { events: [], legs: [leg(0.44, 0.46)], nowMs: m(5), config: cfg, fetchImpl });
+  const row = env.DB.rows[0];
+  check("live exit: close-position sent at the hold, the venue's fill priced the exit, fees from the venue", r5.exits === 1 && calls.some(c => /close-position/.test(c.u)) && row && row.exit_kind === "x_live" && row.exit_px === 0.44 && row.live === 1 && row.exit_order_id === "o-exit" && row.fee_exit_usd === 0.17 && row.mode === "live", { r5, row });
+  // the venue refuses the close (market over): the scalp is marked settling, not retried forever
+  closeMode = "closed";
+  await runScalpLane(env, { events: [ev({ game: "G2", team: "T2", usSlug: "nba-lal-bos" })], legs: [], nowMs: m(10), config: cfg, fetchImpl });
+  const r15 = await runScalpLane(env, { events: [], legs: [], nowMs: m(15), config: cfg, fetchImpl });
+  check("live exit refused as closed: recorded as settling, P&L left to the venue", r15.exits === 1 && env.DB.rows.some(r => r.exit_kind === "settling"), { r15, kinds: env.DB.rows.map(r => r.exit_kind) });
+  // the close errors out three times: the lane halts itself and keeps holding
+  closeMode = "err";
+  await runScalpLane(env, { events: [ev({ game: "G3", team: "T3", usSlug: "nba-lal-bos" })], legs: [], nowMs: m(20), config: cfg, fetchImpl });
+  let last = null; for (let i = 0; i < 3; i++) last = await runScalpLane(env, { events: [], legs: [], nowMs: m(25 + i), config: cfg, fetchImpl });
+  const halt = JSON.parse(env.SIGNALS_CACHE.m.get(SCALP_KEYS.HALT));
+  check("live exit failing three times: the lane halts itself, the position stays on the book", last.halted === true && halt.halted && /exit of nba-lal-bos failed 3 times/.test(halt.why) && last.open === 1, { last, halt });
+  const after = await runScalpLane(env, { events: [ev({ game: "G4", team: "T4", usSlug: "nba-lal-bos" })], legs: [], nowMs: m(30), config: cfg, fetchImpl });
+  check("halted: no new entries", after.entries === 0 && after.skipped["lane halted"] === 1, after);
+}
+
+console.log(`scalp: ${pass} passed, ${fail} failed`);
+if (fail) process.exit(1);
