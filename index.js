@@ -8750,6 +8750,18 @@ async function getWalletPnL(address) {
         // redeems) and the positions on file; an estimate, not a statement.
         method: "estimate",
         bothSides, marketsBought,
+        // Polymarket's Positions tab is a graveyard by construction: a leg
+        // that resolves to zero is never cashed, so it stays there at $0,
+        // while winners are cashed and move to Closed. The dead legs that
+        // ended before this window are what that tab shows and this record
+        // does not (Oct 31 2026: a wallet with 777 dead legs back to
+        // February read 92W-47L here over its last 15 days).
+        ...(() => {
+          const dead = positions.filter(isDeadLeg);
+          const windowStart = activity.length ? Math.min(...activity.map(a => Number(a.timestamp) || Infinity)) : null;
+          const older = windowStart ? dead.filter(p => !(p.endDate && Date.parse(p.endDate) / 1000 >= windowStart)) : dead;
+          return { deadLegs: dead.length, deadLegsOlder: older.length, deadLegsOlderCost: Math.round(older.reduce((sum, p) => sum + (parseFloat(p.initialValue) || 0), 0)) };
+        })(),
         // Polymarket's own book: lifetime / 30d / 7d / 1d P&L, account age,
         // and the lifetime record from closed positions plus the losing legs
         // still on the positions list at $0.
@@ -8760,8 +8772,9 @@ async function getWalletPnL(address) {
           return { ...official, closed: closedRec, deadLegs: dead.length, deadLegsCost: deadCost, record };
         })() : null
       },
-      resolvedBets: resolvedBets.slice(0, 50),
-      openBets: openBets.slice(0, 20)
+      // the whole window (it was 50 rows, which hid most of a busy wallet's record)
+      resolvedBets: resolvedBets.slice(0, 400),
+      openBets: openBets.slice(0, 100)
     };
   } catch (error) {
     return { success: false, error: error.message };
