@@ -24,6 +24,7 @@ import { CREW_KEYS, appendCrewChat, fetchMoneylineQuote } from './crew.js';
 import { COPY_KEYS, appendCopyLog, listCopyInbox } from './copy.js';
 import { attachShadow, refreshShadows, settleShadow, sideTokenId } from './execution.js';
 import { buildIntent, enqueueIntent } from './executor.js';
+import { sanitizeScalpUpdates } from './scalp.js';
 
 const GAMMA_API = 'https://gamma-api.polymarket.com';
 const CLOB_API = 'https://clob.polymarket.com';
@@ -705,7 +706,11 @@ export async function getAutotraderConfig(env) {
 
 export async function updateAutotraderConfig(env, updates) {
   const current = await getAutotraderConfig(env);
-  const merged = { ...current, ...updates, updatedAt: new Date().toISOString() };
+  // The scalp lane's keys (src/scalp.js) are checked and clamped; a bad mode or an out-of-range number is dropped, not stored.
+  const scalpKeys = Object.keys(updates || {}).filter(k => k.startsWith('scalp'));
+  const cleaned = { ...updates }; for (const k of scalpKeys) delete cleaned[k];
+  Object.assign(cleaned, sanitizeScalpUpdates(Object.fromEntries(scalpKeys.map(k => [k, updates[k]]))));
+  const merged = { ...current, ...cleaned, updatedAt: new Date().toISOString() };
   
   // Validate critical fields
   if (merged.maxPositionSize > merged.bankroll * 0.5) {

@@ -231,7 +231,7 @@ export async function recordUsLaneEvents(env, legs, nowMs = Date.now(), opts = {
       .bind(ev.ts, ev.sport, ev.game, ev.team, ev.pToken, ev.usSlug, ev.side, ev.px, ev.qty, ev.fee, ev.pBid, ev.pAsk, ev.pMid, ev.dpC, ev.edgeC));
     for (let i = 0; i < stmts.length; i += 50) await env.DB.batch(stmts.slice(i, i + 50));
   }
-  return { events: events.length, compared: Object.keys(prevMap).length };
+  return { events: events.length, compared: Object.keys(prevMap).length, list: events };
 }
 
 // Pure: when is this event next worth re-reading? The earliest unfilled

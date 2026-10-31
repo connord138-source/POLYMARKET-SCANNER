@@ -254,6 +254,33 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   older events; NO_DATA where Kalshi was not quoted). Rule: kh1 positive on
   the tradable subset at a >50% hit rate over ~200 Kalshi-quoted events, and
   better than x5, before a hedged lane is proposed.
+- `src/scalp.js` — the Polymarket US stale-quote SCALP lane (Oct 31 2026,
+  owner's "build the US scalp lane", after the paper lane's week read x5
+  +1.6c a share at 58% on 571 tradable events). Runs inside the minute
+  cron's `afterSample` hook on the same events the paper lane logs
+  (`recordUsLaneEvents` now returns `list`): `runScalpLane` first closes
+  open scalps whose `scalpHoldMin` (5) has passed at this minute's US quote
+  (buy -> bid, sell -> ask; `rtPnlC`, both taker fees; dry waits
+  `scalpExitGraceMin` for a quote, then the last one seen), then enters this
+  minute's events biggest edge first through `scalpEntryFor` (edge >=
+  `scalpMinEdgeC`, `scalpMinQty` shown, 5-95c, `scalpMaxOpen`, one per game,
+  `scalpMaxPerDay`, `scalpDailyLossUsd` stop; size = min(shown, `scalpMaxUsd`
+  / cost) whole contracts; a sell event buys the SHORT side at 1 - bid).
+  Modes (`scalpMode` in autotrader_config, sanitized by
+  `sanitizeScalpUpdates` in `updateAutotraderConfig`): off / dry (default:
+  decisions and fills at the sampled quotes, nothing sent) / live (FOK entry
+  via `buildUsOrder`+`placeUsOrder`, exit via `closeUsPosition`, fills from
+  executions, ambiguity reconciled on `usPositionQty`, else the lane halts
+  itself; needs `pmusConfigured`, else runs dry with `liveBlocked`).
+  INDEPENDENT of `paperTradeMode`. State: KV `scalp_open`, `scalp_day:<d>`,
+  `scalp_last`, `scalp_recent`, `scalp_halt` (`POST /xvenue/scalp/halt`,
+  admin); every closed scalp in D1 `scalp_trades` (migration 0012).
+  `GET /xvenue/scalp?hours=168` (snapshot key `scalp`): mode, config, open
+  with marks, today, `all`/`bySport`/`byKind`/`byMode` (n, hitRate, avgPnlC,
+  pnlUsd, feesUsd, roiPct), recent. exitKind x5 | late_last_quote | no_quote
+  | x_live | x_live_unpriced | settling. The Auto-trader page's US SCALP LANE
+  card shows it and (admin) sets the mode and sizes. The live flip is the
+  owner's; the lane went in dry.
 - `src/crypto-fv.js` — crypto fair value: every Polymarket BTC/ETH/SOL price
   contract ("above $X on <date>" = European digital; "dip to"/"reach" =
   one-touch via reflection) priced from Coinbase realized vol (7d/30d/90d,
