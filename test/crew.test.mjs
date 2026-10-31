@@ -295,5 +295,55 @@ const deps = (signals = []) => ({
   check("ledger", L.settled === 2 && L.wins === 1 && L.pnl === 0.4 && L.open === 1 && L.byVerdict.TRIM.losses === 1, JSON.stringify(L));
 }
 
+
+// ---------- player props: NFL order, Polymarket's prop priced against the books, council, queue, entry ----------
+{
+  const kickoff = iso(START);
+  const godwin = { slug: "nfl-atl-tb-2026-10-10-recyd-chris-godwin-jr-39pt5", sportsMarketType: "receiving_yards", question: "Chris Godwin Jr.: Receiving Yards O/U 39.5", line: 39.5,
+    outcomes: '["Over","Under"]', bestBid: 0.40, bestAsk: 0.46, outcomePrices: '["0.43","0.57"]', gameStartTime: kickoff.replace("T", " ").replace(".000Z", "+00"), endDate: kickoff, volumeNum: 1800, events: [{ slug: "nfl-atl-tb-2026-10-10" }] };
+  const oddsEvent = { id: "g1", commence_time: kickoff, home_team: "Tampa Bay Buccaneers", away_team: "Atlanta Falcons", bookmakers: [
+    { key: "draftkings", last_update: iso(NOW), markets: [{ key: "player_reception_yds", last_update: iso(NOW), outcomes: [{ name: "Over", description: "Chris Godwin Jr.", price: -120, point: 39.5 }, { name: "Under", description: "Chris Godwin Jr.", price: 100, point: 39.5 }] }] },
+    { key: "fanduel", last_update: iso(NOW), markets: [{ key: "player_reception_yds", last_update: iso(NOW), outcomes: [{ name: "Over", description: "Chris Godwin Jr.", price: -115, point: 39.5 }, { name: "Under", description: "Chris Godwin Jr.", price: -105, point: 39.5 }] }] },
+  ] };
+  const urls = [];
+  globalThis.fetch = async (url) => {
+    const u = String(url); urls.push(u);
+    const json = (b) => ({ ok: true, status: 200, headers: { get: (h) => (h === "x-requests-remaining" ? "15000" : null) }, json: async () => b, text: async () => JSON.stringify(b) });
+    if (u.includes("gamma-api.polymarket.com/markets?closed=false")) return json(u.includes("sports_market_types=receiving_yards") && u.includes("offset=0") ? [godwin] : []);
+    if (u.includes("gamma-api.polymarket.com/markets?slug=")) return json(decodeURIComponent(u.split("slug=")[1]) === godwin.slug ? [godwin] : []);
+    if (u.includes("/sports/americanfootball_nfl/events?")) return json([{ id: "g1", commence_time: kickoff, home_team: oddsEvent.home_team, away_team: oddsEvent.away_team }]);
+    if (u.includes("/events/g1/odds")) return json(oddsEvent);
+    return json([]);
+  };
+  const env = { ...makeEnv(), ODDS_API_KEY: "k" };
+  await handleCrewOrder(env, "Focus NFL today", J(env, "autotrader_config"), NOW);
+  const h = await runCrewHunt(env, { ...deps(), getGameOdds: async () => [] }, NOW);
+  const hunt = J(env, CREW_KEYS.HUNT);
+  const props = hunt.props;
+  check("props: the books' lines priced (one game, one line, both sides on the line-shopping board) and the event odds pulled once with the six NFL markets", props && props.priced === 1 && props.games === 1 && props.rows.length === 2 && urls.filter(u => /\/events\/g1\/odds/.test(u)).length === 1 && /markets=player_pass_yds,player_rush_yds,player_reception_yds,player_receptions,player_pass_tds,player_anytime_td/.test(urls.find(u => /\/events\/g1\/odds/.test(u))), JSON.stringify(props && { ...props, rows: props.rows.length, poly: { ...props.poly, rows: props.poly.rows.length } }));
+  const poly = props.poly;
+  const over = poly.rows.find(r => r.outcomeIndex === 0);
+  check("props: Polymarket's Godwin 39.5 matched to the books' 39.5, Over at the 46c ask vs the devigged fair, a gap over the 3-pt min edge", poly.listed.join() === "nfl" && poly.matched === 1 && over && over.buyPrice === 46 && over.fair > 51 && over.fair < 54 && over.edge >= 5 && poly.value === 1 && poly.debated === 1, JSON.stringify(over));
+  const row = hunt.board.find(d => d.kind === "prop");
+  check("props: the gap went before the council as a prop with a readable label, Over as its outcome", row && row.label === "Chris Godwin Jr. over 39.5 rec yds" && row.team === "Over" && row.marketSlug === godwin.slug && row.votes.length === 6 && row.edge === over.edge, JSON.stringify(row && { label: row.label, team: row.team, verdict: row.verdict, edge: row.edge }));
+  const chat = J(env, CREW_KEYS.CHAT).slice(-1)[0].text;
+  check("props: the chat report says what the props pass found", /Props: 1 lines priced across 1 games/.test(chat) && /Polymarket NFL props: 1 matched to a books line, 1 at \+3 or better \(Chris Godwin Jr. over 39.5 rec yds 46¢ vs 5\d(\.\d)?%\), sent to the council/.test(chat), chat);
+  const queue = J(env, CREW_KEYS.PICKS);
+  const queued = queue.find(p => p.kind === "prop");
+  check("props: queued as a prop pick with its label when the council did not veto", row.verdict === "VETO" ? !queued : (queued && queued.label === row.label && queued.team === "Over" && queued.outcomeIndex === 0), JSON.stringify({ verdict: row.verdict, queued }));
+  if (queued) {
+    const res = await processSignals(env, []);
+    const pos = (J(env, "autotrader_positions") || []).filter(p => p.strategySource === "crew_hunt");
+    check("props: entered at the live ask as a player-prop position titled by the prop, not 'Over'", pos.length === 1 && pos[0].entryPrice === 46 && pos[0].signalSubType === "player_prop" && pos[0].marketTitle === "Atlanta Falcons @ Tampa Bay Buccaneers — Chris Godwin Jr. over 39.5 rec yds" && pos[0].directionRaw === "Over", JSON.stringify({ res: res.crew, pos: pos[0] && [pos[0].marketTitle, pos[0].entryPrice, pos[0].signalSubType] }));
+    check("props: chat names the prop", /Placed: Chris Godwin Jr. over 39.5 rec yds \(player prop\) @ 46¢/.test(J(env, CREW_KEYS.CHAT).slice(-1)[0].text), J(env, CREW_KEYS.CHAT).slice(-1)[0].text);
+  }
+  const st = await getCrewState(env, deps());
+  check("props: the crew state carries the props board for the page", st.hunt && st.hunt.props && st.hunt.props.poly.rows.length === 2 && st.hunt.props.bySport.nfl && st.hunt.props.bySport.nfl.poly.matched === 1 && st.hunt.props.bySport.nfl.poly.rows === undefined);
+  // the chief's state block
+  const { propsReportLine } = await import("../src/crew.js");
+  check("props: a CFB order says Polymarket lists no CFB props", /Polymarket lists no CFB player props, so those are line shopping only/.test(propsReportLine({ priced: 4, games: 2, rows: [], bySport: { cfb: { games: 2 } }, poly: { listed: [], rows: [] } }, ["cfb"], 3)) && /Props: CFB: odds credits low/.test(propsReportLine({ priced: 0, bySport: { cfb: { skipped: "odds credits low" } } }, ["cfb"], 3)));
+  await handleCrewOrder(env, "stand down", J(env, "autotrader_config"), NOW);
+}
+
 console.log(`${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
