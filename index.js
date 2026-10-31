@@ -11,7 +11,7 @@ import {
 } from "./src/gamma.js";
 import { gammaGameMoneyline } from "./src/gamma.js";
 import { usLinkFor, usMatchForGame, usGameQuote, fetchLeagueEvents as fetchUsLeagueEvents, LEAGUES as US_LEAGUES } from "./src/polymarket-us.js";
-import {
+import { enterCopyPicksNow,
   getAutotraderConfig, updateAutotraderConfig, getOpenPositions,
   getTradeHistory, getTradeLog, getBotPerformance, getDailyStats,
   getPnLSummary, getCategoryPerformance, getExecQueue, addToExecQueue,
@@ -7229,6 +7229,15 @@ export default {
         console.log("xvenue:", JSON.stringify(r).slice(0, 300));
       }
       catch (e) { console.error("xvenue error:", e.message); }
+      // Followed wallets, every minute (Oct 31 2026): read their newest fills,
+      // then open the queued copies now (into the inbox the 5-minute cycle adopts).
+      try {
+        const cfg = await getAutotraderConfig(env);
+        const poll = await pollCopyWallets(env, cfg);
+        const entry = await enterCopyPicksNow(env, cfg);
+        await env.SIGNALS_CACHE.put("copy_poll_last", JSON.stringify({ ...poll, entry }), { expirationTtl: 3600 });
+        if (poll.seen || poll.queued || entry.entered) console.log("copy:", JSON.stringify({ poll, entry }).slice(0, 300));
+      } catch (e) { console.error("copy poll error:", e.message); try { await env.SIGNALS_CACHE.put("copy_poll_last", JSON.stringify({ at: new Date().toISOString(), error: e.message }), { expirationTtl: 3600 }); } catch (e2) {} }
       // A crew chat the chief could not answer from the owner's edge location (403) is answered from here.
       try { const pc = await answerPendingCrewChat(env, await getAutotraderConfig(env)); if (pc.answered !== undefined || pc.tries) console.log("crew chat:", JSON.stringify(pc)); }
       catch (e) { console.error("crew chat error:", e.message); }
@@ -7438,9 +7447,10 @@ export default {
         console.error("Crew hunt error:", e.message);
         cronStatus.crewHunt = { error: e.message };
       }
-      // COPY A WHALE: queue the copied wallets' fresh buys for the auto-trader
-      // below (enterCopyPicks fills them in the lane's own ledger).
-      try { cronStatus.copy = await pollCopyWallets(env, await getAutotraderConfig(env)); }
+      // COPY A WHALE: the minute cron polls the wallets and opens the copies
+      // (enterCopyPicksNow); this cycle adopts its inbox in processSignals and
+      // reports the last minute pass here.
+      try { cronStatus.copy = (await env.SIGNALS_CACHE.get("copy_poll_last", { type: "json" })) || { note: "minute cron has not polled yet" }; }
       catch (e) { cronStatus.copy = { error: e.message }; }
       // Market-making study: snapshot reward-market order books (D1 mm_books).
       try { cronStatus.mmBooks = await collectBooks(env); }

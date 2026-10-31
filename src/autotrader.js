@@ -21,7 +21,7 @@ import {
 } from './council.js';
 import { bucketSignal, matchesFilter } from './forge.js';
 import { CREW_KEYS, appendCrewChat, fetchMoneylineQuote } from './crew.js';
-import { COPY_KEYS, appendCopyLog } from './copy.js';
+import { COPY_KEYS, appendCopyLog, listCopyInbox } from './copy.js';
 import { attachShadow, refreshShadows, settleShadow, sideTokenId } from './execution.js';
 import { buildIntent, enqueueIntent } from './executor.js';
 
@@ -1718,6 +1718,8 @@ export async function processSignals(env, signals) {
     positionsExited: 0,
     errors: [],
   };
+  // Copies the minute cron opened since the last cycle join the list here, before the exit checks.
+  try { await drainCopyInbox(env, openPositions, dailyStats, results); } catch (e) { results.errors.push(`copy inbox: ${e.message}`); }
   const skippedMarketsThisCycle = new Set();
 
   // Cross-cycle skip-log dedupe. A persistent signal re-evaluates every
@@ -3085,103 +3087,177 @@ async function enterCrewPicks(env, config, dailyStats, stillOpen, results) {
 }
 
 // Copy lane: open the fresh buys the copied wallets made (src/copy.js).
+// Two callers share the per-pick logic: the 5-minute cycle (inside
+// processSignals, positions in hand) and the minute cron (enterCopyPicksNow,
+// Oct 31 2026: a copy five minutes behind a market maker buys into its exit),
+// which parks each new position in KV copy_inbox:<id> for the next cycle to
+// adopt, so the two crons never write the positions list at the same time.
+async function openCopyPick(env, config, pick, { stillOpen, counts, now = Date.now() }) {
+  const maxPerDay = config.copyMaxPerDay ?? 10;
+  const maxSlip = config.copyMaxSlipPts ?? 4;
+  const maxAgeMs = (config.copyMaxAgeMin ?? 60) * 60e3;
+  if (now - (pick.lastTs || 0) > maxAgeMs) return { skip: 'too old', drop: true };
+  if ((counts.copyOpened || 0) >= maxPerDay) return { skip: 'copy daily cap' };
+  if (stillOpen.some(p => p.marketSlug === pick.marketSlug)) return { skip: 'already holding market', drop: true };
+  // The wallet's own stake when it has one (set on the Followed wallets page), else the lane default.
+  const size = Math.round((pick.betSize > 0 ? pick.betSize : (config.copyBetSize ?? 5)) * 100) / 100;
+  if (config.maxDailyTrades > 0 && counts.tradesOpened >= config.maxDailyTrades) return { skip: 'daily trade cap' };
+  if (config.maxDailySpend > 0 && counts.totalSpent + size > config.maxDailySpend) return { skip: 'daily spend cap' };
+  if (laneOpenCap(config, 'whale_copy') > 0 && laneOpenCount(stillOpen, 'whale_copy') >= laneOpenCap(config, 'whale_copy')) return { skip: 'max open positions' };
+
+  // Honest fill: the live Gamma price of the outcome the wallet bought.
+  let gamma = null;
+  try { gamma = await lookupMarketTokens(pick.marketSlug); } catch (e) {}
+  if (!gamma || !Array.isArray(gamma.gammaPrices)) return { skip: 'gamma lookup miss', drop: true };
+  if (gamma.closed) return { skip: 'market closed', drop: true };
+  const outs = (gamma.outcomes || []).map(x => String(x));
+  const want = String(pick.outcome || '').toLowerCase();
+  let idx = outs.findIndex(o => o.toLowerCase() === want);
+  if (idx < 0) idx = outs.findIndex(o => o.toLowerCase().includes(want) || want.includes(o.toLowerCase()));
+  if (idx < 0 || typeof gamma.gammaPrices[idx] !== 'number' || isNaN(gamma.gammaPrices[idx])) return { skip: 'no outcome match', drop: true };
+  const live = Math.round(gamma.gammaPrices[idx] * 1000) / 10;
+  if (live <= 5 || live >= 95) return { skip: 'price extreme', drop: true };
+  if (typeof pick.price === 'number' && live - pick.price > maxSlip) return { skip: 'price ran away' };
+
+  const category = categorizeMarket(pick.title || '');
+  const position = {
+    id: `at_${now}_${Math.random().toString(36).slice(2, 8)}`,
+    marketSlug: pick.marketSlug,
+    marketTitle: pick.title,
+    marketType: category.startsWith('sports') ? 'sports' : 'other',
+    signalSubType: 'copy',
+    direction: outs[idx],
+    directionRaw: outs[idx],
+    whaleAction: 'BUY',
+    entryPrice: live,
+    size,
+    walletTier: 'COPY',
+    strategySource: 'whale_copy',
+    copyOf: pick.wallet,
+    copyNick: pick.nickname || null,
+    copyPickId: pick.id,
+    whaleWallet: pick.wallet,
+    whalePrice: pick.price ?? null,
+    whaleUsd: pick.usd ?? null,
+    whaleAt: pick.lastTs ? new Date(pick.lastTs).toISOString() : null,
+    copyLagS: pick.lastTs ? Math.max(0, Math.round((now - pick.lastTs) / 1000)) : null,   // seconds behind the whale's last fill
+    openedAt: new Date(now).toISOString(),
+    paperTrade: true,
+    marketCategory: category,
+    holdToResolution: true,
+    mirrorWhaleExit: true,
+    shares: size / (live / 100),
+  };
+  const who = pick.nickname || `${pick.wallet.slice(0, 6)}…${pick.wallet.slice(-4)}`;
+  const reason = `Copied ${who}: ${outs[idx]} @ ${live}¢ (it paid ${pick.price ?? '?'}¢, $${pick.usd}${position.copyLagS != null ? `, ${position.copyLagS}s behind` : ''}) — follows its exit, else holds to resolution`;
+  try { await appendCopyLog(env, { type: 'copied', wallet: pick.wallet, nickname: pick.nickname || null, market: pick.title, outcome: outs[idx], usd: pick.usd, price: pick.price, our: live, size, lagS: position.copyLagS }); } catch (e) {}
+  return { position, reason, category, size, live };
+}
+
+async function copyQueueAndEntered(env) {
+  let queue = [], enteredIds = [];
+  try { queue = await env.SIGNALS_CACHE.get(COPY_KEYS.PICKS, { type: 'json' }) || []; } catch (e) {}
+  try { enteredIds = await env.SIGNALS_CACHE.get(COPY_KEYS.ENTERED, { type: 'json' }) || []; } catch (e) {}
+  return { queue, entered: new Set(enteredIds) };
+}
+async function saveCopyQueue(env, remaining, entered) {
+  try {
+    await env.SIGNALS_CACHE.put(COPY_KEYS.PICKS, JSON.stringify(remaining));
+    await env.SIGNALS_CACHE.put(COPY_KEYS.ENTERED, JSON.stringify(Array.from(entered).slice(-500)), { expirationTtl: 30 * 24 * 3600 });
+  } catch (e) {}
+}
+
+// 5-minute cycle: positions and the day's stats are in hand.
 async function enterCopyPicks(env, config, dailyStats, stillOpen, results) {
   if (config.copyEntries === false) return;
-  let queue = [];
-  try { queue = await env.SIGNALS_CACHE.get(COPY_KEYS.PICKS, { type: 'json' }) || []; } catch (e) { return; }
+  const { queue, entered } = await copyQueueAndEntered(env);
   if (!queue.length) return;
   const stat = { entered: 0, skips: {} };
   results.copy = stat;
   const skip = (why) => { stat.skips[why] = (stat.skips[why] || 0) + 1; };
   if (!config.paperTradeMode) { skip('paper only'); return; }
   if (config.dailyLossLimit && (dailyStats.realizedPnL || 0) <= -Math.abs(config.dailyLossLimit)) { skip('daily loss limit'); return; }
-
-  let enteredIds = [];
-  try { enteredIds = await env.SIGNALS_CACHE.get(COPY_KEYS.ENTERED, { type: 'json' }) || []; } catch (e) {}
-  const entered = new Set(enteredIds);
   const remaining = [];
-  const now = Date.now();
-  const maxPerDay = config.copyMaxPerDay ?? 10;
-  const maxSlip = config.copyMaxSlipPts ?? 4;
-  const maxAgeMs = (config.copyMaxAgeMin ?? 60) * 60e3;
-
   for (const pick of queue) {
     if (entered.has(pick.id)) continue;
-    if (now - (pick.lastTs || 0) > maxAgeMs) { skip('too old'); entered.add(pick.id); continue; }
-    if ((dailyStats.copyOpened || 0) >= maxPerDay) { skip('copy daily cap'); remaining.push(pick); continue; }
-    if (stillOpen.some(p => p.marketSlug === pick.marketSlug)) { skip('already holding market'); entered.add(pick.id); continue; }
-    // The wallet's own stake when it has one (set on the Followed wallets page), else the lane default.
-    const size = Math.round((pick.betSize > 0 ? pick.betSize : (config.copyBetSize ?? 5)) * 100) / 100;
-    if (config.maxDailyTrades > 0 && dailyStats.tradesOpened >= config.maxDailyTrades) { skip('daily trade cap'); remaining.push(pick); continue; }
-    if (config.maxDailySpend > 0 && dailyStats.totalSpent + size > config.maxDailySpend) { skip('daily spend cap'); remaining.push(pick); continue; }
-    if (laneOpenCap(config, 'whale_copy') > 0 && laneOpenCount(stillOpen, 'whale_copy') >= laneOpenCap(config, 'whale_copy')) { skip('max open positions'); remaining.push(pick); continue; }
-
-    // Honest fill: the live Gamma price of the outcome the wallet bought.
-    let gamma = null;
-    try { gamma = await lookupMarketTokens(pick.marketSlug); } catch (e) {}
-    if (!gamma || !Array.isArray(gamma.gammaPrices)) { skip('gamma lookup miss'); entered.add(pick.id); continue; }
-    if (gamma.closed) { skip('market closed'); entered.add(pick.id); continue; }
-    const outs = (gamma.outcomes || []).map(x => String(x));
-    const want = String(pick.outcome || '').toLowerCase();
-    let idx = outs.findIndex(o => o.toLowerCase() === want);
-    if (idx < 0) idx = outs.findIndex(o => o.toLowerCase().includes(want) || want.includes(o.toLowerCase()));
-    if (idx < 0 || typeof gamma.gammaPrices[idx] !== 'number' || isNaN(gamma.gammaPrices[idx])) { skip('no outcome match'); entered.add(pick.id); continue; }
-    const live = Math.round(gamma.gammaPrices[idx] * 1000) / 10;
-    if (live <= 5 || live >= 95) { skip('price extreme'); entered.add(pick.id); continue; }
-    if (typeof pick.price === 'number' && live - pick.price > maxSlip) { skip('price ran away'); remaining.push(pick); continue; }
-
-    const category = categorizeMarket(pick.title || '');
-    const position = {
-      id: `at_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-      marketSlug: pick.marketSlug,
-      marketTitle: pick.title,
-      marketType: category.startsWith('sports') ? 'sports' : 'other',
-      signalSubType: 'copy',
-      direction: outs[idx],
-      directionRaw: outs[idx],
-      whaleAction: 'BUY',
-      entryPrice: live,
-      size,
-      walletTier: 'COPY',
-      strategySource: 'whale_copy',
-      copyOf: pick.wallet,
-      copyNick: pick.nickname || null,
-      copyPickId: pick.id,
-      whaleWallet: pick.wallet,
-      whalePrice: pick.price ?? null,
-      whaleUsd: pick.usd ?? null,
-      openedAt: new Date().toISOString(),
-      paperTrade: true,
-      marketCategory: category,
-      holdToResolution: true,
-      mirrorWhaleExit: true,
-      shares: size / (live / 100),
-    };
-    stillOpen.push(position);
+    const r = await openCopyPick(env, config, pick, { stillOpen, counts: dailyStats });
+    if (!r.position) { skip(r.skip); if (r.drop) entered.add(pick.id); else remaining.push(pick); continue; }
+    stillOpen.push(r.position);
     entered.add(pick.id);
     stat.entered++;
     dailyStats.tradesOpened++;
-    dailyStats.totalSpent += size;
+    dailyStats.totalSpent += r.size;
     dailyStats.copyOpened = (dailyStats.copyOpened || 0) + 1;
     results.tradesPaperTraded = (results.tradesPaperTraded || 0) + 1;
-
-    const who = pick.nickname || `${pick.wallet.slice(0, 6)}…${pick.wallet.slice(-4)}`;
-    await logDecision(env, {
-      type: 'PAPER_TRADE',
-      market: position.marketTitle,
-      size,
-      entryPrice: live,
-      walletTier: 'COPY',
-      reason: `Copied ${who}: ${outs[idx]} @ ${live}¢ (it paid ${pick.price ?? '?'}¢, $${pick.usd}) — follows its exit, else holds to resolution`,
-      marketCategory: category,
-    });
-    try { await appendCopyLog(env, { type: 'copied', wallet: pick.wallet, nickname: pick.nickname || null, market: pick.title, outcome: outs[idx], usd: pick.usd, price: pick.price, our: live, size }); } catch (e) {}
+    await logDecision(env, { type: 'PAPER_TRADE', market: r.position.marketTitle, size: r.size, entryPrice: r.live, walletTier: 'COPY', reason: r.reason, marketCategory: r.category });
   }
+  await saveCopyQueue(env, remaining, entered);
+}
 
-  try {
-    await env.SIGNALS_CACHE.put(COPY_KEYS.PICKS, JSON.stringify(remaining));
-    await env.SIGNALS_CACHE.put(COPY_KEYS.ENTERED, JSON.stringify(Array.from(entered).slice(-500)), { expirationTtl: 30 * 24 * 3600 });
-  } catch (e) {}
+// Minute cron: open the queued copies now, each into its own inbox key.
+// Caps are read against the day's stats plus what the inbox already holds;
+// the positions list and the day's stats are only written by the 5-minute
+// cycle when it adopts the inbox (drainCopyInbox).
+export async function enterCopyPicksNow(env, config, nowMs = Date.now()) {
+  const stat = { at: new Date(nowMs).toISOString(), entered: 0, skips: {} };
+  const skip = (why) => { stat.skips[why] = (stat.skips[why] || 0) + 1; };
+  if (!config.enabled) { skip('bot off'); return stat; }
+  if (config.copyEntries === false) { skip('copy lane off'); return stat; }
+  if (!config.paperTradeMode) { skip('paper only'); return stat; }
+  const { queue, entered } = await copyQueueAndEntered(env);
+  const pending = queue.filter(p => !entered.has(p.id));
+  if (!pending.length) return stat;
+  const [dailyStats, positions, inbox] = await Promise.all([getDailyStats(env), getOpenPositions(env), listCopyInbox(env)]);
+  if (config.dailyLossLimit && (dailyStats.realizedPnL || 0) <= -Math.abs(config.dailyLossLimit)) { skip('daily loss limit'); return stat; }
+  const ids = new Set(positions.map(p => p.id));
+  const stillOpen = [...positions, ...inbox.filter(p => !ids.has(p.id))];
+  const today = new Date(nowMs).toISOString().slice(0, 10);
+  const inboxToday = inbox.filter(p => String(p.openedAt || '').slice(0, 10) === today);
+  const counts = {
+    copyOpened: (dailyStats.copyOpened || 0) + inboxToday.length,
+    tradesOpened: (dailyStats.tradesOpened || 0) + inboxToday.length,
+    totalSpent: (dailyStats.totalSpent || 0) + inboxToday.reduce((a, p) => a + (p.size || 0), 0),
+  };
+  const remaining = [];
+  for (const pick of queue) {
+    if (entered.has(pick.id)) continue;
+    const r = await openCopyPick(env, config, pick, { stillOpen, counts, now: nowMs });
+    if (!r.position) { skip(r.skip); if (r.drop) entered.add(pick.id); else remaining.push(pick); continue; }
+    const pos = { ...r.position, _copyLog: { reason: r.reason, category: r.category } };
+    try { await env.SIGNALS_CACHE.put(COPY_KEYS.INBOX + pos.id, JSON.stringify(pos), { expirationTtl: 2 * 24 * 3600 }); } catch (e) { skip('inbox write failed'); remaining.push(pick); continue; }
+    stillOpen.push(pos);
+    entered.add(pick.id);
+    stat.entered++;
+    counts.copyOpened++; counts.tradesOpened++; counts.totalSpent += r.size;
+  }
+  await saveCopyQueue(env, remaining, entered);
+  return stat;
+}
+
+// 5-minute cycle, before the exit checks: adopt the inbox into the positions
+// list and the day's stats, so the copies exit and settle like the rest.
+async function drainCopyInbox(env, openPositions, dailyStats, results) {
+  let inbox = [];
+  try { inbox = await listCopyInbox(env); } catch (e) { return 0; }
+  if (!inbox.length) return 0;
+  const ids = new Set(openPositions.map(p => p.id));
+  let adopted = 0;
+  for (const raw of inbox) {
+    const { _copyLog, ...position } = raw;
+    if (!ids.has(position.id)) {
+      openPositions.push(position);
+      ids.add(position.id);
+      adopted++;
+      dailyStats.tradesOpened++;
+      dailyStats.totalSpent += position.size || 0;
+      dailyStats.copyOpened = (dailyStats.copyOpened || 0) + 1;
+      results.tradesPaperTraded = (results.tradesPaperTraded || 0) + 1;
+      try { await logDecision(env, { type: 'PAPER_TRADE', market: position.marketTitle, size: position.size, entryPrice: position.entryPrice, walletTier: 'COPY', reason: (_copyLog && _copyLog.reason) || `Copied ${position.copyNick || position.copyOf}`, marketCategory: (_copyLog && _copyLog.category) || position.marketCategory }); } catch (e) {}
+    }
+    try { await env.SIGNALS_CACHE.delete(COPY_KEYS.INBOX + position.id); } catch (e) {}
+  }
+  if (adopted) results.copyAdopted = (results.copyAdopted || 0) + adopted;
+  return adopted;
 }
 
 // ============================================================
