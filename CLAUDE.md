@@ -124,7 +124,25 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   copied from the moment it is added; its history is not replayed. `GET
   /agents/copy` (snapshot key `copy`) carries each wallet's record, the
   ledger's skill row and Polymarket's book (the on-chain refresher pulls
-  copied wallets first). Amounts (Oct 30 2026): `POST /agents/copy/settings` writes the lane's
+  copied wallets first). Cadence (Oct 31 2026, after a market maker's $4.9k
+  buy was sold back six seconds later and the 5-min copy bought into its
+  exit): the poll runs on the MINUTE cron (`copy_poll_last` is the last
+  pass; the 5-min cron only reports it), reads 200 activity rows, keeps a
+  rolling 3h buffer of the wallet's fills (`copy_fills:<addr>`, deduped by
+  tx hash, so a bet split across polls adds up and a late-indexed fill still
+  counts; `fillFromActivity`, `mergeFills`, `betsFromFills`), filters by the
+  follow clock `sinceTs` (set at add / flip to copy, never advanced by a
+  poll; `lastSeenTs` is display only now), records each bet once with
+  `foundAt` and keeps its `usd`/`price` current, marks `soldUsd`/`soldAt`/
+  `soldPx` from the wallet's later SELLs on the same side, and does not
+  queue a bet the wallet has already sold `SOLD_OUT_SHARE` (half) of. Entry
+  is also per minute: `enterCopyPicksNow` (autotrader.js) runs the shared
+  `openCopyPick` gates and parks each new position in its own key
+  `copy_inbox:<id>` (caps read the inbox too); `processSignals` adopts the
+  inbox (`drainCopyInbox`) right after loading positions, before the exit
+  checks, so the two crons never write the positions list together. Each
+  copy carries `copyLagS` (seconds behind the whale's last fill) and
+  `whaleAt`. `getCopyState` lists inbox copies as open and carries `poll`. Amounts (Oct 30 2026): `POST /agents/copy/settings` writes the lane's
   copy* config keys through `copySettingsUpdates` (stake default, smallest
   bet to copy, caps, slip, age; floors/ceilings in `COPY_SETTINGS`), and
   `POST /agents/copy/wallets/size` gives one wallet its own stake

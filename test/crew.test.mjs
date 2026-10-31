@@ -30,7 +30,7 @@ function makeEnv(store = {}, cfg = {}) {
       get: async (k, o) => (k in s ? (o && o.type === "json" ? JSON.parse(s[k]) : s[k]) : null),
       put: async (k, v) => { s[k] = v; },
       delete: async (k) => { delete s[k]; },
-      list: async () => ({ keys: [] }),
+      list: async ({ prefix } = {}) => ({ keys: Object.keys(s).filter(k => !prefix || k.startsWith(prefix)).map(name => ({ name })) }),
     },
   };
 }
@@ -153,8 +153,8 @@ function installFetch(markets, quoteOverride = {}) {
     const json = (b) => ({ ok: true, status: 200, json: async () => b, text: async () => JSON.stringify(b) });
     if (u.includes("gamma-api.polymarket.com/markets?closed=false")) return json(u.includes("offset=0") ? markets : []);
     if (u.includes("site.api.espn.com")) return json(globalThis.__espn || { events: [] });
-    if (u.includes("gamma-api.polymarket.com/markets?slug=")) {
-      const slug = decodeURIComponent(u.split("slug=")[1]);
+    if (u.includes("gamma-api.polymarket.com/markets?") && new URL(u).searchParams.has("slug")) {
+      const slug = new URL(u).searchParams.get("slug");
       const m = markets.find(x => x.slug === slug);
       return json(m ? [{ ...m, ...(quoteOverride[slug] || {}) }] : []);
     }
@@ -243,6 +243,35 @@ const deps = (signals = []) => ({
   }, { paperTradeMode: false });
   const res = await processSignals(env, []);
   check("live mode: paper only", (J(env, "autotrader_positions") || []).length === 0 && res.crew && res.crew.skips["paper only"] === 1, JSON.stringify(res.crew));
+}
+
+// copy lane, minute path: the copy opens now into the inbox; the next 5-minute cycle adopts it
+{
+  const { enterCopyPicksNow } = await import("../src/autotrader.js");
+  installFetch(MARKETS.map(m => ({ ...m, clobTokenIds: '["11","22"]' })));   // the copy entry looks the market up by slug and fills at Gamma's price
+  const W = "0x" + "c".repeat(40);
+  const pick = { id: `${W}:cfb-jmad-gas-2026-10-10:james madison:1`, wallet: W, nickname: "heater", marketSlug: "cfb-jmad-gas-2026-10-10", eventSlug: null, title: "James Madison vs. Georgia Southern", outcome: "James Madison", outcomeIndex: 0, usd: 5000, price: 62, trades: 1, firstTs: NOW - 90e3, lastTs: NOW - 90e3, betSize: null };
+  const env = makeEnv({ copy_picks: JSON.stringify([pick]) });
+  const cfg = J(env, "autotrader_config");
+  const e1 = await enterCopyPicksNow(env, cfg, NOW);
+  const inboxKeys = Object.keys(env.store).filter(k => k.startsWith("copy_inbox:"));
+  const parked = inboxKeys.length ? JSON.parse(env.store[inboxKeys[0]]) : null;
+  check("minute entry: the copy is opened at the live price into its own inbox key, the pick marked entered, the positions list untouched", e1.entered === 1 && inboxKeys.length === 1 && parked && parked.strategySource === "whale_copy" && parked.entryPrice === 62 && parked.copyLagS === 90 && parked.copyNick === "heater" && (J(env, "autotrader_positions") || []).length === 0 && J(env, "copy_entered").includes(pick.id) && J(env, "copy_picks").length === 0, { e1, parked });
+  const e2 = await enterCopyPicksNow(env, cfg, NOW + 60e3);
+  check("minute entry: nothing to do on the next minute", e2.entered === 0 && Object.keys(env.store).filter(k => k.startsWith("copy_inbox:")).length === 1);
+  // a second pick on the same market is refused against the inbox copy; the daily cap counts the inbox too
+  const pick2 = { ...pick, id: pick.id + "b", lastTs: NOW - 30e3 };
+  env.store.copy_picks = JSON.stringify([pick2]);
+  const e3 = await enterCopyPicksNow(env, { ...cfg, copyMaxPerDay: 1 }, NOW + 60e3);
+  check("minute entry: caps read the inbox (daily cap 1 already used, same market held)", e3.entered === 0 && (e3.skips["copy daily cap"] === 1 || e3.skips["already holding market"] === 1), e3);
+  // the 5-minute cycle adopts it
+  const res = await processSignals(env, []);
+  const pos = (J(env, "autotrader_positions") || []).filter(p => p.strategySource === "whale_copy");
+  const day = JSON.parse(env.store[Object.keys(env.store).find(k => k.startsWith("autotrader_daily_stats_"))] || "{}");
+  check("adopt: the inbox copy joins the positions list, the day's stats count it, the key is gone, the log says who", pos.length === 1 && pos[0].id === parked.id && !("_copyLog" in pos[0]) && res.copyAdopted === 1 && Object.keys(env.store).filter(k => k.startsWith("copy_inbox:")).length === 0 && day.copyOpened === 1 && day.tradesOpened >= 1, { res: { adopted: res.copyAdopted, errors: res.errors }, pos: pos[0] && pos[0].id, day });
+  const res2 = await processSignals(env, []);
+  check("adopt: idempotent", !res2.copyAdopted && (J(env, "autotrader_positions") || []).filter(p => p.strategySource === "whale_copy").length === 1);
+  check("minute entry: bot off / lane off / live mode -> nothing opened", (await enterCopyPicksNow(env, { ...cfg, enabled: false }, NOW)).skips["bot off"] === 1 && (await enterCopyPicksNow(env, { ...cfg, copyEntries: false }, NOW)).skips["copy lane off"] === 1 && (await enterCopyPicksNow(env, { ...cfg, paperTradeMode: false }, NOW)).skips["paper only"] === 1);
 }
 
 // lanes: the whale-signal lane paused on its own, the crew lane still places

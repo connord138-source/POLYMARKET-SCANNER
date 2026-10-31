@@ -30,7 +30,13 @@ export const COPY_KEYS = {
   ENTERED: 'copy_entered',   // pick ids entered or skipped for good
   LOG: 'copy_log',           // recent events for the page
   SEEN: 'copy_seen:',        // + member id: when that member last looked at the followed wallets' bets
+  FILLS: 'copy_fills:',      // + address: the wallet's fills over the last few hours (buys and sells), so a bet split across polls still adds up
+  INBOX: 'copy_inbox:',      // + position id: a copy opened by the minute cron, waiting for the 5-minute cycle to adopt it
+  POLL: 'copy_poll_last',    // the last minute-cron poll and entry pass
 };
+export const FILL_WINDOW_MIN = 180;      // fills kept per wallet for the running total
+export const ACTIVITY_LIMIT = 200;       // rows per poll (the feed is newest first; 200 covers hours for any wallet seen so far)
+export const SOLD_OUT_SHARE = 0.5;       // a bet the wallet has already sold half of is not copied: it is trading, not betting
 export const UNSEEN_FIRST_LOOK_H = 24;   // a member who never looked is told about the last day, not the whole book
 export const UNSEEN_MAX = 60;
 export const COPY_MAX_WALLETS = 12;
@@ -85,7 +91,7 @@ export async function setCopyWalletMode(env, address, mode, nowMs = Date.now()) 
   const next = mode === 'copy' ? 'copy' : 'follow';
   if (modeOf(w) === next) return { ok: true, wallet: w };
   w.mode = next;
-  if (next === 'copy') w.lastSeenTs = Math.max(w.lastSeenTs || 0, nowMs);
+  if (next === 'copy') { w.lastSeenTs = Math.max(w.lastSeenTs || 0, nowMs); w.sinceTs = Math.max(w.sinceTs || 0, nowMs); }   // the copy clock starts now; nothing before it is copied
   await kvPut(env, COPY_KEYS.WALLETS, list);
   if (next === 'follow') {
     const picks = await kvJson(env, COPY_KEYS.PICKS, []);
@@ -215,51 +221,132 @@ export function mergePicks(queue, fresh, enteredIds) {
 
 // Cron: read each followed wallet's newest trades; record what it bet, and
 // for a copied wallet queue the fresh buys for the auto-trader.
+// Pure: a fill row from the data-api activity feed (TRADE rows only).
+export function fillFromActivity(a) {
+  if (!a || a.type !== 'TRADE') return null;
+  let ts = Number(a.timestamp) || 0; if (ts && ts < 1e12) ts *= 1000;
+  const side = String(a.side || '').toUpperCase();
+  const slug = a.slug || '', outcome = String(a.outcome || '').trim();
+  const usd = parseFloat(a.usdcSize) || 0, px = parseFloat(a.price) || 0;
+  if (!ts || (side !== 'BUY' && side !== 'SELL') || !slug || !outcome || usd <= 0 || px <= 0) return null;
+  return { id: `${a.transactionHash || ts}|${a.asset || slug}|${side}|${Math.round(usd * 100)}`, ts, side, slug, eventSlug: a.eventSlug || null, title: a.title || slug, outcome, outcomeIndex: typeof a.outcomeIndex === 'number' ? a.outcomeIndex : null, usd, px };
+}
+
+// Pure: merge this poll's fills into the wallet's rolling buffer (newest
+// first; duplicates dropped; the window trimmed). Order of arrival does not
+// matter, so a fill the feed indexed late still counts.
+export function mergeFills(buffer, fills, nowMs = Date.now(), { windowMin = FILL_WINDOW_MIN } = {}) {
+  const lo = nowMs - windowMin * 60e3;
+  const seen = new Set(), out = [];
+  for (const f of [...(fills || []), ...(buffer || [])]) {
+    if (!f || f.ts < lo || seen.has(f.id)) continue;
+    seen.add(f.id); out.push(f);
+  }
+  return out.sort((a, b) => b.ts - a.ts);
+}
+
+// Pure: the wallet's bets from its fill buffer: every BUY group (one
+// market side) at or over `minUsd` since the follow clock started, with the
+// SELLs on the same side after the first buy counted against it.
+export function betsFromFills(wallet, fills, sinceTs, { minUsd = 500, nowMs = Date.now(), maxAgeMin = FILL_WINDOW_MIN } = {}) {
+  const acts = (fills || []).filter(f => f.side === 'BUY').map(f => ({ type: 'TRADE', side: 'BUY', timestamp: f.ts, slug: f.slug, eventSlug: f.eventSlug, title: f.title, outcome: f.outcome, outcomeIndex: f.outcomeIndex, usdcSize: f.usd, price: f.px }));
+  const bets = picksFromActivity(wallet, acts, sinceTs, { minUsd, nowMs, maxAgeMin });
+  for (const b of bets) {
+    const sells = (fills || []).filter(f => f.side === 'SELL' && f.slug === b.marketSlug && f.outcome.toLowerCase() === b.outcome.toLowerCase() && f.ts > b.firstTs);
+    b.soldUsd = Math.round(sells.reduce((s, f) => s + f.usd, 0));
+    b.soldAt = sells.length ? new Date(Math.max(...sells.map(f => f.ts))).toISOString() : null;
+    b.soldPx = sells.length ? Math.round(100 * sells.sort((x, y) => y.ts - x.ts)[0].px) : null;
+  }
+  return bets;
+}
+
+// Each minute (index.js minute cron since Oct 31 2026; it was the 5-minute
+// cron, and a market maker's buys were sold again before the copy landed):
+// read every followed wallet's newest fills, keep a rolling buffer so a bet
+// split across polls still adds up and a late-indexed fill still counts,
+// record each bet once with the minute it was found (`foundAt`) and keep its
+// running total current, note what the wallet has sold of it since, and
+// queue the fresh buys of a copied wallet for the copy entry.
 export async function pollCopyWallets(env, config = {}, nowMs = Date.now(), fetchImpl = fetch) {
   const list = await listCopyWallets(env);
-  const stat = { wallets: list.length, polled: 0, seen: 0, queued: 0, failed: 0 };
+  const stat = { at: new Date(nowMs).toISOString(), wallets: list.length, polled: 0, seen: 0, updated: 0, queued: 0, failed: 0 };
   if (!list.length) return stat;
   let picks = await kvJson(env, COPY_KEYS.PICKS, []);
   const entered = await kvJson(env, COPY_KEYS.ENTERED, []);
-  for (const w of list) {
-    if (!w.enabled) continue;
+  const minUsd = config.copyMinWhaleUsd ?? 500, maxAgeMs = (config.copyMaxAgeMin ?? 60) * 60e3;
+  const polled = await Promise.all(list.map(async (w) => {
+    if (!w.enabled) return null;
     try {
-      const res = await fetchImpl(`${POLY_DATA_API}/activity?user=${w.address}&limit=100`);
-      if (!res.ok) { stat.failed++; continue; }
+      const res = await fetchImpl(`${POLY_DATA_API}/activity?user=${w.address}&limit=${ACTIVITY_LIMIT}`);
+      if (!res.ok) return { w, error: `HTTP ${res.status}` };
       const acts = await res.json();
-      if (!Array.isArray(acts)) { stat.failed++; continue; }
-      stat.polled++;
-      // Followed wallets keep every fresh bet in their recent list (any age
-      // up to a day, so a quiet wallet still shows its last bets); copied
-      // wallets queue only what is fresh enough to copy.
-      const seen = picksFromActivity(w.address, acts, w.lastSeenTs || 0, { minUsd: config.copyMinWhaleUsd ?? 500, nowMs, maxAgeMin: 24 * 60 });
-      let maxTs = w.lastSeenTs || 0;
-      for (const a of acts) { let ts = Number(a.timestamp) || 0; if (ts && ts < 1e12) ts *= 1000; if (ts > maxTs) maxTs = ts; }
-      if (seen.length) {
-        const recent = await kvJson(env, COPY_KEYS.RECENT + w.address, []);
-        const ids = new Set(recent.map(r => r.id));
-        for (const p of seen) if (!ids.has(p.id)) recent.push({ id: p.id, marketSlug: p.marketSlug, eventSlug: p.eventSlug, title: p.title, outcome: p.outcome, usd: p.usd, price: p.price, at: new Date(p.lastTs).toISOString(), foundAt: new Date(nowMs).toISOString() });
-        await kvPut(env, COPY_KEYS.RECENT + w.address, recent.slice(-15), 30 * 24 * 3600);
-        for (const p of seen) await appendCopyLog(env, { type: 'seen', wallet: w.address, nickname: w.nickname, market: p.title, outcome: p.outcome, usd: p.usd, price: p.price }, nowMs);
+      if (!Array.isArray(acts)) return { w, error: 'bad feed' };
+      return { w, acts };
+    } catch (e) { return { w, error: e.message }; }
+  }));
+  for (const r of polled) {
+    if (!r) continue;
+    const { w, acts, error } = r;
+    if (error) { stat.failed++; continue; }
+    stat.polled++;
+    // The follow clock: the moment the wallet was added (or flipped to copy); never moved forward by a poll.
+    if (!w.sinceTs) w.sinceTs = w.lastSeenTs || Date.parse(w.addedAt) || nowMs;
+    let maxTs = w.lastSeenTs || 0;
+    for (const a of acts) { let ts = Number(a.timestamp) || 0; if (ts && ts < 1e12) ts *= 1000; if (ts > maxTs) maxTs = ts; }
+    w.lastSeenTs = maxTs;
+    const buffer = mergeFills(await kvJson(env, COPY_KEYS.FILLS + w.address, []), acts.map(fillFromActivity).filter(Boolean), nowMs);
+    await kvPut(env, COPY_KEYS.FILLS + w.address, buffer, 24 * 3600);
+    const bets = betsFromFills(w.address, buffer, w.sinceTs, { minUsd, nowMs });
+    const recent = await kvJson(env, COPY_KEYS.RECENT + w.address, []);
+    const fresh = [];
+    for (const b of bets) {
+      const key = `${b.marketSlug}|${b.outcome.toLowerCase()}`;
+      const have = recent.find(x => x.id === b.id) || recent.find(x => `${x.marketSlug}|${String(x.outcome).toLowerCase()}` === key && Math.abs(Date.parse(x.at) - b.lastTs) < FILL_WINDOW_MIN * 60e3);
+      const row = { usd: b.usd, price: b.price, at: new Date(b.lastTs).toISOString(), trades: b.trades, soldUsd: b.soldUsd, soldAt: b.soldAt, soldPx: b.soldPx };
+      if (have) {
+        const changed = have.usd !== row.usd || have.soldUsd !== row.soldUsd;
+        Object.assign(have, row);
+        if (changed) stat.updated++;
+        continue;
       }
-      stat.seen += seen.length;
-      w.seen = (w.seen || 0) + seen.length;
-      w.lastSeenTs = maxTs;
-      if (seen.length) w.lastTradeAt = new Date(Math.max(...seen.map(p => p.lastTs))).toISOString();
-      if (modeOf(w) === 'copy') {
-        const fresh = seen.filter(p => nowMs - p.lastTs <= (config.copyMaxAgeMin ?? 60) * 60e3);
-        const merged = mergePicks(picks, fresh.map(p => ({ ...p, nickname: w.nickname || null, betSize: w.betSize > 0 ? w.betSize : null })), entered);
-        picks = merged.queue;
-        stat.queued += merged.added;
-        w.queued = (w.queued || 0) + merged.added;
-      }
-    } catch (e) { stat.failed++; }
+      recent.push({ id: b.id, marketSlug: b.marketSlug, eventSlug: b.eventSlug, title: b.title, outcome: b.outcome, firstAt: new Date(b.firstTs).toISOString(), foundAt: new Date(nowMs).toISOString(), ...row });
+      fresh.push(b);
+    }
+    if (fresh.length) {
+      await kvPut(env, COPY_KEYS.RECENT + w.address, recent.slice(-15), 30 * 24 * 3600);
+      for (const p of fresh) await appendCopyLog(env, { type: 'seen', wallet: w.address, nickname: w.nickname, market: p.title, outcome: p.outcome, usd: p.usd, price: p.price, lagS: Math.max(0, Math.round((nowMs - p.lastTs) / 1000)) }, nowMs);
+      w.seen = (w.seen || 0) + fresh.length;
+      w.lastTradeAt = new Date(Math.max(...fresh.map(p => p.lastTs))).toISOString();
+    } else if (stat.updated) {
+      await kvPut(env, COPY_KEYS.RECENT + w.address, recent.slice(-15), 30 * 24 * 3600);
+    }
+    stat.seen += fresh.length;
+    if (modeOf(w) === 'copy') {
+      // Fresh enough to copy, and not already being sold back by the wallet.
+      const copyable = fresh.filter(p => nowMs - p.lastTs <= maxAgeMs && !(p.soldUsd >= p.usd * SOLD_OUT_SHARE));
+      const merged = mergePicks(picks, copyable.map(p => ({ ...p, nickname: w.nickname || null, betSize: w.betSize > 0 ? w.betSize : null })), entered);
+      picks = merged.queue;
+      stat.queued += merged.added;
+      w.queued = (w.queued || 0) + merged.added;
+    }
   }
   await kvPut(env, COPY_KEYS.WALLETS, list);
   // A pick nobody entered within a few hours is stale: the price is gone.
   const keep = picks.filter(p => nowMs - (p.lastTs || 0) < 6 * 3600e3);
   await kvPut(env, COPY_KEYS.PICKS, keep.slice(-100));
   return stat;
+}
+
+// The copies the minute cron opened that the 5-minute cycle has not adopted
+// yet (KV copy_inbox:<id>, one key each so the two crons never overwrite
+// one another). Listed for the page and drained by the auto-trader.
+export async function listCopyInbox(env) {
+  const out = [];
+  try {
+    const l = await env.SIGNALS_CACHE.list({ prefix: COPY_KEYS.INBOX });
+    for (const k of (l && l.keys) || []) { const p = await kvJson(env, k.name, null); if (p) out.push(p); }
+  } catch (e) {}
+  return out;
 }
 
 // ---------- what a member has not seen yet (Oct 31 2026) ----------
@@ -327,14 +414,18 @@ export function copyLedger(history, openPositions, wallets) {
 
 // GET /agents/copy
 export async function getCopyState(env, deps, nowMs = Date.now()) {
-  const [wallets, picks, log, history, open, config] = await Promise.all([
+  const [wallets, picks, log, history, opened, config, inbox, poll] = await Promise.all([
     listCopyWallets(env),
     kvJson(env, COPY_KEYS.PICKS, []),
     kvJson(env, COPY_KEYS.LOG, []),
     deps.getTradeHistory(env, 1000).catch(() => []),
     deps.getOpenPositions(env).catch(() => []),
     deps.getAutotraderConfig ? deps.getAutotraderConfig(env).catch(() => ({})) : Promise.resolve({}),
+    listCopyInbox(env),
+    kvJson(env, COPY_KEYS.POLL, null),
   ]);
+  const openIds = new Set((opened || []).map(p => p.id));
+  const open = [...(opened || []), ...inbox.filter(p => !openIds.has(p.id))];
   const ledger = copyLedger(history, open, wallets);
   const rows = [];
   for (const w of wallets) {
@@ -374,6 +465,7 @@ export async function getCopyState(env, deps, nowMs = Date.now()) {
     recent: copyClosed,
     total: ledger.total,
     log: (log || []).slice(-30).reverse(),
+    poll: poll || null,
     settings: {
       betSize: config.copyBetSize ?? 5, maxOpen: config.copyMaxOpen ?? 10, maxPerDay: config.copyMaxPerDay ?? 10,
       minWhaleUsd: config.copyMinWhaleUsd ?? 500, maxSlipPts: config.copyMaxSlipPts ?? 4, maxAgeMin: config.copyMaxAgeMin ?? 60,

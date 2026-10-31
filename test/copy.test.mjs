@@ -1,8 +1,8 @@
 // Copy-a-whale lane: pick building, queue merging, the ledger. Run with: node test/copy.test.mjs
-import { picksFromActivity, mergePicks, copyLedger, isWalletAddress, addCopyWallet, pollCopyWallets, listCopyWallets, setCopyWalletMode, modeOf, copySettingsUpdates, setCopyWalletSize, unseenBets, getUnseenBets, markCopySeen, UNSEEN_FIRST_LOOK_H } from "../src/copy.js";
+import { picksFromActivity, mergePicks, copyLedger, isWalletAddress, addCopyWallet, pollCopyWallets, listCopyWallets, setCopyWalletMode, modeOf, copySettingsUpdates, setCopyWalletSize, unseenBets, getUnseenBets, markCopySeen, UNSEEN_FIRST_LOOK_H, fillFromActivity, mergeFills, betsFromFills, listCopyInbox, ACTIVITY_LIMIT } from "../src/copy.js";
 let pass = 0, fail = 0;
 const check = (n, c, x) => { if (c) pass++; else { fail++; console.error("FAIL:", n, x ?? ""); } };
-const kv = () => { const m = new Map(); return { get: async (k) => (m.has(k) ? JSON.parse(m.get(k)) : null), put: async (k, v) => { m.set(k, v); }, _m: m }; };
+const kv = () => { const m = new Map(); return { get: async (k) => (m.has(k) ? JSON.parse(m.get(k)) : null), put: async (k, v) => { m.set(k, v); }, delete: async (k) => { m.delete(k); }, list: async ({ prefix } = {}) => ({ keys: [...m.keys()].filter(k => !prefix || k.startsWith(prefix)).map(name => ({ name })) }), _m: m }; };
 
 const W = "0xF3CE7f04dde4f8c5aed19a20e5ecd8520e5ca57a";
 const now = Date.parse("2026-10-30T02:00:00Z");
@@ -39,14 +39,15 @@ const add = await addCopyWallet(env, { address: W, nickname: "heater" }, now - 2
 check("add: lowercased, enabled, follow-only by default, starts from now, book marked", add.ok && add.wallet.address === W.toLowerCase() && add.wallet.enabled && add.wallet.mode === "follow" && add.wallet.lastSeenTs === now - 20 * 60e3 && add.wallet.bookAtAdd.lifetime === 580358, add);
 check("add: duplicate refused", (await addCopyWallet(env, { address: W })).ok === false);
 check("entries from before modes count as copy", modeOf({ address: "0xa" }) === "copy" && modeOf({ mode: "follow" }) === "follow");
-const fakeFetch = async () => ({ ok: true, json: async () => acts });
+const urls = [];
+const fakeFetch = async (u) => { urls.push(String(u)); return { ok: true, json: async () => acts }; };
 const stat = await pollCopyWallets(env, { copyMinWhaleUsd: 500 }, now, fakeFetch);
 const queue = JSON.parse(env.SIGNALS_CACHE._m.get("copy_picks"));
 const wl = await listCopyWallets(env);
 const recent = JSON.parse(env.SIGNALS_CACHE._m.get("copy_recent:" + W.toLowerCase()));
-check("poll a followed wallet: the bet is recorded, nothing queued, wallet advanced", stat.polled === 1 && stat.seen === 1 && stat.queued === 0 && queue.length === 0 && recent.length === 1 && recent[0].outcome === "Karmine Corp" && wl[0].lastSeenTs === t(1) * 1000 && wl[0].seen === 1, { stat, queue, wl, recent });
+check("poll a followed wallet: the bet is recorded with the minute it was found, nothing queued, wallet advanced, the follow clock kept, 200 rows asked", stat.polled === 1 && stat.seen === 1 && stat.queued === 0 && queue.length === 0 && recent.length === 1 && recent[0].outcome === "Karmine Corp" && recent[0].foundAt === new Date(now).toISOString() && recent[0].soldUsd === 0 && wl[0].lastSeenTs === t(1) * 1000 && wl[0].sinceTs === now - 20 * 60e3 && wl[0].seen === 1 && new RegExp(`limit=${ACTIVITY_LIMIT}`).test(urls[0]), { stat, queue, wl, recent, urls });
 const flip = await setCopyWalletMode(env, W, "copy", now - 10 * 60e3);
-check("flip to copy: the clock never moves backwards, nothing replayed", flip.ok && flip.wallet.mode === "copy" && flip.wallet.lastSeenTs === t(1) * 1000, flip);
+check("flip to copy: the clock never moves backwards, nothing replayed", flip.ok && flip.wallet.mode === "copy" && flip.wallet.lastSeenTs === t(1) * 1000 && flip.wallet.sinceTs === now - 10 * 60e3, flip);
 const acts2 = [...acts, { type: "TRADE", side: "BUY", slug: "nba-gsw-min-2026-10-30", title: "Warriors vs. Timberwolves", outcome: "Warriors", usdcSize: "4000", price: "0.52", timestamp: t(0.5) }];
 const stat2 = await pollCopyWallets(env, { copyMinWhaleUsd: 500 }, now + 60e3, async () => ({ ok: true, json: async () => acts2 }));
 const queue2 = JSON.parse(env.SIGNALS_CACHE._m.get("copy_picks"));
@@ -73,6 +74,41 @@ const cleared = await setCopyWalletSize(env2, W, null);
 check("size: cleared back to the lane default", cleared.ok && cleared.wallet.betSize === undefined && (await listCopyWallets(env2))[0].betSize === undefined);
 const sizedLog = JSON.parse(env2.SIGNALS_CACHE._m.get("copy_log")).filter(e => e.type === "sized");
 check("size: logged both ways", sizedLog.length === 2 && sizedLog[0].betSize === 25 && sizedLog[1].betSize === null, sizedLog);
+
+// ---------- fills buffer: split bets add up, late fills count, sells are noted ----------
+{
+  const env3 = { SIGNALS_CACHE: kv() };
+  const T = Date.parse("2026-10-31T14:00:00Z");
+  const ts = (s) => Math.round((T + s * 1000) / 1000);
+  await addCopyWallet(env3, { address: W, nickname: "heater", mode: "copy" }, T - 3600e3, {});
+  const fill = (side, usd, px, secs, extra = {}) => ({ type: "TRADE", side, slug: "dota2-ty-gl-2026-10-31-game2", eventSlug: "dota2-ty-gl", title: "Dota 2: Team Yandex vs GamerLegion - Game 2 Winner", outcome: "GamerLegion", outcomeIndex: 0, usdcSize: String(usd), price: String(px), timestamp: ts(secs), transactionHash: `0x${secs}${side}${usd}`, ...extra });
+  // poll 1 (14:01): one $300 clip -> under the bar, nothing recorded
+  let feed = [fill("BUY", 300, 0.27, 20)];
+  const s1 = await pollCopyWallets(env3, { copyMinWhaleUsd: 500 }, T + 60e3, async () => ({ ok: true, json: async () => feed }));
+  check("buffer: a $300 clip alone is not a bet yet", s1.seen === 0 && JSON.parse(env3.SIGNALS_CACHE._m.get("copy_fills:" + W.toLowerCase())).length === 1, s1);
+  // poll 2 (14:02): a second $300 clip; the feed is newest first; the two add up to $600 -> recorded now, found at 14:02, queued
+  feed = [fill("BUY", 300, 0.28, 75), fill("BUY", 300, 0.27, 20)];
+  const s2 = await pollCopyWallets(env3, { copyMinWhaleUsd: 500 }, T + 120e3, async () => ({ ok: true, json: async () => feed }));
+  let rec = JSON.parse(env3.SIGNALS_CACHE._m.get("copy_recent:" + W.toLowerCase()));
+  let q = JSON.parse(env3.SIGNALS_CACHE._m.get("copy_picks"));
+  check("buffer: the two clips add up on the second poll -> one bet of $600 found at 14:02, queued once", s2.seen === 1 && s2.queued === 1 && rec.length === 1 && rec[0].usd === 600 && rec[0].foundAt === new Date(T + 120e3).toISOString() && rec[0].at === new Date(ts(75) * 1000).toISOString() && q.length === 1 && q[0].usd === 600, { s2, rec, q });
+  // poll 3 (14:03): the feed now also shows an older $200 clip it had not indexed before, and a $400 sell after the buys
+  feed = [fill("SELL", 400, 0.26, 150), fill("BUY", 300, 0.28, 75), fill("BUY", 200, 0.27, 40), fill("BUY", 300, 0.27, 20)];
+  const s3 = await pollCopyWallets(env3, { copyMinWhaleUsd: 500 }, T + 180e3, async () => ({ ok: true, json: async () => feed }));
+  rec = JSON.parse(env3.SIGNALS_CACHE._m.get("copy_recent:" + W.toLowerCase()));
+  q = JSON.parse(env3.SIGNALS_CACHE._m.get("copy_picks"));
+  check("buffer: a late-indexed clip raises the running total in place (no second row, no second queue entry) and the sell is noted against it", s3.seen === 0 && s3.updated === 1 && rec.length === 1 && rec[0].usd === 800 && rec[0].soldUsd === 400 && rec[0].soldPx === 26 && rec[0].soldAt === new Date(ts(150) * 1000).toISOString() && rec[0].foundAt === new Date(T + 120e3).toISOString() && q.length === 1, { s3, rec, q });
+  // a bet the wallet had already half sold when first seen is recorded but not copied
+  feed = [fill("SELL", 2000, 0.5, 400, { slug: "nba-x", title: "X", outcome: "Yes" }), fill("BUY", 3000, 0.5, 380, { slug: "nba-x", title: "X", outcome: "Yes" }), ...feed];
+  const s4 = await pollCopyWallets(env3, { copyMinWhaleUsd: 500 }, T + 420e3, async () => ({ ok: true, json: async () => feed }));
+  rec = JSON.parse(env3.SIGNALS_CACHE._m.get("copy_recent:" + W.toLowerCase()));
+  q = JSON.parse(env3.SIGNALS_CACHE._m.get("copy_picks"));
+  check("sold out: a bet the wallet already sold most of is shown, not copied", s4.seen === 1 && s4.queued === 0 && rec.some(r => r.marketSlug === "nba-x" && r.soldUsd === 2000) && q.length === 1, { s4, rec: rec.map(r => [r.marketSlug, r.usd, r.soldUsd]), q: q.length });
+  check("fills: a non-trade row or a bad row is dropped; duplicates merge once; the window trims", fillFromActivity({ type: "REDEEM" }) === null && fillFromActivity(fill("BUY", 0, 0.5, 1)) === null && mergeFills([fillFromActivity(fill("BUY", 10, 0.5, 1))], [fillFromActivity(fill("BUY", 10, 0.5, 1)), fillFromActivity(fill("BUY", 10, 0.5, -4 * 3600))], T + 10e3).length === 1);
+  const bets = betsFromFills(W, [fillFromActivity(fill("BUY", 700, 0.3, 10)), fillFromActivity(fill("SELL", 100, 0.31, 20)), fillFromActivity(fill("SELL", 50, 0.29, -5))], 0, { nowMs: T + 60e3 });
+  check("bets: only sells after the first buy count against it", bets.length === 1 && bets[0].soldUsd === 100 && bets[0].soldPx === 31, bets);
+  check("inbox: empty list when nothing is parked", (await listCopyInbox(env3)).length === 0);
+}
 
 // ---------- what a member has not seen yet ----------
 {
