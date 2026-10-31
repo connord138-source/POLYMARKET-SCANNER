@@ -245,6 +245,21 @@ const deps = (signals = []) => ({
   check("live mode: paper only", (J(env, "autotrader_positions") || []).length === 0 && res.crew && res.crew.skips["paper only"] === 1, JSON.stringify(res.crew));
 }
 
+// lanes: the whale-signal lane paused on its own, the crew lane still places
+{
+  installFetch(MARKETS);
+  const env = makeEnv({
+    [CREW_KEYS.PICKS]: JSON.stringify([{ id: "cfb-jmad-gas-2026-10-10:0", marketSlug: "cfb-jmad-gas-2026-10-10", outcomeIndex: 0,
+      team: "James Madison", game: "James Madison vs. Georgia Southern", startTime: iso(START), vegasProb: 74, buyPrice: 63, edge: 11, verdict: "APPROVE", minEdge: 3 }]),
+  }, { signalEntries: false });
+  const res = await processSignals(env, [{ id: "sig1", marketSlug: "x", marketTitle: "x", direction: "YES", score: 90 }]);
+  const pos = (J(env, "autotrader_positions") || []);
+  check("lanes: signalEntries false -> no whale signal evaluated, reason logged, crew pick still entered, lanes reported", res.evaluated === 0 && res.skipReasons["Whale-signal lane paused (lanes)"] === 1 && res.crew && res.crew.entered === 1 && pos.length === 1 && pos[0].strategySource === "crew_hunt" && res.lanes && res.lanes.signals === false && res.lanes.crew === true && res.lanes.copy === true, JSON.stringify({ evaluated: res.evaluated, skip: res.skipReasons, crew: res.crew, lanes: res.lanes }));
+  const env2 = makeEnv({ [CREW_KEYS.PICKS]: JSON.stringify([{ id: "x:0", marketSlug: "cfb-jmad-gas-2026-10-10", outcomeIndex: 0, team: "James Madison", game: "g", startTime: iso(START), vegasProb: 74, verdict: "APPROVE", minEdge: 3 }]) }, { crewHuntEntries: false });
+  const res2 = await processSignals(env2, []);
+  check("lanes: crewHuntEntries false -> the crew lane sits out, reported", (J(env2, "autotrader_positions") || []).length === 0 && !res2.crew && res2.lanes.crew === false && res2.lanes.signals === true, JSON.stringify({ crew: res2.crew, lanes: res2.lanes }));
+}
+
 // hunt with the Odds API down: DraftKings board + crew still prices the slate
 {
   globalThis.__espn = ESPN;

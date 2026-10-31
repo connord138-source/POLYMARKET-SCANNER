@@ -579,6 +579,13 @@ const DEFAULT_CONFIG = {
   // settling opportunities regardless, so the lane still builds its record.
   vegasEdgeRequireProven: true,
   vegasEdgeProvenMinSettled: 30,
+  // LANES (Oct 31 2026, owner's "set the autotrader to wallet copy trades
+  // only, or copy trades along with crew trades"): every entry source has
+  // its own switch so one lane can run alone. signalEntries is the
+  // whale-signal lane (and its Vegas-edge promotions), the only lane the
+  // live executor carries; crewHuntEntries, copyEntries and forgeLaneEnabled
+  // are the paper lanes. Exits always run, whatever is switched off.
+  signalEntries: true,
   // CREW HUNT (Agent Crew orders, src/crew.js): picks the operator's ordered
   // hunt queued after a council debate. Paper only, own lane
   // (strategySource 'crew_hunt'), hold to resolution, re-checked at the live
@@ -2116,7 +2123,12 @@ export async function processSignals(env, signals) {
   }
   
   let councilStats = null;   // loaded lazily, once per cycle
-  for (const signal of signals) {
+  // Lane switch: the whale-signal lane can be paused on its own (copy only,
+  // copy + crew) while exits, the other lanes and the ledger keep running.
+  const signalLaneOn = config.signalEntries !== false;
+  results.lanes = { signals: signalLaneOn, crew: config.crewHuntEntries !== false, copy: config.copyEntries !== false, forge: config.forgeLaneEnabled !== false };
+  if (!signalLaneOn && signals.length) results.skipReasons['Whale-signal lane paused (lanes)'] = signals.length;
+  for (const signal of (signalLaneOn ? signals : [])) {
     results.evaluated++;
     
     // Skip if we already opened a position in this market this cycle or recently
@@ -2848,7 +2860,7 @@ async function enterForgeStrategies(env, config, dailyStats, stillOpen, results,
 }
 
 async function enterVegasEdgeOpportunities(env, config, dailyStats, stillOpen, results) {
-  if (config.vegasEdgeEntries === false) return;
+  if (config.vegasEdgeEntries === false || config.signalEntries === false) return;   // a main-lane source: paused with the whale-signal lane
   if (!config.paperTradeMode) return;
   if (config.vegasEdgeRequireProven !== false) {
     let lane = null;
