@@ -976,7 +976,7 @@ export async function runCrewHunt(env, deps, nowMs = Date.now()) {
   // (30 min apart at most), or every 90 min; otherwise the last ruling stands.
   const browserDk = await kvJson(env, CREW_KEYS.DK_BOARD);
   const dkForDebate = browserDk && nowMs - Date.parse(browserDk.at) < 45 * 60e3 ? browserDk.rows.slice(0, 10)
-    : dkBoard.length ? dkBoard.slice(0, 10).map(r => ({ label: `${r.team} ML`, odds: r.odds, fair: r.fair, implied: r.implied, ev: r.ev, startTime: r.startTime })) : null;
+    : dkBoard.length ? dkBoard.slice(0, 10).map(r => ({ label: `${r.team} ML`, game: r.game, odds: r.odds, fair: r.fair, implied: r.implied, ev: r.ev, startTime: r.startTime })) : null;
   const topSet = debated.slice(0, 5).map(d => d.id).sort().join(',');
   const lastDebate = last && last.debate && last.directiveId === directive.id ? last.debate : null;
   const sinceDebate = lastDebate ? nowMs - Date.parse(lastDebate.at) : Infinity;
@@ -995,7 +995,7 @@ export async function runCrewHunt(env, deps, nowMs = Date.now()) {
           edgePts: d.edge, draftKingsOdds: d.dkOdds, whaleFlow: d.whale, placeable: d.edge >= minEdge,
           openingVotes: d.votes.map(v => `${v.agent}: ${v.vote.toLowerCase()} (${v.conviction}) — ${v.line}`),
         })),
-        dkBoard: dkForDebate && dkForDebate.map(r => ({ pick: r.label, odds: r.odds, fairPct: r.fair, dkImpliedPct: r.implied, per100: r.ev, kickoff: fmtEtShort(r.startTime) })),
+        dkBoard: dkForDebate && dkForDebate.map(r => ({ pick: r.label, game: r.game || null, odds: r.odds, fairPct: r.fair, dkImpliedPct: r.implied, per100: r.ev, kickoff: fmtEtShort(r.startTime) })),
         context: {
           now: fmtEtShort(new Date(nowMs).toISOString()), sports: directive.sports, minEdgePts: minEdge,
           paperBetsLeftToday: Math.max(0, (directive.maxBets ?? 6) - (dailyStats.crewOpened || 0)),
@@ -1061,7 +1061,7 @@ export async function runCrewHunt(env, deps, nowMs = Date.now()) {
       bySport: propsBySport,
       rows: propRows.sort((a, b) => b.ev - a.ev).slice(0, PROP_BOARD_ROWS),
       value: propRows.filter(r => r.ev >= VALUE_EV_MIN).length,
-      priced: propRows.length / 2,
+      priced: Object.values(propsBySport).reduce((n, b) => n + (b.priced || 0), 0),   // every line priced, not just the board's top rows
       games: Object.values(propsBySport).reduce((n, b) => n + (b.games || 0), 0),
       poly: {
         listed: directive.sports.filter(s => POLY_PROP_TYPES[s]),
