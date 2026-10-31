@@ -243,7 +243,7 @@ export function polyQuote(market, idx) {
 // book wider than PROP_MAX_SPREAD (shown, not queued).
 export function polyPropRows(sport, markets, fairs, { nowMs = Date.now(), maxSpread = PROP_MAX_SPREAD } = {}) {
   const map = POLY_PROP_TYPES[sport];
-  const out = { listed: !!map, markets: (markets || []).length, matched: 0, noFair: 0, lineMismatch: 0, skipped: 0, rows: [] };
+  const out = { listed: !!map, markets: (markets || []).length, matched: 0, noFair: 0, lineMismatch: 0, notOpen: 0, rows: [] };   // `skipped` is the pass's reason string, set by propsSweep
   if (!map) return out;
   const byKey = new Map(), byPlayer = new Map();
   for (const f of fairs || []) {
@@ -256,13 +256,13 @@ export function polyPropRows(sport, markets, fairs, { nowMs = Date.now(), maxSpr
     if (!oddsMarket) continue;
     const startMs = Date.parse(String(m.gameStartTime || m.endDate || '').replace(' ', 'T').replace(/\+00$/, 'Z'));
     const outcomes = parseArr(m.outcomes) || [];
-    if (!startMs || startMs - nowMs < PREGAME_MIN_MS || m.closed || m.acceptingOrders === false || outcomes.length !== 2) { out.skipped++; continue; }
+    if (!startMs || startMs - nowMs < PREGAME_MIN_MS || m.closed || m.acceptingOrders === false || outcomes.length !== 2) { out.notOpen++; continue; }
     const player = String(m.question || '').split(':')[0].trim();
     const point = typeof m.line === 'number' ? m.line : null;
     const p = normPlayer(player);
     const f = byKey.get(`${oddsMarket}|${p}|${point ?? ''}`);
     if (!f) { if (byPlayer.has(`${oddsMarket}|${p}`)) out.lineMismatch++; else out.noFair++; continue; }
-    if (Math.abs(startMs - Date.parse(f.startTime)) > 6 * 3600e3) { out.skipped++; continue; }
+    if (Math.abs(startMs - Date.parse(f.startTime)) > 6 * 3600e3) { out.notOpen++; continue; }
     out.matched++;
     const eventSlug = Array.isArray(m.events) && m.events[0] && m.events[0].slug ? m.events[0].slug : null;
     for (let idx = 0; idx < 2; idx++) {
