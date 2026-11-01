@@ -12,7 +12,8 @@ name: Push Kalshi API Key
 #        KALSHI_API_KEY_ID   = the Key ID shown next to the key
 #        KALSHI_PRIVATE_KEY  = the whole PEM file contents, including the
 #                              -----BEGIN ... ----- / -----END ... ----- lines
-#      (multi-line values paste fine; an escaped single line also works)
+#      (multi-line values paste fine; an escaped single line also works; the
+#      bare base64 body without the BEGIN/END lines is wrapped back into a PEM)
 #   3. Run this workflow (Actions > Push Kalshi API Key > Run workflow).
 #
 # The sampler picks the key up on its next minute tick; status/backend.json ->
@@ -43,12 +44,43 @@ jobs:
             echo "::error::KALSHI_PRIVATE_KEY repo secret is not set. Add the full PEM (BEGIN/END lines included) that Kalshi showed when the key was created, then re-run."
             exit 1
           fi
-          # Accept a PEM pasted either with real newlines or as one line with \n escapes.
-          PEM="$(printf '%s' "$KALSHI_PRIVATE_KEY" | sed 's/\\n/\n/g')"
-          if ! printf '%s' "$PEM" | grep -q -- '-----BEGIN .*PRIVATE KEY-----'; then
-            echo "::error::KALSHI_PRIVATE_KEY does not look like a PEM private key (no -----BEGIN ... PRIVATE KEY----- line)."
+          # Accept a PEM pasted either with real newlines or as one line with \n escapes; drop Windows line ends.
+          PEM="$(printf '%s' "$KALSHI_PRIVATE_KEY" | sed 's/\\n/\n/g' | tr -d '\r')"
+          # Diagnostics that never print key material.
+          LEN=$(printf '%s' "$PEM" | wc -c | tr -d ' '); LINES=$(printf '%s\n' "$PEM" | wc -l | tr -d ' ')
+          case "$PEM" in -----*) STARTS=yes ;; *) STARTS=no ;; esac
+          if printf '%s' "$PEM" | grep -q BEGIN; then HASBEGIN=yes; else HASBEGIN=no; fi
+          echo "KALSHI_PRIVATE_KEY: $LEN characters on $LINES line(s); starts with dashes: $STARTS; has a BEGIN line: $HASBEGIN"
+          if printf '%s' "$KALSHI_API_KEY_ID" | grep -q BEGIN; then
+            echo "::error::KALSHI_API_KEY_ID contains a PEM header: the two secrets look swapped. KALSHI_API_KEY_ID is the short Key ID Kalshi shows on screen (like a952bcbe-ec3b-4b5b-b8f9-11dae589608c); KALSHI_PRIVATE_KEY is the key file."
             exit 1
           fi
+          if ! printf '%s' "$PEM" | grep -q -- '-----BEGIN .*PRIVATE KEY-----'; then
+            # The file's base64 body pasted without its BEGIN/END lines (a "copy key" button does this):
+            # recognise what it decodes to and wrap it back into a PEM.
+            BODY="$(printf '%s' "$PEM" | tr -d ' \n\t"')"
+            LABEL=""; KIND=""
+            if printf '%s' "$BODY" | grep -Eq '^[A-Za-z0-9+/=]{40,}$'; then
+              case "$BODY" in
+                MC4CAQAwBQYDK2Vw*) LABEL="PRIVATE KEY"; KIND="Ed25519" ;;
+                MII*IBADANBgkqhkiG9w0BAQEFAASC*) LABEL="PRIVATE KEY"; KIND="RSA (PKCS#8)" ;;
+                MII*IBAAKCAQ*|MII*IBAAKCAg*) LABEL="RSA PRIVATE KEY"; KIND="RSA (PKCS#1)" ;;
+              esac
+            fi
+            if [ -n "$LABEL" ]; then
+              echo "KALSHI_PRIVATE_KEY was pasted without its BEGIN/END lines; it decodes as a $KIND key, so it is wrapped as a PEM."
+              PEM="$(printf -- '-----BEGIN %s-----\n%s\n-----END %s-----\n' "$LABEL" "$(printf '%s' "$BODY" | fold -w 64)" "$LABEL")"
+            else
+              echo "::error::KALSHI_PRIVATE_KEY does not look like a private key. Open the key file Kalshi downloaded in a plain text editor (Notepad or TextEdit): its first line should read -----BEGIN PRIVATE KEY----- (or -----BEGIN RSA PRIVATE KEY-----) and its last line -----END ... PRIVATE KEY-----. Select everything in that file, paste it as this secret's value (the value must start with the dashes), save, then re-run this workflow. What was pasted: $LEN characters on $LINES line(s), starts with dashes: $STARTS, has a BEGIN line: $HASBEGIN."
+              exit 1
+            fi
+          fi
+          # Parse the key the way the worker will before pushing anything.
+          if ! KEYTYPE="$(PEM="$PEM" node -e 'const k=require("crypto").createPrivateKey(process.env.PEM); console.log(k.asymmetricKeyType)' 2>/dev/null)"; then
+            echo "::error::KALSHI_PRIVATE_KEY has the right header lines but does not parse as a private key. Re-copy the whole key file Kalshi downloaded (every line, nothing added or missing) into the secret and re-run."
+            exit 1
+          fi
+          case "$KEYTYPE" in ed25519|rsa) echo "Key parses: $KEYTYPE" ;; *) echo "::error::KALSHI_PRIVATE_KEY is a $KEYTYPE key; the worker signs with Ed25519 or RSA keys only. Create the key on kalshi.com with the default (Ed25519) type."; exit 1 ;; esac
           printf '%s' "$KALSHI_API_KEY_ID" | tr -d '[:space:]' | npx wrangler@4 secret put KALSHI_API_KEY_ID
           printf '%s' "$PEM" | npx wrangler@4 secret put KALSHI_PRIVATE_KEY
           echo "Kalshi key pushed. The sampler signs its Kalshi calls from the next minute tick; xvenue.last.kalshiAuth in status/backend.json will read true."
