@@ -7236,15 +7236,16 @@ export default {
     if (event && event.cron === "* * * * *") {
       try {
         await ensureSchema(env);
-        // The paper lane logs this minute's stale US quotes, the marker fills older
-        // events' marks, and the scalp lane (src/scalp.js) acts on the same events.
+        // The paper lane logs this minute's stale US quotes (and spots stale Kalshi
+        // quotes, `kalshi`), the marker fills older events' marks, and the scalp
+        // lane (src/scalp.js) acts on both sets, one venue each.
         const usLane = async (legs, now) => {
           const rec = await recordUsLaneEvents(env, legs, now);
           const marks = await markUsLaneEvents(env, now);
           let scalp = null;
-          try { const s = await runScalpLane(env, { events: rec.list || [], legs, nowMs: now, config: await getAutotraderConfig(env) }); scalp = { mode: s.mode, entries: s.entries, exits: s.exits, open: s.open, halted: !!s.halted, skipped: s.skipped }; }
+          try { const s = await runScalpLane(env, { events: rec.list || [], kalshiEvents: rec.kalshi || [], legs, nowMs: now, config: await getAutotraderConfig(env) }); scalp = { mode: s.mode, kalshiMode: s.modes && s.modes.kalshi ? s.modes.kalshi.mode : null, entries: s.entries, exits: s.exits, open: s.open, halted: !!s.halted, skipped: s.skipped, byVenue: s.byVenue, kalshiEvents: s.kalshiEvents }; }
           catch (e) { scalp = { error: String(e.message).slice(0, 80) }; }
-          return { events: rec.events, compared: rec.compared, ...marks, scalp };
+          return { events: rec.events, compared: rec.compared, kalshiEvents: (rec.kalshi || []).length, ...marks, scalp };
         };
         const r = await sampleXvenue(env, Date.now(), { afterSample: usLane });
         console.log("xvenue:", JSON.stringify(r).slice(0, 300));
