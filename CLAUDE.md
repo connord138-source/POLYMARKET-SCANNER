@@ -278,9 +278,37 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   `GET /xvenue/scalp?hours=168` (snapshot key `scalp`): mode, config, open
   with marks, today, `all`/`bySport`/`byKind`/`byMode` (n, hitRate, avgPnlC,
   pnlUsd, feesUsd, roiPct), recent. exitKind x5 | late_last_quote | no_quote
-  | x_live | x_live_unpriced | settling. The Auto-trader page's US SCALP LANE
-  card shows it and (admin) sets the mode and sizes. The live flip is the
+  | x_live | x_live_unpriced | settling. The Auto-trader page's SCALP LANE
+  card shows it and (admin) sets the modes and sizes. The live flip is the
   owner's; the lane went in dry.
+  Kalshi venue (Nov 1 2026, owner's "build the kalshi NHL scalp lane", after
+  the sampler's stale-Kalshi read crossed its threshold for NHL: 298 moves,
+  Kalshi still crossable after its fee on 9.7% at 8.4c): the sampler now
+  passes each leg's `k_ticker`/`k_bid`/`k_ask` to the hook,
+  `detectKalshiLaneEvent` (us-lane.js) applies the analyzeSeries stale-Kalshi
+  rule per leg (every leg is its own Kalshi YES market, so both legs are
+  examined; `recordUsLaneEvents` returns them as `kalshi`, not stored in D1),
+  and `runScalpLane({ kalshiEvents })` scalps them on Kalshi's book: a stale
+  ask bought as YES, a stale bid sold as YES (= buying NO at 1 - bid), closed
+  there `scalpHoldMin` later (buy -> k_bid, sell -> k_ask), both Kalshi taker
+  fees (0.07 x p(1-p)). Positions and `scalp_trades` rows carry `venue`
+  ('us' | 'kalshi', null = us; migration 0013 adds `venue`, `k_ticker`).
+  Config: `scalpKalshiMode` (off / dry default / live), `scalpKalshiMaxUsd`
+  (10), `scalpKalshiSports` (['nhl']; empty = every sport). Caps: open and
+  per-day per venue, the loss stop and the one-per-game rule across both, one
+  halt. Kalshi sizes are not sampled: dry assumes the quote holds for the
+  size; live (needs `kalshiAuthConfigured`, else dry with `liveBlocked`) sends
+  immediate-or-cancel V2 orders (`kalshiPlaceOrder`, POST
+  /portfolio/events/orders: bid = buy YES, ask = sell YES, fixed-point
+  strings), fills from the create response, exit = reduce-only IOC 3c through
+  the last quote (1c/99c after the grace period), partial exit fills close
+  that part (`x_live_part`), an unfilled exit three minutes running halts the
+  lane, ambiguity reconciled on `kalshiPositionQty`. Report: `modes`,
+  `kalshi`, `byVenue`; the card shows both venue pills, a per-venue strip, a
+  venue tag per scalp, and KALSHI MODE / $ / SPORTS settings. Rule for a live
+  proposal: 200 dry Kalshi scalps positive after fees at > 50% hit, read by
+  the daily routine; the flip is the owner's and needs the Kalshi keys
+  (push-kalshi-key.yml).
 - `src/crypto-fv.js` — crypto fair value: every Polymarket BTC/ETH/SOL price
   contract ("above $X on <date>" = European digital; "dip to"/"reach" =
   one-touch via reflection) priced from Coinbase realized vol (7d/30d/90d,

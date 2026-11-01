@@ -1,5 +1,5 @@
 // Polymarket US stale-quote paper lane. Run with: node test/us-lane.test.mjs
-import { detectUsLaneEvent, pnlC, rtPnlC, hedgePnlC, HEDGE_MARKS, marksFromSeries, settlementFromGamma, summarizeUsLane, recordUsLaneEvents, markUsLaneEvents, settleUsLaneEvents, usLaneReport, nextDueS, NO_DATA, FINAL_AFTER_S } from "../src/us-lane.js";
+import { detectUsLaneEvent, detectKalshiLaneEvent, pnlC, rtPnlC, hedgePnlC, HEDGE_MARKS, marksFromSeries, settlementFromGamma, summarizeUsLane, recordUsLaneEvents, markUsLaneEvents, settleUsLaneEvents, usLaneReport, nextDueS, NO_DATA, FINAL_AFTER_S } from "../src/us-lane.js";
 import { usFee, kalshiFee } from "../src/xvenue.js";
 let pass = 0, fail = 0;
 const check = (n, c, x) => { if (c) pass++; else { fail++; console.error("FAIL:", n, x ?? ""); } };
@@ -16,6 +16,13 @@ const leg = (ts, p_bid, p_ask, us_bid, us_ask, extra = {}) => ({ ts, sport: "nhl
   check("detect: a 1c edge below the fee is not an event", detectUsLaneEvent(leg(0, 0.40, 0.41, 0.39, 0.40), leg(60, 0.405, 0.415, 0.39, 0.40)) === null);
   check("detect: below moveC, a sample gap, or missing quotes -> null", detectUsLaneEvent(leg(0, 0.40, 0.41, 0.39, 0.40), leg(60, 0.42, 0.43, 0.39, 0.40)) === null && detectUsLaneEvent(leg(0, 0.40, 0.41, 0.39, 0.40), leg(600, 0.45, 0.46, 0.39, 0.40)) === null && detectUsLaneEvent(leg(0, 0.40, 0.41, null, null), leg(60, 0.45, 0.46, null, null)) === null && detectUsLaneEvent(null, leg(60, 0.45, 0.46, 0.39, 0.40)) === null);
   check("detect: moveC is configurable", detectUsLaneEvent(leg(0, 0.40, 0.41, 0.39, 0.40), leg(60, 0.42, 0.43, 0.39, 0.40), { moveC: 1.5 }) !== null);
+  // Kalshi (the Kalshi NHL scalp lane): the same rule on Kalshi's own quote for the leg, no size
+  const kl = (ts, pb, pa, kb, ka, extra = {}) => leg(ts, pb, pa, null, null, { k_ticker: "KXNHLGAME-26NOV01NJWAS-NJ", k_bid: kb, k_ask: ka, ...extra });
+  const kup = detectKalshiLaneEvent(kl(0, 0.40, 0.41, 0.39, 0.40), kl(60, 0.45, 0.46, 0.39, 0.40));
+  check("detect kalshi: +5c global move, Kalshi ask still 0.40 -> buy YES at 0.40, Kalshi fee, edge 0.45 - 0.40 - fee", kup && kup.venue === "kalshi" && kup.side === "buy" && kup.px === 0.40 && kup.kTicker === "KXNHLGAME-26NOV01NJWAS-NJ" && kup.qty === null && Math.abs(kup.fee - kalshiFee(0.40)) < 1e-6 && Math.abs(kup.edgeC - (5 - kalshiFee(0.40) * 100)) < 0.02, kup);
+  const kdn = detectKalshiLaneEvent(kl(0, 0.45, 0.46, 0.45, 0.46), kl(60, 0.40, 0.41, 0.45, 0.46));
+  check("detect kalshi: a down-move sells YES at Kalshi's stale bid", kdn && kdn.side === "sell" && kdn.px === 0.45 && Math.abs(kdn.edgeC - (4 - kalshiFee(0.45) * 100)) < 0.02, kdn);
+  check("detect kalshi: followed, under the fee, no ticker, no quote -> null", detectKalshiLaneEvent(kl(0, 0.40, 0.41, 0.39, 0.40), kl(60, 0.45, 0.46, 0.44, 0.45)) === null && detectKalshiLaneEvent(kl(0, 0.40, 0.41, 0.39, 0.40), kl(60, 0.405, 0.415, 0.39, 0.40)) === null && detectKalshiLaneEvent(kl(0, 0.40, 0.41, 0.39, 0.40), kl(60, 0.45, 0.46, 0.39, 0.40, { k_ticker: null })) === null && detectKalshiLaneEvent(kl(0, 0.40, 0.41, 0.39, 0.40), kl(60, 0.45, 0.46, null, null)) === null);
 }
 {
   const buy = { side: "buy", px: 0.40, fee: usFee(0.40) };
@@ -121,7 +128,10 @@ const leg = (ts, p_bid, p_ask, us_bid, us_ask, extra = {}) => ({ ts, sport: "nhl
   const comp = (ts, pb, pa, ub, ua) => leg(ts, pb, pa, ub, ua, { team: "Capitals", p_token: "tok2", us_long: false });
   const c0 = await recordUsLaneEvents(env, [leg(T + 180, 0.45, 0.46, 0.44, 0.45), comp(T + 180, 0.54, 0.55, 0.55, 0.56)], (T + 180) * 1000);
   const c1 = await recordUsLaneEvents(env, [leg(T + 240, 0.40, 0.41, 0.44, 0.45), comp(T + 240, 0.59, 0.60, 0.55, 0.56)], (T + 240) * 1000);
-  check("record: a down-move logs one sell on the long leg and nothing on its complement", c0.events === 0 && c1.events === 1 && c1.compared === 1 && events.length === 2 && events[1].side === "sell" && events[1].team === "Devils" && !("nhl|Devils vs. Capitals|Capitals" in JSON.parse(kv.get("xv_prev")).legs), JSON.stringify({ c0, c1, ev: events[1] }));
+  check("record: a down-move logs one sell on the long leg and nothing on its complement", c0.events === 0 && c1.events === 1 && c1.compared === 1 && events.length === 2 && events[1].side === "sell" && events[1].team === "Devils" && JSON.parse(kv.get("xv_prev")).legs["nhl|Devils vs. Capitals|Capitals"].us_bid === null, JSON.stringify({ c0, c1, ev: events[1] }));
+  const kc0 = await recordUsLaneEvents(env, [leg(T + 300, 0.40, 0.41, 0.44, 0.45, { k_ticker: "K-NJ", k_bid: 0.39, k_ask: 0.41 }), leg(T + 300, 0.59, 0.60, 0.55, 0.56, { team: "Capitals", p_token: "tok2", us_long: false, k_ticker: "K-WAS", k_bid: 0.58, k_ask: 0.60 })], (T + 300) * 1000);
+  const kc1 = await recordUsLaneEvents(env, [leg(T + 360, 0.45, 0.46, 0.44, 0.45, { k_ticker: "K-NJ", k_bid: 0.44, k_ask: 0.46 }), leg(T + 360, 0.54, 0.55, 0.55, 0.56, { team: "Capitals", p_token: "tok2", us_long: false, k_ticker: "K-WAS", k_bid: 0.58, k_ask: 0.60 })], (T + 360) * 1000);
+  check("record: Kalshi events come from every leg's own book (the complement's stale bid is a sell there), none stored in D1, US compare count unchanged", kc0.kalshi.length === 0 && kc1.kalshi.length === 1 && kc1.kalshi[0].team === "Capitals" && kc1.kalshi[0].side === "sell" && kc1.kalshi[0].px === 0.58 && kc1.kalshi[0].kTicker === "K-WAS" && kc1.events === 0 && kc1.compared === 1 && events.length === 2, JSON.stringify({ kc0, kc1 }));
   events.pop(); quotes.push({ ts: T + 180, game: "Devils vs. Capitals", team: "Devils", p_bid: 0.45, p_ask: 0.46 });
   for (const [dt, pb, pa, ub, ua] of [[300, 0.47, 0.48, 0.46, 0.48], [900, 0.50, 0.51, null, null], [3600, 0.55, 0.56, 0.54, 0.56]]) quotes.push({ ts: T + 60 + dt, game: "Devils vs. Capitals", team: "Devils", p_bid: pb, p_ask: pa, us_bid: ub, us_ask: ua });
   const m1 = await markUsLaneEvents(env, (T + 60 + 400) * 1000);

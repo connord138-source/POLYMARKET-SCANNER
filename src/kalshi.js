@@ -99,9 +99,52 @@ export async function kalshiHeaders(env, method, path, nowMs = Date.now()) {
   return { headers, authed: true, keyType: k.type };
 }
 
-// GET/POST against /trade-api/v2 with signing. Returns the Response.
-export async function kalshiFetch(env, path, { method = 'GET', body } = {}) {
+// GET/POST/DELETE against /trade-api/v2 with signing. Returns the Response.
+export async function kalshiFetch(env, path, { method = 'GET', body, fetchImpl } = {}) {
   const { headers } = await kalshiHeaders(env, method, path);
   if (body !== undefined) headers['content-type'] = 'application/json';
-  return fetch(`${KALSHI_API}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+  return (fetchImpl || fetch)(`${KALSHI_API}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+}
+
+// ---------- trading (Nov 1 2026, the Kalshi NHL scalp lane) ----------
+// Kalshi's V2 event-market orders (POST /portfolio/events/orders): one YES
+// book per market, `bid` = buy YES, `ask` = sell YES (= buy NO at 1 - price;
+// positions net, so an `ask` from flat leaves a NO position). Prices and
+// counts are fixed-point strings. Only reached when KALSHI_API_KEY_ID /
+// KALSHI_PRIVATE_KEY are on the worker (push-kalshi-key.yml).
+export class KalshiError extends Error {
+  constructor(status, message, body) { super(message); this.name = 'KalshiError'; this.status = status; this.body = body; }
+}
+const fp = (v) => { const n = Number(v); return Number.isFinite(n) ? n : null; };
+export const kalshiPriceStr = (p) => (Math.round(Math.min(0.99, Math.max(0.01, Number(p))) * 100) / 100).toFixed(2);   // whole cents, inside 1-99c
+async function kalshiJsonCall(env, path, { method = 'GET', body, fetchImpl } = {}) {
+  const res = await kalshiFetch(env, path, { method, body, fetchImpl });
+  let data = null; try { data = await res.json(); } catch (e) { data = null; }
+  if (!res.ok) throw new KalshiError(res.status, `kalshi ${res.status}${data && (data.message || data.error) ? `: ${String(data.message || data.error).slice(0, 120)}` : ''}`, data);
+  return data || {};
+}
+// Place one order; IOC by default (a scalp wants the quote or nothing). Returns
+// { orderId, fillCount, remainingCount, avgPx (YES terms), avgFee (per contract) }.
+export async function kalshiPlaceOrder(env, { ticker, side, count, price, timeInForce = 'immediate_or_cancel', reduceOnly = false, clientOrderId, postOnly = false }, { fetchImpl } = {}) {
+  if (!ticker || !['bid', 'ask'].includes(side) || !(count > 0)) throw new KalshiError(400, 'kalshi order: ticker, side bid|ask and a positive count are required');
+  const body = { ticker, side, count: String(Math.round(count * 100) / 100), price: kalshiPriceStr(price), time_in_force: timeInForce, self_trade_prevention_type: 'taker_at_cross', client_order_id: clientOrderId || `er-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` };
+  if (reduceOnly) body.reduce_only = true;
+  if (postOnly) body.post_only = true;
+  const r = await kalshiJsonCall(env, '/portfolio/events/orders', { method: 'POST', body, fetchImpl });
+  return { orderId: r.order_id || null, clientOrderId: r.client_order_id || body.client_order_id, fillCount: fp(r.fill_count) ?? 0, remainingCount: fp(r.remaining_count) ?? 0, avgPx: fp(r.average_fill_price), avgFee: fp(r.average_fee_paid), tsMs: r.ts_ms || null, sent: body };
+}
+// Cancel a resting order (auto-routed by its market ticker). Returns the contracts canceled.
+export async function kalshiCancelOrder(env, orderId, ticker, { fetchImpl } = {}) {
+  const r = await kalshiJsonCall(env, `/portfolio/events/orders/${encodeURIComponent(orderId)}?market_ticker=${encodeURIComponent(ticker || '')}`, { method: 'DELETE', fetchImpl });
+  return { orderId: r.order_id || orderId, reducedBy: fp(r.reduced_by) ?? 0 };
+}
+// Net contracts held in one market: positive = YES, negative = NO, 0 = flat.
+export async function kalshiPositionQty(env, ticker, { fetchImpl } = {}) {
+  const r = await kalshiJsonCall(env, `/portfolio/positions?ticker=${encodeURIComponent(ticker)}&count_filter=position&limit=20`, { fetchImpl });
+  const row = (r.market_positions || []).find(m => m.ticker === ticker);
+  return row ? (fp(row.position_fp) ?? 0) : 0;
+}
+export async function getKalshiOrder(env, orderId, { fetchImpl } = {}) {
+  const r = await kalshiJsonCall(env, `/portfolio/orders/${encodeURIComponent(orderId)}`, { fetchImpl });
+  return r.order || r;
 }

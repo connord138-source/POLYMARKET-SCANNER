@@ -325,7 +325,7 @@ export async function sampleXvenue(env, nowMs = Date.now(), hooks = {}) {
     const phase = l.startMs > nowMs ? 'pre' : 'live';
     stmts.push(env.DB.prepare(`INSERT INTO xvenue_quotes (ts, sport, game, team, phase, k_ticker, k_bid, k_ask, k_last, p_token, p_bid, p_ask, p_last, p_fee_rate, us_bid, us_ask, us_last, us_bid_qty, us_ask_qty) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
       .bind(ts, l.sport, l.game, l.team, phase, l.kTicker, k ? num(k.yes_bid_dollars) : null, k ? num(k.yes_ask_dollars) : null, k ? num(k.last_price_dollars) : null, l.pToken, p.bid, p.ask, p.last, l.feeRate, us.bid, us.ask, us.last, us.bidQty, us.askQty));
-    if (phase === 'live') sampled.push({ ts, sport: l.sport, game: l.game, team: l.team, p_token: l.pToken, us_slug: l.usSlug, us_long: !!l.usLong, p_bid: p.bid, p_ask: p.ask, us_bid: us.bid, us_ask: us.ask, us_bid_qty: us.bidQty, us_ask_qty: us.askQty });
+    if (phase === 'live') sampled.push({ ts, sport: l.sport, game: l.game, team: l.team, p_token: l.pToken, us_slug: l.usSlug, us_long: !!l.usLong, p_bid: p.bid, p_ask: p.ask, us_bid: us.bid, us_ask: us.ask, us_bid_qty: us.bidQty, us_ask_qty: us.askQty, k_ticker: l.kTicker || null, k_bid: k ? num(k.yes_bid_dollars) : null, k_ask: k ? num(k.yes_ask_dollars) : null });
   }
   status.usQuoted = uq.size;
   if (stmts.length) {

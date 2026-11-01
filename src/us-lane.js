@@ -64,6 +64,29 @@ export function detectUsLaneEvent(prev, row, { moveC = 3, usRate = US_TAKER_RATE
   return { ...base, side: 'sell', px: row.us_bid, qty: row.us_bid_qty ?? null, fee: r4(fee), edgeC: r2(edge * 100) };
 }
 
+// Pure: the same question asked of Kalshi (Nov 1 2026, the Kalshi NHL scalp
+// lane): after a 3c+ global move, is Kalshi's same-minute quote on this leg
+// still crossable after its taker fee? The analyzeSeries stale-Kalshi rule
+// (src/xvenue.js), one leg at a time. Kalshi sizes are not sampled (`qty` null).
+//   up-move:   global bid above Kalshi's ask + fee -> buy YES on Kalshi at the ask
+//   down-move: Kalshi's bid above the global ask + fee -> sell YES on Kalshi at the bid (= buy NO at 1 - bid)
+export function detectKalshiLaneEvent(prev, row, { moveC = 3, kRate = KALSHI_TAKER_RATE, maxGapS = 180 } = {}) {
+  if (!prev || !row || !(row.ts - prev.ts <= maxGapS) || row.ts <= prev.ts) return null;
+  const pm = mid(row.p_bid, row.p_ask), ppm = mid(prev.p_bid, prev.p_ask);
+  if (pm == null || ppm == null || row.k_bid == null || row.k_ask == null || !row.k_ticker) return null;
+  const dP = (pm - ppm) * 100;
+  if (Math.abs(dP) < moveC) return null;
+  const base = { venue: 'kalshi', ts: row.ts, sport: row.sport, game: row.game, team: row.team, pToken: row.p_token || null, kTicker: row.k_ticker, usSlug: row.us_slug || null, pBid: row.p_bid, pAsk: row.p_ask, pMid: r4(pm), dpC: r2(dP), qty: null };
+  if (dP > 0) {
+    const fee = kalshiFee(row.k_ask, kRate), edge = row.p_bid - row.k_ask - fee;
+    if (edge <= 0) return null;
+    return { ...base, side: 'buy', px: row.k_ask, fee: r4(fee), edgeC: r2(edge * 100) };
+  }
+  const fee = kalshiFee(row.k_bid, kRate), edge = row.k_bid - row.p_ask - fee;
+  if (edge <= 0) return null;
+  return { ...base, side: 'sell', px: row.k_bid, fee: r4(fee), edgeC: r2(edge * 100) };
+}
+
 // Pure: cents per share at a mark (global mid, or 0/1 at settlement), after
 // the entry fee. Exit costs (a second fee and the US spread) are NOT charged:
 // the question is whether the US quote was wrong, not what a round trip costs.
@@ -210,19 +233,26 @@ export function summarizeUsLane(events, { tradableQty = TRADABLE_QTY } = {}) {
 
 // Sampler hook: compare this minute's sampled legs with the previous minute
 // (KV `xv_prev`), insert any qualifying events, roll the prev blob forward.
-// `legs` = [{ts, sport, game, team, p_token, us_slug, p_bid, p_ask, us_bid, us_ask, us_bid_qty, us_ask_qty}].
-// Only the leg the US instrument actually quotes (`us_long`) is examined: the
-// other leg's US bid/ask are that quote's complements, so an up-move there is
-// the same trade seen from the other side and would double-count every event.
+// `legs` = [{ts, sport, game, team, p_token, us_slug, p_bid, p_ask, us_bid, us_ask, us_bid_qty, us_ask_qty, k_ticker, k_bid, k_ask}].
+// Only the leg the US instrument actually quotes (`us_long`) is examined for
+// the US lane: the other leg's US bid/ask are that quote's complements, so an
+// up-move there is the same trade seen from the other side and would
+// double-count every event. Kalshi lists one market per leg with its own book,
+// so every leg is examined for the Kalshi scalp lane (`kalshi`, not stored in
+// D1: the scalp lane's own ledger is the record); `compared` counts US legs.
 export async function recordUsLaneEvents(env, legs, nowMs = Date.now(), opts = {}) {
   let prev = null; try { prev = await env.SIGNALS_CACHE.get(US_LANE_KEYS.PREV, { type: 'json' }); } catch (e) {}
   const prevMap = (prev && prev.legs) || {};
   const key = (l) => `${l.sport}|${l.game}|${l.team}`;
-  const events = []; const next = {};
+  const events = []; const kalshi = []; const next = {}; let compared = 0;
   for (const l of legs || []) {
+    const k = key(l), p = prevMap[k];
+    next[k] = { ts: l.ts, p_bid: l.p_bid, p_ask: l.p_ask, us_bid: l.us_long ? l.us_bid : null, us_ask: l.us_long ? l.us_ask : null, us_bid_qty: l.us_long ? l.us_bid_qty ?? null : null, us_ask_qty: l.us_long ? l.us_ask_qty ?? null : null, k_bid: l.k_bid ?? null, k_ask: l.k_ask ?? null };
+    const kev = detectKalshiLaneEvent(p, l, opts);
+    if (kev) kalshi.push(kev);
     if (!l.us_long) continue;
-    next[key(l)] = { ts: l.ts, p_bid: l.p_bid, p_ask: l.p_ask, us_bid: l.us_bid, us_ask: l.us_ask, us_bid_qty: l.us_bid_qty ?? null, us_ask_qty: l.us_ask_qty ?? null };
-    const ev = detectUsLaneEvent(prevMap[key(l)], l, opts);
+    if (p && p.us_bid != null) compared++;
+    const ev = detectUsLaneEvent(p, l, opts);
     if (ev) events.push(ev);
   }
   try { await env.SIGNALS_CACHE.put(US_LANE_KEYS.PREV, JSON.stringify({ at: nowMs, legs: next }), { expirationTtl: 3600 }); } catch (e) {}
@@ -231,7 +261,7 @@ export async function recordUsLaneEvents(env, legs, nowMs = Date.now(), opts = {
       .bind(ev.ts, ev.sport, ev.game, ev.team, ev.pToken, ev.usSlug, ev.side, ev.px, ev.qty, ev.fee, ev.pBid, ev.pAsk, ev.pMid, ev.dpC, ev.edgeC));
     for (let i = 0; i < stmts.length; i += 50) await env.DB.batch(stmts.slice(i, i + 50));
   }
-  return { events: events.length, compared: Object.keys(prevMap).length, list: events };
+  return { events: events.length, compared, list: events, kalshi };
 }
 
 // Pure: when is this event next worth re-reading? The earliest unfilled
