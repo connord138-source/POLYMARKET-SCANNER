@@ -104,15 +104,17 @@ export function sanitizeScalpUpdates(updates = {}) {
   return out;
 }
 // What a venue actually runs as: live needs that venue's key on the worker.
+// `keyOnWorker` says whether that venue's key is present at all, so the card
+// can grey out Live before it is asked for, not only after a blocked attempt.
 export function scalpModeFor(env, cfg, venue = 'us') {
   const asked = venue === 'kalshi' ? cfg.scalpKalshiMode : cfg.scalpMode;
-  if (asked === 'off') return { mode: 'off', liveAsked: false, liveBlocked: null };
+  const keyOnWorker = !!(venue === 'kalshi' ? kalshiAuthConfigured(env) : pmusConfigured(env));
+  if (asked === 'off') return { mode: 'off', liveAsked: false, liveBlocked: null, keyOnWorker };
   if (asked === 'live') {
-    const ok = venue === 'kalshi' ? kalshiAuthConfigured(env) : pmusConfigured(env);
-    if (ok) return { mode: 'live', liveAsked: true, liveBlocked: null };
-    return { mode: 'dry', liveAsked: true, liveBlocked: venue === 'kalshi' ? 'KALSHI_API_KEY_ID / KALSHI_PRIVATE_KEY are not on the worker (push-kalshi-key.yml); running dry' : 'PMUS_KEY_ID / PMUS_SECRET_KEY are not on the worker (push-polymarket-us-key.yml); running dry' };
+    if (keyOnWorker) return { mode: 'live', liveAsked: true, liveBlocked: null, keyOnWorker };
+    return { mode: 'dry', liveAsked: true, liveBlocked: venue === 'kalshi' ? 'KALSHI_API_KEY_ID / KALSHI_PRIVATE_KEY are not on the worker (push-kalshi-key.yml); running dry' : 'PMUS_KEY_ID / PMUS_SECRET_KEY are not on the worker (push-polymarket-us-key.yml); running dry', keyOnWorker };
   }
-  return { mode: 'dry', liveAsked: false, liveBlocked: null };
+  return { mode: 'dry', liveAsked: false, liveBlocked: null, keyOnWorker };
 }
 export const scalpModes = (env, cfg) => ({ us: scalpModeFor(env, cfg, 'us'), kalshi: scalpModeFor(env, cfg, 'kalshi') });
 
