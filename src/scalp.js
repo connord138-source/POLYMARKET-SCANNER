@@ -261,7 +261,7 @@ async function kalshiExit(env, pos, quote, { fetchImpl, nowMs, market = false })
 // = this minute's stale Kalshi quotes (same call, `kalshi`), `legs` = every
 // live leg the sampler quoted this minute (for exits and marks).
 const mkDayVenue = () => ({ entries: 0, exits: 0, wins: 0, pnlUsd: 0, feesUsd: 0 });
-const mkDay = (nowMs) => ({ date: dayOf(nowMs), entries: 0, exits: 0, wins: 0, pnlUsd: 0, feesUsd: 0, byVenue: { us: mkDayVenue(), kalshi: mkDayVenue() } });
+const mkDay = (nowMs) => ({ date: dayOf(nowMs), entries: 0, exits: 0, wins: 0, pnlUsd: 0, feesUsd: 0, events: 0, kalshiEvents: 0, skipped: {}, byVenue: { us: mkDayVenue(), kalshi: mkDayVenue() } });
 export async function runScalpLane(env, { events = [], kalshiEvents = [], legs = [], nowMs = Date.now(), config = {}, fetchImpl = fetch } = {}) {
   const cfg = scalpConfig(config);
   const modes = scalpModes(env, cfg);
@@ -275,8 +275,10 @@ export async function runScalpLane(env, { events = [], kalshiEvents = [], legs =
   const dayKey = SCALP_KEYS.DAY + dayOf(nowMs);
   const day = { ...mkDay(nowMs), ...(await kvJson(env, dayKey, {})) };
   day.byVenue = { us: { ...mkDayVenue(), ...((day.byVenue && day.byVenue.us) || {}) }, kalshi: { ...mkDayVenue(), ...((day.byVenue && day.byVenue.kalshi) || {}) } };
+  // the day keeps what the lane saw and why it passed, so a quiet venue can be told from a blind one
+  day.events = (day.events || 0) + events.length; day.kalshiEvents = (day.kalshiEvents || 0) + kalshiEvents.length; day.skipped = day.skipped || {};
   const legMap = new Map((legs || []).map(l => [legKey(l), l]));
-  const skip = (why) => { last.skipped[why] = (last.skipped[why] || 0) + 1; };
+  const skip = (why) => { last.skipped[why] = (last.skipped[why] || 0) + 1; day.skipped[why] = (day.skipped[why] || 0) + 1; };
   const setHalt = async (why) => { halted = true; await kvPut(env, SCALP_KEYS.HALT, { halted: true, at: nowIso, why }); last.haltedWhy = why; };
 
   // 1. exits (and marks) on the open scalps; exits run whatever the venue's mode is now
