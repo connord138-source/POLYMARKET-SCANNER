@@ -6,9 +6,13 @@ import { usFee, kalshiFee, KALSHI_TAKER_RATE } from "../src/xvenue.js";
 let pass = 0, fail = 0;
 const check = (n, c, x) => { if (c) pass++; else { fail++; console.error("FAIL:", n, x ?? ""); } };
 const kvStore = () => { const m = new Map(); return { m, get: async (k) => (m.has(k) ? JSON.parse(m.get(k)) : null), put: async (k, v) => { m.set(k, v); }, delete: async (k) => { m.delete(k); }, list: async ({ prefix } = {}) => ({ keys: [...m.keys()].filter(k => !prefix || k.startsWith(prefix)).map(name => ({ name })) }) }; };
-const COLS = ["id", "mode", "ts_entry", "ts_exit", "sport", "game", "team", "us_slug", "side", "entry_px", "exit_px", "shares", "usd", "fee_entry_usd", "fee_exit_usd", "pnl_c", "pnl_usd", "edge_c", "dp_c", "shown_qty", "hold_s", "exit_kind", "live", "order_id", "exit_order_id", "note", "venue", "k_ticker"];
+const COLS = ["id", "mode", "ts_entry", "ts_exit", "sport", "game", "team", "us_slug", "side", "entry_px", "exit_px", "shares", "usd", "fee_entry_usd", "fee_exit_usd", "pnl_c", "pnl_usd", "edge_c", "dp_c", "shown_qty", "hold_s", "exit_kind", "live", "order_id", "exit_order_id", "note", "venue", "k_ticker", "probe"];
 const d1 = () => { const rows = []; return { rows, prepare: (sql) => ({ bind: (...args) => ({ run: async () => { if (/INSERT/.test(sql)) { const r = Object.fromEntries(COLS.map((c, i) => [c, args[i]])); const i = rows.findIndex(x => x.id === r.id); if (i >= 0) rows[i] = r; else rows.push(r); } return { success: true }; }, all: async () => ({ results: rows.filter(r => r.ts_entry >= args[0]).sort((a, b) => b.ts_entry - a.ts_entry) }) }), run: async () => ({ success: true }) }) }; };
 const mkEnv = (extra = {}) => ({ SIGNALS_CACHE: kvStore(), DB: d1(), ...extra });
+// the fill probe (src/fill-probe.js) re-reads the venue's book on every dry entry: tests answer it from here and skip its wait
+let bookImpl = async () => ({ ok: false, status: 404, json: async () => ({}), text: async () => "{}", headers: { get: () => null } });
+const probeOpts = { sleep: async () => {}, clock: () => T0 + 4000 };
+const run = (env, o = {}) => runScalpLane(env, { fetchImpl: (u, i) => bookImpl(u, i), probe: probeOpts, ...o });
 const T0 = Date.parse("2026-11-01T01:00:00Z");
 const leg = (bid, ask, extra = {}) => ({ ts: Math.floor(T0 / 1000), sport: "nba", game: "Lakers vs. Celtics", team: "Lakers", p_token: "tok", us_slug: "nba-lal-bos", us_long: true, p_bid: 0.45, p_ask: 0.46, us_bid: bid, us_ask: ask, us_bid_qty: 300, us_ask_qty: 300, ...extra });
 const ev = (extra = {}) => ({ ts: Math.floor(T0 / 1000), sport: "nba", game: "Lakers vs. Celtics", team: "Lakers", pToken: "tok", usSlug: "nba-lal-bos", pBid: 0.45, pAsk: 0.46, pMid: 0.455, dpC: 4, side: "buy", px: 0.40, qty: 300, fee: usFee(0.40), edgeC: 2.5, ...extra });
@@ -50,13 +54,17 @@ const ev = (extra = {}) => ({ ts: Math.floor(T0 / 1000), sport: "nba", game: "La
   const env = mkEnv();
   const cfg = {};
   const m = (k) => T0 + k * 60e3;
-  const r1 = await runScalpLane(env, { events: [ev()], legs: [leg(0.40, 0.40)], nowMs: m(0), config: cfg });
+  let bookReads = 0;
+  bookImpl = async (u) => { if (/\/v1\/markets\/nba-lal-bos\/book/.test(String(u))) { bookReads++; const ask = bookReads === 1 ? "0.40" : "0.42"; return { ok: true, status: 200, json: async () => ({ marketData: { bids: [{ px: { value: "0.39" }, qty: "120" }], offers: [{ px: { value: ask }, qty: "80" }] } }) }; } return { ok: false, status: 404, json: async () => ({}) }; };
+  const r1 = await run(env, { events: [ev()], legs: [leg(0.40, 0.40)], nowMs: m(0), config: cfg });
   const open1 = JSON.parse(env.SIGNALS_CACHE.m.get(SCALP_KEYS.OPEN));
+  check("fill probe: the dry entry re-read the US book twice; the ask was still 0.40 with 80 shares at t0, gone to 0.42 at t1", r1.probe && r1.probe.probed === 1 && r1.probe.there0 === 1 && r1.probe.there1 === 0 && bookReads === 2 && open1[0].probe.t0.there === true && open1[0].probe.t0.enough === true && open1[0].probe.t0.qty === 80 && open1[0].probe.t0.s === 4 && open1[0].probe.t1.there === false && open1[0].probe.t1.moveC === 2 && open1[0].probe.delayS === 10, { probe: r1.probe, pos: open1[0].probe });
+  bookImpl = async () => ({ ok: false, status: 404, json: async () => ({}) });
   check("dry minute 0: one scalp opened at the stale ask for 25 contracts, exit due in 5 min, nothing sent", r1.mode === "dry" && r1.entries === 1 && r1.open === 1 && open1.length === 1 && open1[0].px === 0.40 && open1[0].shares === 25 && open1[0].exitAtMs === m(5) && open1[0].live === false, r1);
-  const r2 = await runScalpLane(env, { events: [ev({ edgeC: 3 })], legs: [leg(0.43, 0.45)], nowMs: m(2), config: cfg });
+  const r2 = await run(env, { events: [ev({ edgeC: 3 })], legs: [leg(0.43, 0.45)], nowMs: m(2), config: cfg });
   const open2 = JSON.parse(env.SIGNALS_CACHE.m.get(SCALP_KEYS.OPEN));
   check("dry minute 2: still holding, marked at the bid, the same game not entered twice", r2.entries === 0 && r2.skipped["already in this game"] === 1 && open2.length === 1 && open2[0].lastBid === 0.43 && open2[0].markC === rtPnlC({ side: "buy", px: 0.40, fee: usFee(0.40) }, 0.43), { r2, open2 });
-  const r5 = await runScalpLane(env, { events: [], legs: [leg(0.44, 0.46)], nowMs: m(5), config: cfg });
+  const r5 = await run(env, { events: [], legs: [leg(0.44, 0.46)], nowMs: m(5), config: cfg });
   const open5 = JSON.parse(env.SIGNALS_CACHE.m.get(SCALP_KEYS.OPEN));
   const want = scalpPnl({ side: "buy", px: 0.40, shares: 25 }, 0.44);
   const row = env.DB.rows[0];
@@ -64,32 +72,33 @@ const ev = (extra = {}) => ({ ts: Math.floor(T0 / 1000), sport: "nba", game: "La
   check("day: counts the stale quotes seen and the skip reasons, not only the entries", day.events === 2 && day.kalshiEvents === 0 && day.skipped["already in this game"] === 1, day);
   check("dry minute 5: closed at the bid, both fees, recorded in D1 and the day", r5.exits === 1 && open5.length === 0 && row && row.exit_kind === "x5" && row.exit_px === 0.44 && Math.abs(row.pnl_usd - want.pnlUsd) < 0.011 && row.pnl_c === want.pnlC && row.live === 0 && row.hold_s === 300 && day.exits === 1 && day.wins === 1 && Math.abs(day.pnlUsd - want.pnlUsd) < 0.011, { r5, row, day });
   const rep = await scalpReport(env, cfg, { nowMs: m(6) });
+  check("fill probe: travels onto the D1 row and into the report's per-venue summary", rep.recent[0].probe && rep.recent[0].probe.t0.there === true && rep.probe.us && rep.probe.us.n === 1 && rep.probe.us.t0.thereRate === 1 && rep.probe.us.t0.enoughRate === 1 && rep.probe.us.t0.qtyMed === 80 && rep.probe.us.t1.thereRate === 0 && rep.probe.us.t1.goneAvgMoveC === 2 && /probe/.test(rep.read), { probe: rep.probe, row: rep.recent[0].probe });
   check("report: mode, record from D1, today, nothing open, read text", rep.mode === "dry" && rep.all.n === 1 && rep.all.wins === 1 && rep.all.hitRate === 1 && rep.recent.length === 1 && rep.recent[0].exitKind === "x5" && rep.open.length === 0 && rep.today.entries === 1 && /kill switch/.test(rep.read), { all: rep.all, today: rep.today });
   // no quote at the hold: wait the grace period, then close at the last quote seen
   const env2 = mkEnv();
-  await runScalpLane(env2, { events: [ev()], legs: [leg(0.40, 0.40)], nowMs: m(0), config: cfg });
-  await runScalpLane(env2, { events: [], legs: [leg(0.42, 0.44)], nowMs: m(3), config: cfg });
-  const g1 = await runScalpLane(env2, { events: [], legs: [], nowMs: m(5), config: cfg });
-  const g2 = await runScalpLane(env2, { events: [], legs: [], nowMs: m(14), config: cfg });
-  const g3 = await runScalpLane(env2, { events: [], legs: [], nowMs: m(15), config: cfg });
+  await run(env2, { events: [ev()], legs: [leg(0.40, 0.40)], nowMs: m(0), config: cfg });
+  await run(env2, { events: [], legs: [leg(0.42, 0.44)], nowMs: m(3), config: cfg });
+  const g1 = await run(env2, { events: [], legs: [], nowMs: m(5), config: cfg });
+  const g2 = await run(env2, { events: [], legs: [], nowMs: m(14), config: cfg });
+  const g3 = await run(env2, { events: [], legs: [], nowMs: m(15), config: cfg });
   check("dry, no quote at the hold: holds through the grace period, then closes at the last quote seen (late_last_quote)", g1.exits === 0 && g2.exits === 0 && g3.exits === 1 && env2.DB.rows[0].exit_kind === "late_last_quote" && env2.DB.rows[0].exit_px === 0.42, { g1, g2, g3, row: env2.DB.rows[0] });
   // caps over a day: max open 3, one per game, daily cap, loss stop
   const env3 = mkEnv();
   const evs = ["a", "b", "c", "d"].map(g => ev({ game: `G${g}`, team: `T${g}`, usSlug: `s-${g}`, edgeC: 2 }));
-  const c1 = await runScalpLane(env3, { events: evs, legs: [], nowMs: m(0), config: cfg });
+  const c1 = await run(env3, { events: evs, legs: [], nowMs: m(0), config: cfg });
   check("caps: three open at most, the fourth waits", c1.entries === 3 && c1.skipped["max open scalps"] === 1, c1);
-  const c2 = await runScalpLane(env3, { events: [ev({ game: "Gz", usSlug: "s-z" })], legs: [], nowMs: m(1), config: { scalpMaxPerDay: 3, scalpMaxOpen: 10 } });
+  const c2 = await run(env3, { events: [ev({ game: "Gz", usSlug: "s-z" })], legs: [], nowMs: m(1), config: { scalpMaxPerDay: 3, scalpMaxOpen: 10 } });
   check("caps: the daily cap counts the day's entries", c2.entries === 0 && c2.skipped["daily scalp cap"] === 1, c2);
   env3.SIGNALS_CACHE.m.set(SCALP_KEYS.DAY + "2026-11-01", JSON.stringify({ date: "2026-11-01", entries: 1, exits: 1, wins: 0, pnlUsd: -16, feesUsd: 1 }));
-  const c3 = await runScalpLane(env3, { events: [ev({ game: "Gz", usSlug: "s-z" })], legs: [], nowMs: m(2), config: { scalpMaxOpen: 10 } });
+  const c3 = await run(env3, { events: [ev({ game: "Gz", usSlug: "s-z" })], legs: [], nowMs: m(2), config: { scalpMaxOpen: 10 } });
   check("caps: the day's loss stop", c3.entries === 0 && c3.skipped["daily loss stop"] === 1, c3);
   // off, halt
-  const off = await runScalpLane(mkEnv(), { events: [ev()], legs: [], nowMs: m(0), config: { scalpMode: "off" } });
+  const off = await run(mkEnv(), { events: [ev()], legs: [], nowMs: m(0), config: { scalpMode: "off" } });
   check("off: nothing happens, mode reported", off.mode === "off" && off.entries === 0);
   const env4 = mkEnv(); await setScalpHalt(env4, true, "test");
-  const h = await runScalpLane(env4, { events: [ev()], legs: [], nowMs: m(0), config: cfg });
+  const h = await run(env4, { events: [ev()], legs: [], nowMs: m(0), config: cfg });
   check("halt: no entries while halted, reported", h.entries === 0 && h.skipped["lane halted"] === 1 && h.halted === true, h);
-  const blocked = await runScalpLane(mkEnv(), { events: [], legs: [], nowMs: m(0), config: { scalpMode: "live" } });
+  const blocked = await run(mkEnv(), { events: [], legs: [], nowMs: m(0), config: { scalpMode: "live" } });
   check("live asked without the key: runs dry and says why", blocked.mode === "dry" && blocked.liveAsked && /not on the worker/.test(blocked.liveBlocked), blocked);
 }
 
@@ -110,25 +119,25 @@ const ev = (extra = {}) => ({ ts: Math.floor(T0 / 1000), sport: "nba", game: "La
   const env = mkEnv({ PMUS_KEY_ID: "key-1", PMUS_SECRET_KEY: Buffer.alloc(32, 9).toString("base64") });
   const cfg = { scalpMode: "live" };
   const m = (k) => T0 + k * 60e3;
-  const r1 = await runScalpLane(env, { events: [ev()], legs: [leg(0.40, 0.40)], nowMs: m(0), config: cfg, fetchImpl });
+  const r1 = await run(env, { events: [ev()], legs: [leg(0.40, 0.40)], nowMs: m(0), config: cfg, fetchImpl });
   const open1 = JSON.parse(env.SIGNALS_CACHE.m.get(SCALP_KEYS.OPEN));
   const order = calls.find(c => /\/v1\/orders$/.test(c.u));
   check("live entry: a FOK limit for 25 long contracts at 40c is sent and its fill recorded on the open scalp", r1.mode === "live" && r1.entries === 1 && open1.length === 1 && open1[0].live === true && open1[0].orderId === "o-entry" && open1[0].px === 0.40 && open1[0].shares === 25 && open1[0].feeEntryUsd === 0.17 && order && order.method === "POST" && order.body.marketSlug === "nba-lal-bos" && order.body.intent === "ORDER_INTENT_BUY_LONG" && order.body.price.value === "0.40" && order.body.quantity === 25 && order.body.tif === "TIME_IN_FORCE_FILL_OR_KILL", { r1, open1, order: order && order.body });
-  const r5 = await runScalpLane(env, { events: [], legs: [leg(0.44, 0.46)], nowMs: m(5), config: cfg, fetchImpl });
+  const r5 = await run(env, { events: [], legs: [leg(0.44, 0.46)], nowMs: m(5), config: cfg, fetchImpl });
   const row = env.DB.rows[0];
   check("live exit: close-position sent at the hold, the venue's fill priced the exit, fees from the venue", r5.exits === 1 && calls.some(c => /close-position/.test(c.u)) && row && row.exit_kind === "x_live" && row.exit_px === 0.44 && row.live === 1 && row.exit_order_id === "o-exit" && row.fee_exit_usd === 0.17 && row.mode === "live", { r5, row });
   // the venue refuses the close (market over): the scalp is marked settling, not retried forever
   closeMode = "closed";
-  await runScalpLane(env, { events: [ev({ game: "G2", team: "T2", usSlug: "nba-lal-bos" })], legs: [], nowMs: m(10), config: cfg, fetchImpl });
-  const r15 = await runScalpLane(env, { events: [], legs: [], nowMs: m(15), config: cfg, fetchImpl });
+  await run(env, { events: [ev({ game: "G2", team: "T2", usSlug: "nba-lal-bos" })], legs: [], nowMs: m(10), config: cfg, fetchImpl });
+  const r15 = await run(env, { events: [], legs: [], nowMs: m(15), config: cfg, fetchImpl });
   check("live exit refused as closed: recorded as settling, P&L left to the venue", r15.exits === 1 && env.DB.rows.some(r => r.exit_kind === "settling"), { r15, kinds: env.DB.rows.map(r => r.exit_kind) });
   // the close errors out three times: the lane halts itself and keeps holding
   closeMode = "err";
-  await runScalpLane(env, { events: [ev({ game: "G3", team: "T3", usSlug: "nba-lal-bos" })], legs: [], nowMs: m(20), config: cfg, fetchImpl });
-  let last = null; for (let i = 0; i < 3; i++) last = await runScalpLane(env, { events: [], legs: [], nowMs: m(25 + i), config: cfg, fetchImpl });
+  await run(env, { events: [ev({ game: "G3", team: "T3", usSlug: "nba-lal-bos" })], legs: [], nowMs: m(20), config: cfg, fetchImpl });
+  let last = null; for (let i = 0; i < 3; i++) last = await run(env, { events: [], legs: [], nowMs: m(25 + i), config: cfg, fetchImpl });
   const halt = JSON.parse(env.SIGNALS_CACHE.m.get(SCALP_KEYS.HALT));
   check("live exit failing three times: the lane halts itself, the position stays on the book", last.halted === true && halt.halted && /exit of nba-lal-bos failed 3 times/.test(halt.why) && last.open === 1, { last, halt });
-  const after = await runScalpLane(env, { events: [ev({ game: "G4", team: "T4", usSlug: "nba-lal-bos" })], legs: [], nowMs: m(30), config: cfg, fetchImpl });
+  const after = await run(env, { events: [ev({ game: "G4", team: "T4", usSlug: "nba-lal-bos" })], legs: [], nowMs: m(30), config: cfg, fetchImpl });
   check("halted: no new entries", after.entries === 0 && after.skipped["lane halted"] === 1, after);
 }
 
@@ -170,13 +179,13 @@ const kev = (extra = {}) => ({ venue: "kalshi", ts: Math.floor(T0 / 1000), sport
   // dry, end to end: a stale Kalshi ask bought as YES, closed at Kalshi's bid five minutes later
   const env = mkEnv();
   const m = (k) => T0 + k * 60e3;
-  const r1 = await runScalpLane(env, { events: [], kalshiEvents: [kev()], legs: [kleg(0.40, 0.40)], nowMs: m(0), config: {} });
+  const r1 = await run(env, { events: [], kalshiEvents: [kev()], legs: [kleg(0.40, 0.40)], nowMs: m(0), config: {} });
   const open1 = JSON.parse(env.SIGNALS_CACHE.m.get(SCALP_KEYS.OPEN));
   check("kalshi dry minute 0: one scalp opened at the stale ask for 25 YES contracts, venue and ticker on it", r1.entries === 1 && r1.byVenue.kalshi.entries === 1 && r1.byVenue.us.entries === 0 && r1.kalshiEvents === 1 && open1.length === 1 && open1[0].venue === "kalshi" && open1[0].kTicker === "KXNHLGAME-26NOV01NJWAS-NJ" && open1[0].px === 0.40 && open1[0].shares === 25 && open1[0].shownQty === null && open1[0].live === false, { r1, open1 });
-  const r2 = await runScalpLane(env, { events: [], kalshiEvents: [], legs: [kleg(0.43, 0.45)], nowMs: m(2), config: {} });
+  const r2 = await run(env, { events: [], kalshiEvents: [], legs: [kleg(0.43, 0.45)], nowMs: m(2), config: {} });
   const open2 = JSON.parse(env.SIGNALS_CACHE.m.get(SCALP_KEYS.OPEN));
   check("kalshi dry minute 2: marked at Kalshi's bid", r2.exits === 0 && open2[0].lastBid === 0.43 && open2[0].markC === rtPnlC({ side: "buy", px: 0.40, fee: kalshiFee(0.40) }, 0.43, KALSHI_TAKER_RATE), open2[0]);
-  const r5 = await runScalpLane(env, { events: [], kalshiEvents: [], legs: [kleg(0.44, 0.46)], nowMs: m(5), config: {} });
+  const r5 = await run(env, { events: [], kalshiEvents: [], legs: [kleg(0.44, 0.46)], nowMs: m(5), config: {} });
   const row = env.DB.rows[0];
   const want = scalpPnl({ venue: "kalshi", side: "buy", px: 0.40, shares: 25 }, 0.44);
   const day = JSON.parse(env.SIGNALS_CACHE.m.get(SCALP_KEYS.DAY + "2026-11-01"));
@@ -185,16 +194,16 @@ const kev = (extra = {}) => ({ venue: "kalshi", ts: Math.floor(T0 / 1000), sport
   check("report: modes per venue, byVenue, the Kalshi row carries its venue and ticker, the read names both venues", rep.modes.kalshi.mode === "dry" && rep.kalshi.mode === "dry" && rep.byVenue.kalshi.n === 1 && rep.recent[0].venue === "kalshi" && rep.recent[0].kTicker === "KXNHLGAME-26NOV01NJWAS-NJ" && /Kalshi/.test(rep.read) && rep.config.scalpKalshiSports.join() === "nhl", { modes: rep.modes, byVenue: rep.byVenue });
   // both venues see the same game in the same minute: the bigger edge is taken, the other waits (one scalp per game across venues)
   const env2 = mkEnv();
-  const both = await runScalpLane(env2, { events: [ev({ sport: "nhl", game: "Devils vs. Capitals", team: "Devils", edgeC: 2 })], kalshiEvents: [kev({ edgeC: 3.3 })], legs: [], nowMs: m(0), config: {} });
+  const both = await run(env2, { events: [ev({ sport: "nhl", game: "Devils vs. Capitals", team: "Devils", edgeC: 2 })], kalshiEvents: [kev({ edgeC: 3.3 })], legs: [], nowMs: m(0), config: {} });
   const open3 = JSON.parse(env2.SIGNALS_CACHE.m.get(SCALP_KEYS.OPEN));
   check("both venues, one game: the bigger edge (Kalshi) is taken, the US one is 'already in this game'", both.entries === 1 && open3[0].venue === "kalshi" && both.skipped["already in this game"] === 1, both);
   // the Kalshi venue off: its events are not even considered; the US venue runs
-  const off = await runScalpLane(mkEnv(), { events: [ev()], kalshiEvents: [kev()], legs: [], nowMs: m(0), config: { scalpKalshiMode: "off" } });
-  check("kalshi off: Kalshi events ignored, the US scalp still opens; both off = nothing", off.entries === 1 && off.byVenue.us.entries === 1 && off.byVenue.kalshi.entries === 0 && off.modes.kalshi.mode === "off" && (await runScalpLane(mkEnv(), { events: [ev()], kalshiEvents: [kev()], legs: [], nowMs: m(0), config: { scalpMode: "off", scalpKalshiMode: "off" } })).entries === 0, off);
+  const off = await run(mkEnv(), { events: [ev()], kalshiEvents: [kev()], legs: [], nowMs: m(0), config: { scalpKalshiMode: "off" } });
+  check("kalshi off: Kalshi events ignored, the US scalp still opens; both off = nothing", off.entries === 1 && off.byVenue.us.entries === 1 && off.byVenue.kalshi.entries === 0 && off.modes.kalshi.mode === "off" && (await run(mkEnv(), { events: [ev()], kalshiEvents: [kev()], legs: [], nowMs: m(0), config: { scalpMode: "off", scalpKalshiMode: "off" } })).entries === 0, off);
   // an old open scalp without a venue is a US scalp
   const env4 = mkEnv();
   env4.SIGNALS_CACHE.m.set(SCALP_KEYS.OPEN, JSON.stringify([{ id: "old", sport: "nba", game: "Lakers vs. Celtics", team: "Lakers", usSlug: "nba-lal-bos", side: "buy", px: 0.40, shares: 25, usd: 10, feeEntryUsd: 0.42, entryMs: m(-5), exitAtMs: m(0), live: false }]));
-  const old = await runScalpLane(env4, { events: [], kalshiEvents: [], legs: [leg(0.44, 0.46)], nowMs: m(0), config: {} });
+  const old = await run(env4, { events: [], kalshiEvents: [], legs: [leg(0.44, 0.46)], nowMs: m(0), config: {} });
   check("an open scalp from before venues is closed as a US scalp", old.exits === 1 && env4.DB.rows[0].venue === "us" && env4.DB.rows[0].exit_px === 0.44, env4.DB.rows[0]);
 }
 {
@@ -220,37 +229,37 @@ const kev = (extra = {}) => ({ venue: "kalshi", ts: Math.floor(T0 / 1000), sport
   const env = mkEnv({ KALSHI_API_KEY_ID: "kid", KALSHI_PRIVATE_KEY: kPem });
   const cfg = { scalpKalshiMode: "live" };
   const m = (k) => T0 + k * 60e3;
-  const r1 = await runScalpLane(env, { events: [], kalshiEvents: [kev()], legs: [kleg(0.40, 0.40)], nowMs: m(0), config: cfg, fetchImpl });
+  const r1 = await run(env, { events: [], kalshiEvents: [kev()], legs: [kleg(0.40, 0.40)], nowMs: m(0), config: cfg, fetchImpl });
   const open1 = JSON.parse(env.SIGNALS_CACHE.m.get(SCALP_KEYS.OPEN));
   const order = calls.find(c => /events\/orders$/.test(c.u) && c.method === "POST");
   check("kalshi live entry: an immediate-or-cancel bid for 25 YES at 0.40 is signed and sent; the fill and fee from the response land on the open scalp", r1.modes.kalshi.mode === "live" && r1.entries === 1 && order && order.body.ticker === "KXNHLGAME-26NOV01NJWAS-NJ" && order.body.side === "bid" && order.body.count === "25" && order.body.price === "0.40" && order.body.time_in_force === "immediate_or_cancel" && !order.body.reduce_only && open1[0].live === true && open1[0].orderId === "k-2" && open1[0].px === 0.40 && open1[0].shares === 25 && Math.abs(open1[0].feeEntryUsd - kalshiFee(0.40) * 25) < 0.02, { order, open1, r1 });
-  const r5 = await runScalpLane(env, { events: [], kalshiEvents: [], legs: [kleg(0.44, 0.46)], nowMs: m(5), config: cfg, fetchImpl });
+  const r5 = await run(env, { events: [], kalshiEvents: [], legs: [kleg(0.44, 0.46)], nowMs: m(5), config: cfg, fetchImpl });
   const exit = calls.filter(c => /events\/orders$/.test(c.u) && c.method === "POST").pop();
   const row = env.DB.rows[0];
   check("kalshi live exit: a reduce-only IOC ask 3c under the bid, the venue's fill prices the exit", r5.exits === 1 && exit.body.side === "ask" && exit.body.price === "0.41" && exit.body.reduce_only === true && exit.body.count === "25" && row.exit_kind === "x_live" && row.exit_px === 0.41 && row.live === 1 && row.venue === "kalshi" && posQty === 0, { exit: exit.body, row });
   // a partial exit fill closes that part and keeps the rest for the next minute
   fillMode = "full";
-  await runScalpLane(env, { events: [], kalshiEvents: [kev({ game: "G2", team: "T2", kTicker: "KXNHLGAME-26NOV01NJWAS-NJ" })], legs: [], nowMs: m(10), config: cfg, fetchImpl });
+  await run(env, { events: [], kalshiEvents: [kev({ game: "G2", team: "T2", kTicker: "KXNHLGAME-26NOV01NJWAS-NJ" })], legs: [], nowMs: m(10), config: cfg, fetchImpl });
   fillMode = "partial";
-  const p1 = await runScalpLane(env, { events: [], kalshiEvents: [], legs: [kleg(0.44, 0.46, { game: "G2", team: "T2" })], nowMs: m(15), config: cfg, fetchImpl });
+  const p1 = await run(env, { events: [], kalshiEvents: [], legs: [kleg(0.44, 0.46, { game: "G2", team: "T2" })], nowMs: m(15), config: cfg, fetchImpl });
   const openP = JSON.parse(env.SIGNALS_CACHE.m.get(SCALP_KEYS.OPEN));
   fillMode = "full";
-  const p2 = await runScalpLane(env, { events: [], kalshiEvents: [], legs: [kleg(0.44, 0.46, { game: "G2", team: "T2" })], nowMs: m(16), config: cfg, fetchImpl });
+  const p2 = await run(env, { events: [], kalshiEvents: [], legs: [kleg(0.44, 0.46, { game: "G2", team: "T2" })], nowMs: m(16), config: cfg, fetchImpl });
   check("kalshi partial exit: 12 of 25 closed as x_live_part, 13 stay open and close the next minute", p1.exits === 1 && openP.length === 1 && openP[0].shares === 13 && env.DB.rows.some(r => r.exit_kind === "x_live_part" && r.shares === 12) && p2.exits === 1 && env.DB.rows.filter(r => r.game === "G2").length === 2 && posQty === 0, { p1, openP, kinds: env.DB.rows.map(r => [r.exit_kind, r.shares]) });
   // the venue refuses the close as closed while contracts are still held: settling
-  await runScalpLane(env, { events: [], kalshiEvents: [kev({ game: "G3", team: "T3" })], legs: [], nowMs: m(20), config: cfg, fetchImpl });
+  await run(env, { events: [], kalshiEvents: [kev({ game: "G3", team: "T3" })], legs: [], nowMs: m(20), config: cfg, fetchImpl });
   fillMode = "closed";
-  const r25 = await runScalpLane(env, { events: [], kalshiEvents: [], legs: [kleg(0.44, 0.46, { game: "G3", team: "T3" })], nowMs: m(25), config: cfg, fetchImpl });
+  const r25 = await run(env, { events: [], kalshiEvents: [], legs: [kleg(0.44, 0.46, { game: "G3", team: "T3" })], nowMs: m(25), config: cfg, fetchImpl });
   check("kalshi exit refused as closed: recorded as settling", r25.exits === 1 && env.DB.rows.some(r => r.game === "G3" && r.exit_kind === "settling"), { r25, kinds: env.DB.rows.map(r => [r.game, r.exit_kind]) });
   // unfilled IOC exits three minutes running: the lane halts itself, the contracts stay
   fillMode = "full"; posQty = 0;
-  await runScalpLane(env, { events: [], kalshiEvents: [kev({ game: "G4", team: "T4" })], legs: [], nowMs: m(30), config: cfg, fetchImpl });
+  await run(env, { events: [], kalshiEvents: [kev({ game: "G4", team: "T4" })], legs: [], nowMs: m(30), config: cfg, fetchImpl });
   fillMode = "none";
-  let last = null; for (let i = 0; i < 3; i++) last = await runScalpLane(env, { events: [], kalshiEvents: [], legs: [kleg(0.44, 0.46, { game: "G4", team: "T4" })], nowMs: m(35 + i), config: cfg, fetchImpl });
+  let last = null; for (let i = 0; i < 3; i++) last = await run(env, { events: [], kalshiEvents: [], legs: [kleg(0.44, 0.46, { game: "G4", team: "T4" })], nowMs: m(35 + i), config: cfg, fetchImpl });
   const halt = JSON.parse(env.SIGNALS_CACHE.m.get(SCALP_KEYS.HALT));
   check("kalshi exit unfilled three times: the lane halts itself, the position stays", last.halted === true && halt.halted && /exit of KXNHLGAME-26NOV01NJWAS-NJ failed 3 times/.test(halt.why) && last.open === 1, { last, halt });
   // live asked without the Kalshi key: runs dry and says why
-  const blocked = await runScalpLane(mkEnv(), { events: [], kalshiEvents: [kev()], legs: [], nowMs: m(0), config: cfg });
+  const blocked = await run(mkEnv(), { events: [], kalshiEvents: [kev()], legs: [], nowMs: m(0), config: cfg });
   check("kalshi live without the key: dry, the reason reported, the dry scalp still opens", blocked.modes.kalshi.mode === "dry" && blocked.modes.kalshi.liveAsked && /push-kalshi-key/.test(blocked.modes.kalshi.liveBlocked) && blocked.entries === 1, blocked.modes);
 }
 

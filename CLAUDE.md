@@ -309,6 +309,26 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   proposal: 200 dry Kalshi scalps positive after fees at > 50% hit, read by
   the daily routine; the flip is the owner's and needs the Kalshi keys
   (push-kalshi-key.yml).
+- `src/fill-probe.js` — the fill probe (Nov 2 2026, owner's "Lets do it!").
+  The dry record assumes the order fills at the quote the sampler saw once a
+  minute; a live order goes out seconds later and stale quotes get picked
+  off. So every DRY scalp entry (both venues) re-reads the venue's book right
+  away (t0, `usTopOfBook(slug, { fetchImpl })` for Polymarket US with shares
+  shown; `kalshiOrderbook` in kalshi.js for Kalshi, YES bids and NO bids with
+  counts, so Kalshi sizes exist here) and again `PROBE_DELAY_MS` (10s) later
+  (t1): `probeRead` (pure) says whether the entry price is still quoted on
+  our side (`there`), with at least the scalp's size (`enough`, null without
+  sizes), the contracts left (`qty`) and the move against us in cents
+  (`moveC`). `runFillProbe` reads all of a minute's entries in parallel with
+  one shared wait (the minute cron runs ~10s longer on minutes with entries);
+  results sit on the position as `probe` and travel onto the `scalp_trades`
+  row (`probe` JSON, migration 0014). `scalpReport.probe` =
+  `summarizeProbes` per venue: t0/t1 `{ n, read, there, thereRate, enough,
+  enoughRate, qtyMed, goneAvgMoveC, avgS, noBook }`; the card shows it in one
+  line. Rule: a live flip of a venue is only worth it when t0 thereRate is
+  high (say 70%+) with the size there; a low t1 rate says the edge is
+  short-lived and a faster sampler would be needed first. Live entries are
+  not probed (their fill is the evidence).
 - `src/crypto-fv.js` — crypto fair value: every Polymarket BTC/ETH/SOL price
   contract ("above $X on <date>" = European digital; "dip to"/"reach" =
   one-touch via reflection) priced from Coinbase realized vol (7d/30d/90d,
