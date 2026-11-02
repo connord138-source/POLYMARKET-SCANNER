@@ -144,6 +144,24 @@ export async function kalshiPositionQty(env, ticker, { fetchImpl } = {}) {
   const row = (r.market_positions || []).find(m => m.ticker === ticker);
   return row ? (fp(row.position_fp) ?? 0) : 0;
 }
+// The market's order book in YES terms: best YES bid with its contracts, and
+// the best YES ask (= 1 - the best NO bid) with that level's contracts. Kalshi
+// returns bids only (yes_dollars / no_dollars as [price, count] pairs, best
+// first); the legacy cents shape (yes / no) is accepted too. Public endpoint,
+// signed when a key is on the worker. null when the book is empty on both sides.
+export async function kalshiOrderbook(env, ticker, { fetchImpl, depth = 5 } = {}) {
+  const r = await kalshiJsonCall(env, `/markets/${encodeURIComponent(ticker)}/orderbook?depth=${depth}`, { fetchImpl });
+  const ob = r.orderbook_fp || r.orderbook || {};
+  const levels = (fpLevels, centLevels) => {
+    const xs = Array.isArray(fpLevels) ? fpLevels.map(l => ({ px: fp(l[0]), qty: fp(l[1]) })) : Array.isArray(centLevels) ? centLevels.map(l => ({ px: fp(l[0]) != null ? fp(l[0]) / 100 : null, qty: fp(l[1]) })) : [];
+    return xs.filter(l => l.px != null && l.px > 0 && l.px < 1);
+  };
+  const yes = levels(ob.yes_dollars, ob.yes), no = levels(ob.no_dollars, ob.no);
+  const best = (xs) => xs.reduce((a, b) => (a == null || b.px > a.px ? b : a), null);
+  const yb = best(yes), nb = best(no);
+  if (!yb && !nb) return null;
+  return { bid: yb ? yb.px : null, bidQty: yb ? yb.qty : null, ask: nb ? Math.round((1 - nb.px) * 10000) / 10000 : null, askQty: nb ? nb.qty : null };
+}
 export async function getKalshiOrder(env, orderId, { fetchImpl } = {}) {
   const r = await kalshiJsonCall(env, `/portfolio/orders/${encodeURIComponent(orderId)}`, { fetchImpl });
   return r.order || r;

@@ -239,10 +239,11 @@ export async function buildPairs(env, nowMs = Date.now()) {
 
 // Polymarket US top of book for one market: best bid/ask with the shares shown
 // there (/book), else best bid/ask alone (/bbo). null when neither answers.
-export async function usTopOfBook(slug) {
+export async function usTopOfBook(slug, { fetchImpl } = {}) {
+  const f = fetchImpl || fetch;
   const v = (x) => (x && x.value != null ? Number(x.value) : null);
   try {
-    const res = await fetch(`${US_API}/v1/markets/${encodeURIComponent(slug)}/book`);
+    const res = await f(`${US_API}/v1/markets/${encodeURIComponent(slug)}/book`);
     if (res.ok) {
       const md = (await res.json()).marketData || {};
       const top = (lv, pick) => { const xs = (lv || []).map(l => ({ px: v(l.px), qty: l.qty != null ? Number(l.qty) : null })).filter(l => l.px > 0); if (!xs.length) return null; return xs.reduce((a, b) => (pick(b.px, a.px) ? b : a)); };
@@ -251,7 +252,7 @@ export async function usTopOfBook(slug) {
       if (b || a) return { bid: b ? b.px : null, ask: a ? a.px : null, last: null, bidQty: b ? b.qty : null, askQty: a ? a.qty : null };
     }
   } catch (e) { /* fall through to /bbo */ }
-  const res = await fetch(`${US_API}/v1/markets/${encodeURIComponent(slug)}/bbo`);
+  const res = await f(`${US_API}/v1/markets/${encodeURIComponent(slug)}/bbo`);
   if (!res.ok) return null;
   const md = (await res.json()).marketData || {};
   return { bid: v(md.bestBid), ask: v(md.bestAsk), last: v(md.lastTradePx), bidQty: null, askQty: null };

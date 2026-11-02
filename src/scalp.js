@@ -42,6 +42,7 @@ import { usFee, kalshiFee, US_TAKER_RATE, KALSHI_TAKER_RATE } from './xvenue.js'
 import { rtPnlC, TRADABLE_QTY } from './us-lane.js';
 import { pmusConfigured, fetchUsMarket, buildUsOrder, placeUsOrder, closeUsPosition, usPositionQty, fillFromExecutions, fillFromOrder, getUsOrder, PmusError } from './polymarket-us.js';
 import { kalshiAuthConfigured, kalshiPlaceOrder, kalshiPositionQty, KalshiError } from './kalshi.js';
+import { runFillProbe, summarizeProbes, PROBE_DELAY_MS } from './fill-probe.js';
 
 export const SCALP_KEYS = { OPEN: 'scalp_open', HALT: 'scalp_halt', LAST: 'scalp_last', DAY: 'scalp_day:', RECENT: 'scalp_recent' };
 export const SCALP_VENUES = { us: 'Polymarket US', kalshi: 'Kalshi' };
@@ -70,6 +71,7 @@ export const SCALP_SCHEMA = [
   `CREATE INDEX IF NOT EXISTS idx_scalp_trades_ts ON scalp_trades(ts_entry)`,
   `ALTER TABLE scalp_trades ADD COLUMN venue TEXT`,                      // 'us' | 'kalshi' (null = us); migrations/0013_scalp_venue.sql
   `ALTER TABLE scalp_trades ADD COLUMN k_ticker TEXT`,                   // the Kalshi market the scalp traded
+  `ALTER TABLE scalp_trades ADD COLUMN probe TEXT`,                      // fill probe JSON (src/fill-probe.js); migrations/0014_scalp_probe.sql
 ];
 const MAX_EXIT_TRIES = 3;
 const RECENT_KEEP = 60;
@@ -162,8 +164,8 @@ export const legKey = (l) => `${l.sport}|${l.game}|${l.team}`;
 async function recordTrade(env, row) {
   if (env.DB) {
     try {
-      await env.DB.prepare(`INSERT OR REPLACE INTO scalp_trades (id, mode, ts_entry, ts_exit, sport, game, team, us_slug, side, entry_px, exit_px, shares, usd, fee_entry_usd, fee_exit_usd, pnl_c, pnl_usd, edge_c, dp_c, shown_qty, hold_s, exit_kind, live, order_id, exit_order_id, note, venue, k_ticker) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-        .bind(row.id, row.mode, row.tsEntry, row.tsExit, row.sport, row.game, row.team, row.usSlug, row.side, row.entryPx, row.exitPx, row.shares, row.usd, row.feeEntryUsd, row.feeExitUsd, row.pnlC, row.pnlUsd, row.edgeC, row.dpC, row.shownQty, row.holdS, row.exitKind, row.live ? 1 : 0, row.orderId || null, row.exitOrderId || null, row.note || null, row.venue || 'us', row.kTicker || null).run();
+      await env.DB.prepare(`INSERT OR REPLACE INTO scalp_trades (id, mode, ts_entry, ts_exit, sport, game, team, us_slug, side, entry_px, exit_px, shares, usd, fee_entry_usd, fee_exit_usd, pnl_c, pnl_usd, edge_c, dp_c, shown_qty, hold_s, exit_kind, live, order_id, exit_order_id, note, venue, k_ticker, probe) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+        .bind(row.id, row.mode, row.tsEntry, row.tsExit, row.sport, row.game, row.team, row.usSlug, row.side, row.entryPx, row.exitPx, row.shares, row.usd, row.feeEntryUsd, row.feeExitUsd, row.pnlC, row.pnlUsd, row.edgeC, row.dpC, row.shownQty, row.holdS, row.exitKind, row.live ? 1 : 0, row.orderId || null, row.exitOrderId || null, row.note || null, row.venue || 'us', row.kTicker || null, row.probe ? JSON.stringify(row.probe) : null).run();
     } catch (e) { row.note = `${row.note || ''} (d1: ${String(e.message).slice(0, 60)})`.trim(); }
   }
   const recent = await kvJson(env, SCALP_KEYS.RECENT, []);
@@ -262,7 +264,7 @@ async function kalshiExit(env, pos, quote, { fetchImpl, nowMs, market = false })
 // live leg the sampler quoted this minute (for exits and marks).
 const mkDayVenue = () => ({ entries: 0, exits: 0, wins: 0, pnlUsd: 0, feesUsd: 0 });
 const mkDay = (nowMs) => ({ date: dayOf(nowMs), entries: 0, exits: 0, wins: 0, pnlUsd: 0, feesUsd: 0, events: 0, kalshiEvents: 0, skipped: {}, byVenue: { us: mkDayVenue(), kalshi: mkDayVenue() } });
-export async function runScalpLane(env, { events = [], kalshiEvents = [], legs = [], nowMs = Date.now(), config = {}, fetchImpl = fetch } = {}) {
+export async function runScalpLane(env, { events = [], kalshiEvents = [], legs = [], nowMs = Date.now(), config = {}, fetchImpl = fetch, probe = {} } = {}) {
   const cfg = scalpConfig(config);
   const modes = scalpModes(env, cfg);
   const { mode, liveAsked, liveBlocked } = modes.us;
@@ -300,7 +302,7 @@ export async function runScalpLane(env, { events = [], kalshiEvents = [], legs =
       const row = {
         id: part ? `${pos.id}-p${part.n}` : pos.id, venue, mode: pos.live ? 'live' : 'dry', tsEntry: Math.floor(pos.entryMs / 1000), tsExit: Math.floor(nowMs / 1000), sport: pos.sport, game: pos.game, team: pos.team, usSlug: pos.usSlug || null, kTicker: pos.kTicker || null, side: pos.side,
         entryPx: pos.px, exitPx: exitPx ?? null, shares, usd: r2(pos.usd * scale), feeEntryUsd, feeExitUsd: p ? p.feeExitUsd : null, pnlC: p ? p.pnlC : null, pnlUsd: p ? p.pnlUsd : null,
-        edgeC: pos.edgeC, dpC: pos.dpC, shownQty: pos.shownQty, holdS: Math.round((nowMs - pos.entryMs) / 1000), exitKind, live: !!pos.live, orderId: pos.orderId || null, ...extra,
+        edgeC: pos.edgeC, dpC: pos.dpC, shownQty: pos.shownQty, holdS: Math.round((nowMs - pos.entryMs) / 1000), exitKind, live: !!pos.live, orderId: pos.orderId || null, probe: pos.probe || null, ...extra,
         entryAt: new Date(pos.entryMs).toISOString(), exitAt: nowIso,
       };
       await recordTrade(env, row);
@@ -362,6 +364,7 @@ export async function runScalpLane(env, { events = [], kalshiEvents = [], legs =
   // 2. entries on this minute's events, both venues, biggest edge first
   const candidates = [...(events || []).map(e => ({ ...e, venue: 'us' })), ...(kalshiEvents || []).map(e => ({ ...e, venue: 'kalshi' }))].filter(e => modes[venueOf(e)].mode !== 'off');
   const sorted = candidates.sort((a, b) => (b.edgeC || 0) - (a.edgeC || 0));
+  const fresh = [];   // this minute's dry entries, probed below
   for (const ev of sorted) {
     const venue = venueOf(ev);
     if (halted) { skip('lane halted'); continue; }
@@ -385,8 +388,17 @@ export async function runScalpLane(env, { events = [], kalshiEvents = [], legs =
       }
     }
     still.push(pos);
+    if (!pos.live) fresh.push(pos);
     day.entries++; day.byVenue[venue].entries++;
     last.entries++; last.byVenue[venue].entries++;
+  }
+
+  // 3. the fill probe (src/fill-probe.js): re-read the venue's book for each
+  // dry entry now and again after the delay, so the dry record can say whether
+  // the stale quote was still there to hit. Never fatal.
+  if (fresh.length) {
+    try { const r = await runFillProbe(env, fresh, { fetchImpl, nowMs, delayMs: probe.delayMs ?? PROBE_DELAY_MS, sleep: probe.sleep, clock: probe.clock }); last.probe = r; }
+    catch (e) { last.probe = { error: String(e.message).slice(0, 80) }; }
   }
 
   await kvPut(env, SCALP_KEYS.OPEN, still, 7 * 86400);
@@ -419,7 +431,8 @@ export function summarizeScalps(rows) {
   const map = (o) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, fin(v)]));
   return { all: fin(all), bySport: map(bySport), byKind: map(byKind), byMode: map(byMode), byVenue: map(byVenue) };
 }
-const rowFromD1 = (r) => ({ id: r.id, venue: r.venue || 'us', mode: r.mode, entryAt: new Date(r.ts_entry * 1000).toISOString(), exitAt: r.ts_exit ? new Date(r.ts_exit * 1000).toISOString() : null, sport: r.sport, game: r.game, team: r.team, usSlug: r.us_slug, kTicker: r.k_ticker || null, side: r.side, entryPx: r.entry_px, exitPx: r.exit_px, shares: r.shares, usd: r.usd, feeEntryUsd: r.fee_entry_usd, feeExitUsd: r.fee_exit_usd, pnlC: r.pnl_c, pnlUsd: r.pnl_usd, edgeC: r.edge_c, dpC: r.dp_c, shownQty: r.shown_qty, holdS: r.hold_s, exitKind: r.exit_kind, live: !!r.live, orderId: r.order_id, exitOrderId: r.exit_order_id, note: r.note });
+const parseJson = (v) => { if (v == null) return null; if (typeof v !== 'string') return v; try { return JSON.parse(v); } catch (e) { return null; } };
+const rowFromD1 = (r) => ({ id: r.id, venue: r.venue || 'us', probe: parseJson(r.probe), mode: r.mode, entryAt: new Date(r.ts_entry * 1000).toISOString(), exitAt: r.ts_exit ? new Date(r.ts_exit * 1000).toISOString() : null, sport: r.sport, game: r.game, team: r.team, usSlug: r.us_slug, kTicker: r.k_ticker || null, side: r.side, entryPx: r.entry_px, exitPx: r.exit_px, shares: r.shares, usd: r.usd, feeEntryUsd: r.fee_entry_usd, feeExitUsd: r.fee_exit_usd, pnlC: r.pnl_c, pnlUsd: r.pnl_usd, edgeC: r.edge_c, dpC: r.dp_c, shownQty: r.shown_qty, holdS: r.hold_s, exitKind: r.exit_kind, live: !!r.live, orderId: r.order_id, exitOrderId: r.exit_order_id, note: r.note });
 
 export async function scalpReport(env, config = {}, { hours = 168, nowMs = Date.now() } = {}) {
   const cfg = scalpConfig(config);
@@ -437,7 +450,7 @@ export async function scalpReport(env, config = {}, { hours = 168, nowMs = Date.
   return {
     success: true, hours, mode, liveAsked, liveBlocked, modes, kalshi: modes.kalshi, halted: !!(halt && halt.halted), halt, config: cfg, last,
     open: open.map(p => ({ ...p, venue: venueOf(p), holdLeftS: Math.max(0, Math.round((p.exitAtMs - nowMs) / 1000)) })),
-    today: day, ...sum, recent: rows.slice(0, 30),
-    read: `The stale-quote scalp lane (src/scalp.js), two venues. Polymarket US (venue 'us', mode scalpMode): each minute the sampler sees global Polymarket's mid move 3c+ while the US quote has not followed and is still crossable after its taker fee, the lane takes the stale quote for up to $${cfg.scalpMaxUsd} (never more than the shares shown, ${cfg.scalpMinQty}+ required) and closes on the US book ${cfg.scalpHoldMin} minutes later as a taker. Kalshi (venue 'kalshi', mode scalpKalshiMode, sports: ${kSports}): the same minutes on Kalshi's own YES book for the leg, a stale ask bought as YES or a stale bid sold as YES (= buying NO), up to $${cfg.scalpKalshiMaxUsd}, closed on that book ${cfg.scalpHoldMin} minutes later; Kalshi sizes are not sampled, so dry assumes the quote holds for that size and live sends immediate-or-cancel orders that fill what is there or nothing. pnlC is cents a share after both of the venue's taker fees (Polymarket US 0.0695 x p(1-p), Kalshi 0.07 x p(1-p)), the number the paper lane's x5 mark reads for the US venue. Modes per venue: off / dry (decisions and fills at the sampled quotes, nothing sent) / live (real orders with that venue's key, only when it is on the worker: PMUS_* for Polymarket US, KALSHI_* for Kalshi). Risk: ${cfg.scalpMaxOpen} open and ${cfg.scalpMaxPerDay} a day per venue, one stop at -$${cfg.scalpDailyLossUsd} realized on the day across both, one scalp per game across venues, edge >= ${cfg.scalpMinEdgeC}c; POST /xvenue/scalp/halt is the kill switch for both and the lane halts itself on an ambiguous send or an exit it cannot reconcile. byVenue splits the record. exitKind: x5 = closed at the hold on the venue's quote; late_last_quote / no_quote = no quote at the hold (dry), closed at the last quote seen or unpriced; x_live = the venue's fill (x_live_part = a partial Kalshi fill, the rest closed later); settling = the venue refused the close (market over), the position settles there and its P&L lands in the account balance, not here. The live flips are the owner's.`,
+    today: day, ...sum, probe: summarizeProbes([...rows, ...open]), recent: rows.slice(0, 30),
+    read: `The stale-quote scalp lane (src/scalp.js), two venues. Polymarket US (venue 'us', mode scalpMode): each minute the sampler sees global Polymarket's mid move 3c+ while the US quote has not followed and is still crossable after its taker fee, the lane takes the stale quote for up to $${cfg.scalpMaxUsd} (never more than the shares shown, ${cfg.scalpMinQty}+ required) and closes on the US book ${cfg.scalpHoldMin} minutes later as a taker. Kalshi (venue 'kalshi', mode scalpKalshiMode, sports: ${kSports}): the same minutes on Kalshi's own YES book for the leg, a stale ask bought as YES or a stale bid sold as YES (= buying NO), up to $${cfg.scalpKalshiMaxUsd}, closed on that book ${cfg.scalpHoldMin} minutes later; Kalshi sizes are not sampled, so dry assumes the quote holds for that size and live sends immediate-or-cancel orders that fill what is there or nothing. pnlC is cents a share after both of the venue's taker fees (Polymarket US 0.0695 x p(1-p), Kalshi 0.07 x p(1-p)), the number the paper lane's x5 mark reads for the US venue. Modes per venue: off / dry (decisions and fills at the sampled quotes, nothing sent) / live (real orders with that venue's key, only when it is on the worker: PMUS_* for Polymarket US, KALSHI_* for Kalshi). Risk: ${cfg.scalpMaxOpen} open and ${cfg.scalpMaxPerDay} a day per venue, one stop at -$${cfg.scalpDailyLossUsd} realized on the day across both, one scalp per game across venues, edge >= ${cfg.scalpMinEdgeC}c; POST /xvenue/scalp/halt is the kill switch for both and the lane halts itself on an ambiguous send or an exit it cannot reconcile. byVenue splits the record. exitKind: x5 = closed at the hold on the venue's quote; late_last_quote / no_quote = no quote at the hold (dry), closed at the last quote seen or unpriced; x_live = the venue's fill (x_live_part = a partial Kalshi fill, the rest closed later); settling = the venue refused the close (market over), the position settles there and its P&L lands in the account balance, not here. The live flips are the owner's. probe (src/fill-probe.js, Nov 2 2026): every dry entry re-reads the venue's book a few seconds after the sampler's look (t0) and ${PROBE_DELAY_MS / 1000}s later (t1); per venue, thereRate = the share of reads where the entry price was still quoted on our side, enoughRate = of those with sizes, the share with at least the scalp's size behind it, qtyMed = contracts left when it was there, goneAvgMoveC = how far the quote had moved against us when it was gone, avgS = seconds after the sample. This is the dry record's missing piece: whether the quote survives long enough for a live order to hit it.`,
   };
 }
