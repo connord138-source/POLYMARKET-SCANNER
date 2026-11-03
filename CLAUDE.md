@@ -483,8 +483,12 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   `cronStatus.dataApi` every cycle; `describeFailure` puts the same on the
   scan's error text. The 5-min cron no longer dies on a failed scan:
   `runScan` is wrapped, the failure lands in `cronStatus.scan.error`
-  (`fromCache: true`) and the cycle carries on with the last stored signals
-  (KV `signals`); every cycle's scan outcome is pushed to KV `scan_history`
+  (`fromCache: true`, `stored` = the list's size) and the cycle carries on
+  with the stored signals (KV `signals`, the 7-day merged list of ~15k rows)
+  cut to the scan's own window by `scanWindow` (src/scan-window.js, shared
+  with runScan: 48h, event not started or past, not at a resolution price,
+  score >= 30; the first fallback handed the auto-trader the whole week, all
+  skipped by its gates); every cycle's scan outcome is pushed to KV `scan_history`
   (288 cycles, a day) and summarized in `cronStatus.scanRecent` (`okRate`,
   `failedStreak`, `lastOkAgoMin`, `last` 12) so the daily routine reads the
   hit rate rather than one cycle. If the scan keeps failing from the

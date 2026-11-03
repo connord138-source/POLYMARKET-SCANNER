@@ -34,6 +34,7 @@ import { sampleXvenue, xvenueReport, XV_SCHEMA, usTopOfBook } from "./src/xvenue
 import { US_LANE_SCHEMA, recordUsLaneEvents, markUsLaneEvents, settleUsLaneEvents, usLaneReport } from "./src/us-lane.js";
 import { SCALP_SCHEMA, runScalpLane, scalpReport, setScalpHalt } from "./src/scalp.js";
 import { dataApi, dataApiStats, describeFailure, pushScanHistory, scanHistorySummary } from "./src/data-api.js";
+import { scanWindow } from "./src/scan-window.js";
 import { getExecReport } from "./src/execution.js";
 import { runExecutor, getExecutorReport, setHalt } from "./src/executor.js";
 import { getCryptoFairValue, refreshCryptoFairValue, annotateCryptoFairValue } from "./src/crypto-fv.js";
@@ -7336,22 +7337,28 @@ export default {
       // Nov 3 2026: a throttled trades feed (Data API v2 answered 429) used to
       // throw here and kill the whole cycle - no settlements, no auto-trader,
       // no executor pass. A failed scan is now recorded and the cycle carries
-      // on with the last stored signals (KV `signals`, the previous scan's).
+      // on with the stored signals (KV `signals`) cut to the scan's own window.
       let result;
       const scanT0 = Date.now();
+      const SCAN_HOURS = 48, SCAN_MIN_SCORE = 30;
       try {
-        result = await runScan(48, 30, env);
+        result = await runScan(SCAN_HOURS, SCAN_MIN_SCORE, env);
         console.log("Cron scan completed successfully");
       } catch (scanErr) {
         console.error("Cron scan failed, carrying on with the stored signals:", scanErr.message);
         let stored = null;
         try { stored = await env.SIGNALS_CACHE.get("signals", { type: "json" }); } catch (e) { stored = null; }
-        result = { success: false, signals: Array.isArray(stored) ? stored : [], error: scanErr.message, fromCache: true };
+        // KV `signals` is the 7-day merged list (~15k rows), not the last scan's
+        // output: apply the scan's own window so the auto-trader sees what the
+        // last scan would have returned, not the whole week.
+        const storedList = Array.isArray(stored) ? stored : [];
+        const windowed = scanWindow(storedList, { hoursBack: SCAN_HOURS, minScore: SCAN_MIN_SCORE, isStarted: scanEventStarted, isOver: scanEventOver }).final;
+        result = { success: false, signals: windowed, stored: storedList.length, error: scanErr.message, fromCache: true };
       }
       cronStatus.scan = {
         signals: result.signals?.length || 0,
         success: result.success,
-        ...(result.error ? { error: result.error, fromCache: true } : {})
+        ...(result.error ? { error: result.error, fromCache: true, stored: result.stored } : {})
       };
       // The scan's rolling record (KV scan_history, last 288 cycles = a day): the daily
       // routine reads the hit rate and the failure streak from cronStatus.scanRecent.
@@ -7607,6 +7614,16 @@ export default {
     }
   }
 };
+
+// The scan's event-date checks, passed to scanWindow (src/scan-window.js).
+function scanEventStarted(s) {
+  return hasEventStarted(s.marketTitle, s.marketSlug, s.avgEntryPrice / 100);
+}
+// Event date + 6 hours passed (a buffer for games to finish).
+function scanEventOver(s) {
+  const eventDate = getEventDate(s.marketTitle, s.marketSlug);
+  return !!(eventDate && Date.now() > eventDate.getTime() + 6 * 60 * 60 * 1000);
+}
 
 async function runScan(hoursBack, minScore, env, debugMode = false) {
   const now = Date.now();
@@ -8381,48 +8398,11 @@ function formatDirectionForDisplay(direction, marketTitle, marketSlug) {
     }
   }
   
-  // Filter by requested time window
-  const filteredSignals = allSignals.filter(s => {
-    const signalTime = new Date(s.firstTradeTime).getTime();
-    return signalTime >= cutoffTime;
-  });
-  
-  // Filter out events that have already started (check cached signals too)
-  // This is a quick heuristic filter based on date/time
-  const activeSignals = filteredSignals.filter(s => {
-    return !hasEventStarted(s.marketTitle, s.marketSlug, s.avgEntryPrice / 100);
-  });
-  
-  // Additional filter: Check if market appears resolved based on current price
-  // If we have the current market price and it's at 99%+ or 1%-, market is resolved
-  const trulyActiveSignals = activeSignals.filter(s => {
-    // If currentPrice is at resolution levels, filter it out
-    const price = s.currentPrice || s.avgEntryPrice;
-    if (price >= 99 || price <= 1) {
-      console.log(`Filtering resolved market: ${s.marketTitle} (price: ${price}%)`);
-      return false;
-    }
-    
-    // Check if event date has passed (more thorough check)
-    const eventDate = getEventDate(s.marketTitle, s.marketSlug);
-    if (eventDate) {
-      const now = new Date();
-      // If event date + 6 hours has passed, filter it out
-      // This gives buffer for games to finish
-      const eventEndTime = new Date(eventDate.getTime() + 6 * 60 * 60 * 1000);
-      if (now > eventEndTime) {
-        console.log(`Filtering past event: ${s.marketTitle} (event: ${eventDate.toISOString()})`);
-        return false;
-      }
-    }
-    
-    return true;
-  });
-  
-  // Filter by min score and sort
-  const finalSignals = trulyActiveSignals
-    .filter(s => s.score >= minScore)
-    .sort((a, b) => b.score - a.score);
+  // The scan's window (src/scan-window.js, shared with the cron's failed-scan
+  // fallback): first trade within hoursBack, event not started, not priced at
+  // a resolution level, event not past; then the score cut, best first.
+  const { windowed: filteredSignals, notStarted: activeSignals, active: trulyActiveSignals, final: finalSignals } =
+    scanWindow(allSignals, { hoursBack, minScore, nowMs: now, isStarted: scanEventStarted, isOver: scanEventOver });
   
   // In debug mode, include all signals before score filtering
   const debugAllSignals = debugMode ? trulyActiveSignals.sort((a, b) => b.score - a.score).map(s => ({
