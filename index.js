@@ -7353,7 +7353,7 @@ export default {
         success: result.success,
         ...(result.error ? { error: result.error, fromCache: true } : {})
       };
-      // The scan's rolling record (KV scan_history, last 48 cycles): the daily
+      // The scan's rolling record (KV scan_history, last 288 cycles = a day): the daily
       // routine reads the hit rate and the failure streak from cronStatus.scanRecent.
       try {
         const hist = pushScanHistory(await env.SIGNALS_CACHE.get("scan_history", { type: "json" }), {

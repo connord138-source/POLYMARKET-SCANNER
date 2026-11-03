@@ -485,7 +485,7 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   `runScan` is wrapped, the failure lands in `cronStatus.scan.error`
   (`fromCache: true`) and the cycle carries on with the last stored signals
   (KV `signals`); every cycle's scan outcome is pushed to KV `scan_history`
-  (48 cycles) and summarized in `cronStatus.scanRecent` (`okRate`,
+  (288 cycles, a day) and summarized in `cronStatus.scanRecent` (`okRate`,
   `failedStreak`, `lastOkAgoMin`, `last` 12) so the daily routine reads the
   hit rate rather than one cycle. If the scan keeps failing from the
   Worker's egress while the feed answers elsewhere, the structural fixes
