@@ -23,6 +23,22 @@ export const DATA_API = 'https://data-api.polymarket.com';
 export const V2_PAGE_MAX = 1000;
 export const V2_DEFAULT_LIMIT = 100;
 const MAX_PAGES = 12;
+// v2 rate-limits harder than v1 did (Nov 3 2026, 15:15 UTC: the scan's
+// 5000-trade read answered 429 and the whole 5-minute cron died with it). Two
+// guards: a 429 / 5xx page is retried after a short wait (Retry-After when
+// given, capped), and the GLOBAL trades feed (no user / condition / event
+// filter) is kept for FEED_TTL_MS and served to every smaller or equal read
+// in that window, so the scan, the sport price pass, the active-sports probe
+// and the per-market lookups share one paged read instead of each paying
+// five requests.
+export const FEED_TTL_MS = 20000;
+export const RETRY_MAX = 3;
+const RETRY_BASE_MS = 1200;
+const RETRY_CAP_MS = 4000;
+const defaultSleep = (ms) => new Promise(res => setTimeout(res, ms));
+let feedCache = null;   // { at, want, rows } for the global trades feed
+export const _resetFeedCache = () => { feedCache = null; };
+const isGlobalFeed = (req) => req.path === '/v2/trades' && !req.params.has('user') && !req.params.has('condition') && !req.params.has('event_id') && !req.params.has('side') && !req.params.has('start') && !req.params.has('end') && (req.params.get('taker_only') ?? 'true') === 'true';
 
 // snake_case -> camelCase, one level (the rows are flat).
 export const camel = (k) => String(k).replace(/_([a-z0-9])/g, (_, c) => c.toUpperCase());
@@ -81,10 +97,29 @@ const respLike = (ok, status, rows, text) => ({ ok, status, json: async () => ro
 // run out), one status at a time for the position routes. The first non-OK
 // page ends the read with that status (rows already read are kept only when
 // the failure is on a later page).
-export async function dataApi(urlOrPath, { fetchImpl, maxPages = MAX_PAGES } = {}) {
+// One page, retried on 429 / 5xx with a short wait (Retry-After honoured, capped).
+async function fetchPage(f, url, { sleep, nowMs, retries = RETRY_MAX }) {
+  let res = null, lastErr = null;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try { res = await f(url); lastErr = null; } catch (e) { res = null; lastErr = e; }
+    const retryable = res ? (res.status === 429 || res.status >= 500) : true;
+    if (res && !retryable) return res;
+    if (attempt === retries) break;
+    let waitMs = RETRY_BASE_MS * Math.pow(2, attempt);
+    const ra = res && res.headers && typeof res.headers.get === 'function' ? Number(res.headers.get('retry-after')) : NaN;
+    if (Number.isFinite(ra) && ra > 0) waitMs = Math.max(waitMs, ra * 1000);
+    await sleep(Math.min(waitMs, RETRY_CAP_MS));
+  }
+  if (res) return res;
+  throw lastErr || new Error('data-api: unreachable');
+}
+
+export async function dataApi(urlOrPath, { fetchImpl, maxPages = MAX_PAGES, sleep = defaultSleep, nowMs = Date.now() } = {}) {
   const f = fetchImpl || fetch;
   const req = v2Request(urlOrPath);
   if (req.passthrough) return f(req.passthrough);
+  const global = isGlobalFeed(req);
+  if (global && feedCache && nowMs - feedCache.at < FEED_TTL_MS && req.want <= feedCache.want) return respLike(true, 200, feedCache.rows.slice(0, req.want));   // a read no bigger than the one cached
   const rows = [];
   let status = 200;
   for (const st of req.statuses) {
@@ -94,8 +129,8 @@ export async function dataApi(urlOrPath, { fetchImpl, maxPages = MAX_PAGES } = {
       if (st) p.set('status', st);
       if (cursor) p.set('cursor', cursor);
       let res;
-      try { res = await f(`${DATA_API}${req.path}?${p.toString()}`); } catch (e) { if (rows.length) return respLike(true, 200, rows); throw e; }
-      if (!res.ok) { if (rows.length) return respLike(true, 200, rows); let t = ''; try { t = await res.text(); } catch (e) {} return respLike(false, res.status, null, t); }
+      try { res = await fetchPage(f, `${DATA_API}${req.path}?${p.toString()}`, { sleep, nowMs }); } catch (e) { if (rows.length) break; throw e; }
+      if (!res.ok) { if (rows.length) break; let t = ''; try { t = await res.text(); } catch (e) {} return respLike(false, res.status, null, t); }
       let body = null; try { body = await res.json(); } catch (e) { body = null; }
       if (Array.isArray(body)) { rows.push(...body); cursor = null; }          // a v1-shaped body (legacy mock): as it is
       else {
@@ -107,5 +142,6 @@ export async function dataApi(urlOrPath, { fetchImpl, maxPages = MAX_PAGES } = {
       if (!cursor) break;
     }
   }
+  if (global) feedCache = { at: nowMs, want: req.want, rows: rows.slice() };
   return respLike(true, status, rows.slice(0, req.want));
 }

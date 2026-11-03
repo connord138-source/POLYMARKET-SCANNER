@@ -7332,12 +7332,25 @@ export default {
       // Crypto fair value first, so this scan's crypto signals carry fresh model prices.
       try { const fv = await refreshCryptoFairValue(env); cronStatus.cryptoFv = { ...fv.summary, errors: fv.errors }; }
       catch (e) { cronStatus.cryptoFv = { error: e.message }; }
-      // Run scan with 48h window and low minScore to capture everything
-      const result = await runScan(48, 30, env);
-      console.log("Cron scan completed successfully");
+      // Run scan with 48h window and low minScore to capture everything.
+      // Nov 3 2026: a throttled trades feed (Data API v2 answered 429) used to
+      // throw here and kill the whole cycle - no settlements, no auto-trader,
+      // no executor pass. A failed scan is now recorded and the cycle carries
+      // on with the last stored signals (KV `signals`, the previous scan's).
+      let result;
+      try {
+        result = await runScan(48, 30, env);
+        console.log("Cron scan completed successfully");
+      } catch (scanErr) {
+        console.error("Cron scan failed, carrying on with the stored signals:", scanErr.message);
+        let stored = null;
+        try { stored = await env.SIGNALS_CACHE.get("signals", { type: "json" }); } catch (e) { stored = null; }
+        result = { success: false, signals: Array.isArray(stored) ? stored : [], error: scanErr.message, fromCache: true };
+      }
       cronStatus.scan = {
         signals: result.signals?.length || 0,
-        success: result.success
+        success: result.success,
+        ...(result.error ? { error: result.error, fromCache: true } : {})
       };
       
       // Check for new high-value signals and send alerts
