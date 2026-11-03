@@ -1,5 +1,5 @@
 // Polymarket Data API v2 behind the v1 shapes (src/data-api.js). Run with: node test/data-api.test.mjs
-import { dataApi, v2Request, v1Row, camel, DATA_API, V2_PAGE_MAX, FEED_TTL_MS, RETRY_MAX, _resetFeedCache } from "../src/data-api.js";
+import { dataApi, v2Request, v1Row, camel, DATA_API, V2_PAGE_MAX, FEED_TTL_MS, FEED_BLOCK_MS, RETRY_MAX, SCAN_HISTORY_MAX, _resetFeedCache, dataApiStats, describeFailure, pushScanHistory, scanHistorySummary } from "../src/data-api.js";
 const noSleep = async () => {};
 let pass = 0, fail = 0;
 const check = (n, c, x) => { if (c) pass++; else { fail++; console.error("FAIL:", n, x ?? ""); } };
@@ -100,6 +100,80 @@ const json = (b, status = 200) => ({ ok: status < 400, status, json: async () =>
   await dataApi(`${DATA_API}/trades?user=0xw&limit=100`, { fetchImpl: feed, sleep: noSleep, nowMs: 1_012_000 });
   await dataApi(`${DATA_API}/trades?market=0xc&limit=100`, { fetchImpl: feed, sleep: noSleep, nowMs: 1_012_000 });
   check("a user or market read is never served from the global feed", calls === before + 2, { calls });
+}
+
+// ---------- Nov 3 2026: the block after a refusal, the age rule, the stats ----------
+{
+  const page = (n, from, hasMore, cursor) => ({ data: Array.from({ length: n }, (_, i) => ({ proxy_wallet: `w${from + i}` })), pagination: { has_more: hasMore, next_cursor: hasMore ? cursor : null } });
+  const json = (b, status = 200, headers = {}) => ({ ok: status < 400, status, json: async () => b, text: async () => (typeof b === "string" ? b : JSON.stringify(b)), headers: { get: (k) => headers[k.toLowerCase()] ?? null } });
+  // a refused global read blocks the path: the next readers fail at once, nothing is sent
+  _resetFeedCache();
+  let calls = 0;
+  const refused = async () => { calls++; return json("<html><body>error code: 1015</body></html>", 429, { "retry-after": "30" }); };
+  const r1 = await dataApi(`${DATA_API}/trades?limit=5000`, { fetchImpl: refused, sleep: noSleep, nowMs: 2_000_000 });
+  check("refused after the retries: ok false 429, Retry-After and the tries carried", r1.ok === false && r1.status === 429 && r1.retryAfter === 30 && r1.attempts === RETRY_MAX + 1 && calls === RETRY_MAX + 1, { r1, calls });
+  const r2 = await dataApi(`${DATA_API}/trades?limit=2000`, { fetchImpl: refused, sleep: noSleep, nowMs: 2_005_000 });
+  check("a later global read in the block fails at once: no request, blocked flagged", r2.ok === false && r2.status === 429 && r2.blocked === true && r2.blockedAgoS === 5 && calls === RETRY_MAX + 1, { r2, calls });
+  const r3 = await dataApi(`${DATA_API}/trades?market=0xc&limit=300`, { fetchImpl: refused, sleep: noSleep, nowMs: 2_006_000 });
+  check("a filtered read of the same path is blocked too (the limit is per path)", r3.ok === false && r3.blocked === true && calls === RETRY_MAX + 1, { r3, calls });
+  const other = await dataApi(`${DATA_API}/activity?user=0xw&limit=5`, { fetchImpl: async () => json(page(2, 0, false, null)), sleep: noSleep, nowMs: 2_006_000 });
+  check("another path is not blocked", other.ok && (await other.json()).length === 2);
+  const d2 = await describeFailure(r2);
+  check("describeFailure names the block", /not retried: \/v2\/trades throttled 5s ago/.test(d2) && /retry-after 30s/.test(d2), d2);
+  const d1 = await describeFailure(r1);
+  check("describeFailure carries the tries, Retry-After and the body with tags stripped", /4 tries/.test(d1) && /retry-after 30s/.test(d1) && /error code: 1015/.test(d1) && !/<html>/.test(d1), d1);
+  // the block is at least FEED_BLOCK_MS, longer when Retry-After says so (30s here: the floor applies)
+  const r4 = await dataApi(`${DATA_API}/trades?limit=10`, { fetchImpl: async () => { calls++; return json(page(10, 0, false, null)); }, sleep: noSleep, nowMs: 2_000_000 + FEED_BLOCK_MS + 1 });
+  check("the block lifts after FEED_BLOCK_MS and the read is sent", r4.ok && (await r4.json()).length === 10 && calls === RETRY_MAX + 2, { calls });
+  // a long Retry-After stretches the block
+  _resetFeedCache();
+  await dataApi(`${DATA_API}/trades?limit=10`, { fetchImpl: async () => json({ e: 1 }, 429, { "retry-after": "90" }), sleep: noSleep, nowMs: 3_000_000 });
+  const r5 = await dataApi(`${DATA_API}/trades?limit=10`, { fetchImpl: async () => json(page(1, 0, false, null)), sleep: noSleep, nowMs: 3_000_000 + 80_000 });
+  const r6 = await dataApi(`${DATA_API}/trades?limit=10`, { fetchImpl: async () => json(page(1, 0, false, null)), sleep: noSleep, nowMs: 3_000_000 + 91_000 });
+  check("a 90s Retry-After blocks for 90s", r5.ok === false && r5.blocked === true && r6.ok === true, { r5: r5.blocked, r6: r6.ok });
+  // the retry wait honours Retry-After up to the cap
+  _resetFeedCache();
+  const waits = []; let n = 0;
+  await dataApi(`${DATA_API}/trades?limit=10`, { fetchImpl: async () => (++n === 1 ? json({ e: 1 }, 429, { "retry-after": "30" }) : json(page(10, 0, false, null))), sleep: async (ms) => { waits.push(ms); } });
+  check("a 30s Retry-After waits the cap (10s), not 4s and not 30s", waits.length === 1 && waits[0] === 10000, waits);
+  // the cached feed is still served during a block, and the age rule
+  _resetFeedCache();
+  let fetched = 0;
+  const feed = async () => { fetched++; return json(page(1000, 0, false, null)); };
+  await dataApi(`${DATA_API}/trades?limit=1000`, { fetchImpl: feed, sleep: noSleep, nowMs: 4_000_000 });
+  const young = await dataApi(`${DATA_API}/trades?limit=500`, { fetchImpl: feed, sleep: noSleep, nowMs: 4_000_000 + 100_000 });
+  check("default readers accept a 100s-old feed (the venue's own edge serves 300s)", young.ok && young.cached === true && young.cacheAgeS === 100 && fetched === 1, { fetched, young: young.cached });
+  const scan = await dataApi(`${DATA_API}/trades?limit=1000`, { fetchImpl: feed, sleep: noSleep, nowMs: 4_000_000 + 100_000, maxAgeMs: 60_000 });
+  check("the scan (maxAgeMs 60s) refuses a 100s-old feed and reads fresh", scan.ok && !scan.cached && fetched === 2, { fetched });
+  const old = await dataApi(`${DATA_API}/trades?limit=100`, { fetchImpl: feed, sleep: noSleep, nowMs: 4_000_000 + 100_000 + FEED_TTL_MS + 1 });
+  check("FEED_TTL_MS is 4 minutes and still expires", FEED_TTL_MS === 240000 && old.ok && !old.cached && fetched === 3, { fetched });
+  // stats
+  _resetFeedCache();
+  await dataApi(`${DATA_API}/trades?limit=1000`, { fetchImpl: feed, sleep: noSleep, nowMs: 5_000_000 });
+  await dataApi(`${DATA_API}/trades?limit=100`, { fetchImpl: feed, sleep: noSleep, nowMs: 5_001_000 });
+  await dataApi(`${DATA_API}/activity?user=0xw&limit=5`, { fetchImpl: refused, sleep: noSleep, nowMs: 5_002_000 });
+  await dataApi(`${DATA_API}/activity?user=0xw&limit=5`, { fetchImpl: refused, sleep: noSleep, nowMs: 5_003_000 });
+  const s = dataApiStats(5_010_000);
+  check("dataApiStats: reads, served, blocked, throttled pages, the block with its remaining seconds, the feed's age, the last failure's body", s.reads === 4 && s.ok === 2 && s.served === 1 && s.failed === 2 && s.blocked === 1 && s.throttled === RETRY_MAX + 1 && s.requests === RETRY_MAX + 2 && s.blocked_paths["/v2/activity"] && s.blocked_paths["/v2/activity"].forS === 52 && s.feed && s.feed.rows === 1000 && s.feed.ageS === 10 && s.lastError && s.lastError.status === 429 && s.lastError.path === "/v2/activity" && /error code: 1015/.test(s.lastError.body) && s.lastError.retryAfter === 30, s);
+  check("_resetFeedCache clears the block and the counters", (_resetFeedCache(), dataApiStats().reads === 0 && Object.keys(dataApiStats().blocked_paths).length === 0 && dataApiStats().feed === null));
+}
+
+// ---------- the scan's rolling record ----------
+{
+  let h = [];
+  for (let i = 0; i < SCAN_HISTORY_MAX + 5; i++) h = pushScanHistory(h, { at: new Date(Date.UTC(2026, 10, 3, 0, 5 * i)).toISOString(), ok: i % 4 !== 3, signals: 100 + i, ms: 1000 + i });
+  check("pushScanHistory keeps the last SCAN_HISTORY_MAX entries, newest last", h.length === SCAN_HISTORY_MAX && h[h.length - 1].signals === 100 + SCAN_HISTORY_MAX + 4 && pushScanHistory(null, { at: "x" }).length === 1 && pushScanHistory([{ at: "a" }, null, {}], { at: "b" }).length === 2, { n: h.length });
+  const now = Date.parse("2026-11-03T04:30:00Z");
+  const list = [
+    { at: "2026-11-03T04:00:00Z", ok: true, signals: 10, ms: 900 },
+    { at: "2026-11-03T04:05:00Z", ok: true, signals: 12, ms: 1100 },
+    { at: "2026-11-03T04:10:00Z", ok: false, signals: 12, ms: 8000, error: "Trades API error: 429 (4 tries)", cached: true },
+    { at: "2026-11-03T04:15:00Z", ok: false, signals: 12, ms: 20, error: "Trades API error: 429 (not retried)", cached: true },
+  ];
+  const sum = scanHistorySummary(list, now);
+  check("scanHistorySummary: cycles, ok rate, failure streak, last ok age, last error, avg ms, last 12", sum.cycles === 4 && sum.ok === 2 && sum.failed === 2 && sum.okRate === 0.5 && sum.failedStreak === 2 && sum.lastOkAt === "2026-11-03T04:05:00Z" && sum.lastOkAgoMin === 25 && sum.lastError.at === "2026-11-03T04:15:00Z" && /not retried/.test(sum.lastError.error) && sum.avgMs === 2505 && sum.last.length === 4 && sum.last[3].ok === false && sum.last[0].error === undefined, sum);
+  const empty = scanHistorySummary(null, now);
+  check("scanHistorySummary on nothing", empty.cycles === 0 && empty.okRate === null && empty.failedStreak === 0 && empty.lastOkAt === null && empty.last.length === 0, empty);
 }
 
 console.log(`data-api: ${pass} passed, ${fail} failed`);

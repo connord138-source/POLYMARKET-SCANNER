@@ -33,7 +33,7 @@ import { collectBooks, MM_SCHEMA } from "./src/mm-collector.js";
 import { sampleXvenue, xvenueReport, XV_SCHEMA, usTopOfBook } from "./src/xvenue.js";
 import { US_LANE_SCHEMA, recordUsLaneEvents, markUsLaneEvents, settleUsLaneEvents, usLaneReport } from "./src/us-lane.js";
 import { SCALP_SCHEMA, runScalpLane, scalpReport, setScalpHalt } from "./src/scalp.js";
-import { dataApi } from "./src/data-api.js";
+import { dataApi, dataApiStats, describeFailure, pushScanHistory, scanHistorySummary } from "./src/data-api.js";
 import { getExecReport } from "./src/execution.js";
 import { runExecutor, getExecutorReport, setHalt } from "./src/executor.js";
 import { getCryptoFairValue, refreshCryptoFairValue, annotateCryptoFairValue } from "./src/crypto-fv.js";
@@ -7338,6 +7338,7 @@ export default {
       // no executor pass. A failed scan is now recorded and the cycle carries
       // on with the last stored signals (KV `signals`, the previous scan's).
       let result;
+      const scanT0 = Date.now();
       try {
         result = await runScan(48, 30, env);
         console.log("Cron scan completed successfully");
@@ -7352,6 +7353,16 @@ export default {
         success: result.success,
         ...(result.error ? { error: result.error, fromCache: true } : {})
       };
+      // The scan's rolling record (KV scan_history, last 48 cycles): the daily
+      // routine reads the hit rate and the failure streak from cronStatus.scanRecent.
+      try {
+        const hist = pushScanHistory(await env.SIGNALS_CACHE.get("scan_history", { type: "json" }), {
+          at: new Date(scanT0).toISOString(), ok: !!result.success, signals: result.signals?.length || 0, ms: Date.now() - scanT0,
+          ...(result.error ? { error: String(result.error).slice(0, 240), cached: true } : {})
+        });
+        await env.SIGNALS_CACHE.put("scan_history", JSON.stringify(hist), { expirationTtl: 7 * 24 * 60 * 60 });
+        cronStatus.scanRecent = scanHistorySummary(hist, Date.now());
+      } catch (e) { cronStatus.scanRecent = { error: e.message }; }
       
       // Check for new high-value signals and send alerts
       let alertableSignals = [];
@@ -7585,6 +7596,9 @@ export default {
       cronStatus.error = error.message;
     }
     
+    // The Data API adapter's counters, active blocks and last failure (Nov 3 2026)
+    try { cronStatus.dataApi = dataApiStats(); } catch (e) { cronStatus.dataApi = { error: e.message }; }
+
     // Save cron status to KV for visibility
     if (env.SIGNALS_CACHE) {
       await env.SIGNALS_CACHE.put("cron_last_run", JSON.stringify(cronStatus), {
@@ -7600,8 +7614,8 @@ async function runScan(hoursBack, minScore, env, debugMode = false) {
   
   // Fetch fresh trades from API - INCREASED LIMIT from 2000 to 5000
   console.log("Fetching trades...");
-  const tradesRes = await dataApi(`${POLYMARKET_API}/trades?limit=5000`);
-  if (!tradesRes.ok) throw new Error("Trades API error: " + tradesRes.status);
+  const tradesRes = await dataApi(`${POLYMARKET_API}/trades?limit=5000`, { maxAgeMs: 60 * 1000 });   // the scan wants a feed under a minute old; the cycle's later readers share it
+  if (!tradesRes.ok) throw new Error("Trades API error: " + tradesRes.status + (await describeFailure(tradesRes)));
   const allTrades = await tradesRes.json();
   console.log(`Fetched ${allTrades.length} trades`);
   

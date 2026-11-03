@@ -462,15 +462,37 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   readers already ignore. The two offset pagers (`fetchAllPositions`,
   `getWalletClosedRecord`) became one cursor read each. Rate limits (Nov 3
   2026, 15:15 UTC: the scan's 5000-trade read answered 429 and the cycle
-  died with it): a 429 / 5xx page is retried up to `RETRY_MAX` (3) times
-  after a wait (Retry-After honoured, capped 4s), and the GLOBAL trades feed
-  (no user / condition / event / side / window filter) is kept in the isolate
-  for `FEED_TTL_MS` (20s) and served to every read no bigger than the one
-  cached, so the scan, the sport price pass, the active-sports probe and the
-  per-market lookups of one cycle share one paged read. The 5-min cron no
-  longer dies on a failed scan: `runScan` is wrapped, the failure lands in
-  `cronStatus.scan.error` (`fromCache: true`) and the cycle carries on with
-  the last stored signals (KV `signals`). Tests: test/data-api.test.mjs (26).
+  died with it): the published limits are per IP (/v2/trades 300 per 10s,
+  /v2/activity and /v2/positions 200), enforced by Cloudflare, and a
+  cron-triggered Worker reaches a Cloudflare-proxied host from a shared
+  egress address, so the window is shared with every other Worker reading
+  the feed; the same pages answer 200 from elsewhere. Guards: a 429 / 5xx
+  page is retried up to `RETRY_MAX` (3) times after a wait (Retry-After
+  honoured, capped 10s); the GLOBAL trades feed (no user / condition / event /
+  side / window filter) is kept in the isolate for `FEED_TTL_MS` (4 min; the
+  venue's own edge serves that feed from a 300s cache, activity 15s,
+  positions 5s) and served to every read no bigger than the one cached, the
+  scan insisting on a copy under a minute old (`maxAgeMs`), so one cycle
+  pays one paged read; a path that answered 429 after its retries is
+  blocked for `FEED_BLOCK_MS` (60s, or Retry-After if longer) and every read
+  of it in that window fails at once (`blocked: true`) instead of waiting
+  through its own retries (the 15:30 cycle ran past eight minutes when the
+  settlement, line-movement and edge readers each retried the feed the scan
+  had just been refused). `dataApiStats()` (counters, active blocks, the
+  last failure's status / Retry-After / body excerpt) lands in
+  `cronStatus.dataApi` every cycle; `describeFailure` puts the same on the
+  scan's error text. The 5-min cron no longer dies on a failed scan:
+  `runScan` is wrapped, the failure lands in `cronStatus.scan.error`
+  (`fromCache: true`) and the cycle carries on with the last stored signals
+  (KV `signals`); every cycle's scan outcome is pushed to KV `scan_history`
+  (48 cycles) and summarized in `cronStatus.scanRecent` (`okRate`,
+  `failedStreak`, `lastOkAgoMin`, `last` 12) so the daily routine reads the
+  hit rate rather than one cycle. If the scan keeps failing from the
+  Worker's egress while the feed answers elsewhere, the structural fixes
+  are a relay with its own egress (a Supabase edge function the Worker calls
+  with a shared secret) or ingesting Polymarket's real-time trade socket
+  into our own store; both are the owner's call. Tests:
+  test/data-api.test.mjs (43).
 - `src/gamma.js` — Gamma API settlement (`findGammaMarket` handles
   closed markets + multi-market moneyline preference).
 - D1 database `polymarket-scanner` — settled signals (`signals` table);
