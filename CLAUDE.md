@@ -443,6 +443,25 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   the window is `outsideWindow`, sold-out markets settle on the sale. The
   pages show the book's money and this module's record and skill (win rate
   minus average price); its dollars appear only when the book is missing.
+- `src/data-api.js` — Polymarket Data API v2 behind the v1 shapes (Nov 2
+  2026: Polymarket retired Data API v1 that day; every /trades, /activity,
+  /positions and /closed-positions call answered 410 and the 5-min cron died
+  at the whale scan from ~22:30 UTC). `dataApi(v1Url, { fetchImpl })` is the
+  drop-in for `fetch(v1Url)` at every call site (index.js, autotrader.js
+  whale exits, copy.js poll, execution.js tape): it maps the route
+  (/positions -> /v2/positions over OPEN then REDEEMABLE, which is what v1
+  listed; /closed-positions -> status=CLOSED; market -> condition; offset
+  and sizeThreshold dropped), follows the opaque cursor until the v1 `limit`
+  is met (pages of 1000; a 5000-trade scan is five calls), and returns a
+  Response-like { ok, status, json() } whose rows are camelCased with the
+  v1 names added (`v1Row`: token_id -> asset, current_size -> size,
+  current_price -> curPrice, current_value -> currentValue, entry_cost_usdc
+  -> initialValue, total_pnl -> cashPnl, total_size -> totalBought). /v2
+  URLs pass through; a bare-array body (an old test mock) is returned as
+  is. v2 activity carries new types (TAKER_REBATE, CONVERSION...) that the
+  readers already ignore. The two offset pagers (`fetchAllPositions`,
+  `getWalletClosedRecord`) became one cursor read each. Tests:
+  test/data-api.test.mjs (20).
 - `src/gamma.js` — Gamma API settlement (`findGammaMarket` handles
   closed markets + multi-market moneyline preference).
 - D1 database `polymarket-scanner` — settled signals (`signals` table);

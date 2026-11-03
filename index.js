@@ -33,6 +33,7 @@ import { collectBooks, MM_SCHEMA } from "./src/mm-collector.js";
 import { sampleXvenue, xvenueReport, XV_SCHEMA, usTopOfBook } from "./src/xvenue.js";
 import { US_LANE_SCHEMA, recordUsLaneEvents, markUsLaneEvents, settleUsLaneEvents, usLaneReport } from "./src/us-lane.js";
 import { SCALP_SCHEMA, runScalpLane, scalpReport, setScalpHalt } from "./src/scalp.js";
+import { dataApi } from "./src/data-api.js";
 import { getExecReport } from "./src/execution.js";
 import { runExecutor, getExecutorReport, setHalt } from "./src/executor.js";
 import { getCryptoFairValue, refreshCryptoFairValue, annotateCryptoFairValue } from "./src/crypto-fv.js";
@@ -50,7 +51,7 @@ import {
   getFactorCombos, getDiscoveredPatterns
 } from "./src/at-learning.js";
 
-var POLYMARKET_API = "https://data-api.polymarket.com";
+var POLYMARKET_API = "https://data-api.polymarket.com";   // v1 URLs below are translated to v2 by dataApi (src/data-api.js) since v1 retired Nov 2 2026
 // SCORING SYSTEM v8 - Adaptive Learning System
 // Base scores that get multiplied by learned factor weights
 var SCORES = {
@@ -2275,7 +2276,7 @@ async function checkMarketSettlement(marketSlug, signalDetectedAt = null) {
     // If a market's last trade price is at 0.95+ or 0.05-, it's effectively settled
     
     // Fetch recent trades and look for ones matching our slug
-    const tradesRes = await fetch(`${POLYMARKET_API}/trades?limit=2000`);
+    const tradesRes = await dataApi(`${POLYMARKET_API}/trades?limit=2000`);
     if (!tradesRes.ok) {
       console.log(`Trades API error: ${tradesRes.status}`);
       return null;
@@ -2633,7 +2634,7 @@ async function trackLineMovement(env, marketSlug, direction, entryPrice, signalI
 async function checkLineMovement(env, marketSlug) {
   try {
     // Fetch recent trades and find ones for this market
-    const tradesRes = await fetch(`${POLYMARKET_API}/trades?limit=500`);
+    const tradesRes = await dataApi(`${POLYMARKET_API}/trades?limit=500`);
     if (!tradesRes.ok) return null;
     
     const trades = await tradesRes.json();
@@ -3709,7 +3710,7 @@ async function buildOddsComparison(env, sport) {
   const oddsData = await getGameOdds(env, sportKey, 'h2h,spreads');   // KV-cached
   // 5000 (vs 2000) roughly doubles the number of today's liquid games that
   // appear in the window - a market only shows up if it has traded recently.
-  const tradesRes = await fetch(`${POLYMARKET_API}/trades?limit=5000`);
+  const tradesRes = await dataApi(`${POLYMARKET_API}/trades?limit=5000`);
   const allTrades = tradesRes.ok ? await tradesRes.json() : [];
 
   const sportPrefix = sport.toLowerCase() + '-';
@@ -4013,7 +4014,7 @@ var EDGE_SCAN_SPORTS = ["mlb", "nba", "wnba", "nfl", "nhl", "ncaab", "ncaaf", "c
 // so we only spend odds credits on in-season leagues.
 async function detectActiveSports(env) {
   try {
-    const res = await fetch(`${POLYMARKET_API}/trades?limit=5000`);
+    const res = await dataApi(`${POLYMARKET_API}/trades?limit=5000`);
     if (!res.ok) return [];
     const trades = await res.json();
     const present = new Set();
@@ -5569,7 +5570,7 @@ export default {
           }
           if (whaleBalance === null) {
             try {
-              const dataResp = await fetch(`https://data-api.polymarket.com/positions?user=${encodeURIComponent(walletAddress.toLowerCase())}&sizeThreshold=0&limit=100`);
+              const dataResp = await dataApi(`https://data-api.polymarket.com/positions?user=${encodeURIComponent(walletAddress.toLowerCase())}&sizeThreshold=0&limit=100`);
               if (dataResp.ok) {
                 const positions = await dataResp.json();
                 const match = positions.find(p => p.asset === tokenId || p.tokenId === tokenId);
@@ -6175,7 +6176,7 @@ export default {
         const sport = url.searchParams.get("sport") || "nba";
         
         try {
-          const tradesRes = await fetch(`${POLYMARKET_API}/trades?limit=2000`);
+          const tradesRes = await dataApi(`${POLYMARKET_API}/trades?limit=2000`);
           const allTrades = tradesRes.ok ? await tradesRes.json() : [];
           
           // Get unique slugs that might be sports
@@ -6580,7 +6581,7 @@ export default {
           // Also fetch trades to debug matching
           let tradeSlugs = [];
           try {
-            const tradesRes = await fetch(`${POLYMARKET_API}/trades?limit=100`);
+            const tradesRes = await dataApi(`${POLYMARKET_API}/trades?limit=100`);
             if (tradesRes.ok) {
               const trades = await tradesRes.json();
               // Get unique slugs from trades
@@ -6648,7 +6649,7 @@ export default {
         
         // Try events endpoint
         try {
-          const eventRes = await fetch(`${POLYMARKET_API}/events/${slug}`);
+          const eventRes = await dataApi(`${POLYMARKET_API}/events/${slug}`);
           apiResults.eventsEndpoint = {
             status: eventRes.status,
             ok: eventRes.ok,
@@ -6660,7 +6661,7 @@ export default {
         
         // Try markets endpoint
         try {
-          const marketRes = await fetch(`${POLYMARKET_API}/markets/${slug}`);
+          const marketRes = await dataApi(`${POLYMARKET_API}/markets/${slug}`);
           apiResults.marketsEndpoint = {
             status: marketRes.status,
             ok: marketRes.ok,
@@ -6672,7 +6673,7 @@ export default {
         
         // Try markets query
         try {
-          const queryRes = await fetch(`${POLYMARKET_API}/markets?slug=${slug}`);
+          const queryRes = await dataApi(`${POLYMARKET_API}/markets?slug=${slug}`);
           apiResults.marketsQuery = {
             status: queryRes.status,
             ok: queryRes.ok,
@@ -6684,7 +6685,7 @@ export default {
         
         // Try events query
         try {
-          const eventsQueryRes = await fetch(`${POLYMARKET_API}/events?slug=${slug}`);
+          const eventsQueryRes = await dataApi(`${POLYMARKET_API}/events?slug=${slug}`);
           apiResults.eventsQuery = {
             status: eventsQueryRes.status,
             ok: eventsQueryRes.ok,
@@ -6696,7 +6697,7 @@ export default {
         
         // Also get a sample trade to see data structure
         try {
-          const tradeRes = await fetch(`${POLYMARKET_API}/trades?limit=1`);
+          const tradeRes = await dataApi(`${POLYMARKET_API}/trades?limit=1`);
           if (tradeRes.ok) {
             const trades = await tradeRes.json();
             apiResults.sampleTrade = trades[0] || null;
@@ -6707,7 +6708,7 @@ export default {
               
               // Try market by conditionId
               try {
-                const condRes = await fetch(`${POLYMARKET_API}/markets?conditionId=${conditionId}`);
+                const condRes = await dataApi(`${POLYMARKET_API}/markets?conditionId=${conditionId}`);
                 apiResults.marketByConditionId = {
                   status: condRes.status,
                   ok: condRes.ok,
@@ -6719,7 +6720,7 @@ export default {
               
               // Try condition endpoint directly
               try {
-                const condRes2 = await fetch(`${POLYMARKET_API}/conditions/${conditionId}`);
+                const condRes2 = await dataApi(`${POLYMARKET_API}/conditions/${conditionId}`);
                 apiResults.conditionEndpoint = {
                   status: condRes2.status,
                   ok: condRes2.ok,
@@ -6731,7 +6732,7 @@ export default {
               
               // Try prices endpoint
               try {
-                const priceRes = await fetch(`${POLYMARKET_API}/prices?conditionId=${conditionId}`);
+                const priceRes = await dataApi(`${POLYMARKET_API}/prices?conditionId=${conditionId}`);
                 apiResults.pricesByConditionId = {
                   status: priceRes.status,
                   ok: priceRes.ok,
@@ -7586,7 +7587,7 @@ async function runScan(hoursBack, minScore, env, debugMode = false) {
   
   // Fetch fresh trades from API - INCREASED LIMIT from 2000 to 5000
   console.log("Fetching trades...");
-  const tradesRes = await fetch(`${POLYMARKET_API}/trades?limit=5000`);
+  const tradesRes = await dataApi(`${POLYMARKET_API}/trades?limit=5000`);
   if (!tradesRes.ok) throw new Error("Trades API error: " + tradesRes.status);
   const allTrades = await tradesRes.json();
   console.log(`Fetched ${allTrades.length} trades`);
@@ -7681,7 +7682,7 @@ async function runScan(hoursBack, minScore, env, debugMode = false) {
     const batch = uniqueWallets.slice(i, i + 10);
     await Promise.all(batch.map(async (wallet) => {
       try {
-        const res = await fetch(`${POLYMARKET_API}/activity?user=${wallet}&limit=20`);
+        const res = await dataApi(`${POLYMARKET_API}/activity?user=${wallet}&limit=20`);
         if (res.ok) {
           const activity = await res.json();
           walletProfiles[wallet] = {
@@ -8467,7 +8468,7 @@ function formatDirectionForDisplay(direction, marketTitle, marketSlug) {
 async function getWalletDetails(address) {
   try {
     // Fetch activity with more results
-    const res = await fetch(`${POLYMARKET_API}/activity?user=${address}&limit=500`);
+    const res = await dataApi(`${POLYMARKET_API}/activity?user=${address}&limit=500`);
     if (!res.ok) throw new Error("Wallet API error: " + res.status);
     const activity = await res.json();
     
@@ -8576,7 +8577,7 @@ async function getWalletDetails(address) {
 // Get current open positions for a wallet
 async function getWalletPositions(address) {
   try {
-    const res = await fetch(`${POLYMARKET_API}/positions?user=${address}`);
+    const res = await dataApi(`${POLYMARKET_API}/positions?user=${address}`);
     if (!res.ok) throw new Error("Positions API error: " + res.status);
     const positions = await res.json();
     
@@ -8683,7 +8684,7 @@ async function refreshOnChainSkill(env, perRun = 6) {
 // The activity-feed rebuild below is an estimate over a window; this is
 // the venue's own book over the account's life. Null when unavailable.
 async function getWalletOfficialPnL(address) {
-  const res = await fetch(`${POLYMARKET_API}/v2/user-pnl?user=${address}&interval=all&fidelity=1d`);
+  const res = await dataApi(`${POLYMARKET_API}/v2/user-pnl?user=${address}&interval=all&fidelity=1d`);
   if (!res.ok) return null;
   const d = await res.json();
   const pts = d && d.data && d.data.points;
@@ -8711,19 +8712,15 @@ async function getWalletOfficialPnL(address) {
 // graveyard; the lifetime record adds those from the positions on file.
 async function getWalletClosedRecord(address, maxPages = 8) {
   let wins = 0, losses = 0, won = 0, lost = 0, n = 0, truncated = false;
-  for (let page = 0; page < maxPages; page++) {
-    const res = await fetch(`${POLYMARKET_API}/closed-positions?user=${address}&limit=50&offset=${page * 50}`);
-    if (!res.ok) break;
-    const rows = await res.json();
-    if (!Array.isArray(rows) || !rows.length) break;
-    for (const c of rows) {
-      const pnl = parseFloat(c.realizedPnl) || 0;
-      n++;
-      if (pnl > 0) { wins++; won += pnl; } else if (pnl < 0) { losses++; lost += -pnl; }
-    }
-    if (rows.length < 50) break;
-    if (page === maxPages - 1) truncated = true;
+  const cap = 50 * maxPages;   // v2 pages by cursor (dataApi follows it); the cap keeps the old 8-page bound
+  const res = await dataApi(`${POLYMARKET_API}/closed-positions?user=${address}&limit=${cap}`);
+  const rows = res.ok ? await res.json() : [];
+  for (const c of Array.isArray(rows) ? rows : []) {
+    const pnl = parseFloat(c.realizedPnl) || 0;
+    n++;
+    if (pnl > 0) { wins++; won += pnl; } else if (pnl < 0) { losses++; lost += -pnl; }
   }
+  if (n >= cap) truncated = true;
   return { closed: n, wins, losses, won: Math.round(won), lost: Math.round(lost), truncated };
 }
 
@@ -8740,23 +8737,18 @@ function isDeadLeg(p) {
 // 900+ resolved positions, and a market whose position fell off the page
 // used to be read as "no position" and written down as a loss.
 async function fetchAllPositions(address, maxPages = 4) {
-  const out = [];
-  for (let page = 0; page < maxPages; page++) {
-    const res = await fetch(`${POLYMARKET_API}/positions?user=${address}&limit=500&offset=${page * 500}`);
-    if (!res.ok) break;
-    const rows = await res.json();
-    if (!Array.isArray(rows) || rows.length === 0) break;
-    out.push(...rows);
-    if (rows.length < 500) break;
-  }
-  return out;
+  // v2 pages by cursor (dataApi follows it, open and redeemable alike); the cap keeps the old 4-page bound
+  const res = await dataApi(`${POLYMARKET_API}/positions?user=${address}&limit=${500 * maxPages}`);
+  if (!res.ok) return [];
+  const rows = await res.json();
+  return Array.isArray(rows) ? rows : [];
 }
 
 async function getWalletPnL(address) {
   try {
     // Fetch all activity to analyze bets, plus the venue's own book
     const [activityRes, positions, official, closedRec] = await Promise.all([
-      fetch(`${POLYMARKET_API}/activity?user=${address}&limit=500`),
+      dataApi(`${POLYMARKET_API}/activity?user=${address}&limit=500`),
       fetchAllPositions(address).catch(() => []),
       getWalletOfficialPnL(address).catch(() => null),
       getWalletClosedRecord(address).catch(() => null)

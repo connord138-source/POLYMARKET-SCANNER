@@ -50,7 +50,8 @@ check("side token: label match, then Yes/No", sideTokenId(gamma, "Rams") === "N"
   globalThis.fetch = async (url) => {
     const u = String(url);
     if (u.includes("/book?token_id=Y")) return { ok: true, json: async () => ({ bids: [{ price: "0.38", size: "100" }], asks: [{ price: "0.39", size: "50" }] }) };
-    if (u.includes("/trades?market=0xc")) return { ok: true, json: async () => [{ asset: "Y", side: "SELL", price: 0.38, size: 20, timestamp: Math.floor(Date.now() / 1000) + 1 }] };
+    // the tape is read through Data API v2 (src/data-api.js): /v2/trades?condition=..., rows in snake_case under `data`
+    if (u.includes("/v2/trades?") && u.includes("condition=0xc")) return { ok: true, status: 200, json: async () => ({ data: [{ token_id: "Y", side: "SELL", price: 0.38, size: 20, timestamp: Math.floor(Date.now() / 1000) + 1 }], pagination: { has_more: false, next_cursor: null } }) };
     return { ok: false, status: 404 };
   };
   const pos = { id: "p1", marketTitle: "Bills vs. Rams", direction: "Bills", size: 10, entryPrice: 38.5 };
