@@ -460,8 +460,17 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   URLs pass through; a bare-array body (an old test mock) is returned as
   is. v2 activity carries new types (TAKER_REBATE, CONVERSION...) that the
   readers already ignore. The two offset pagers (`fetchAllPositions`,
-  `getWalletClosedRecord`) became one cursor read each. Tests:
-  test/data-api.test.mjs (20).
+  `getWalletClosedRecord`) became one cursor read each. Rate limits (Nov 3
+  2026, 15:15 UTC: the scan's 5000-trade read answered 429 and the cycle
+  died with it): a 429 / 5xx page is retried up to `RETRY_MAX` (3) times
+  after a wait (Retry-After honoured, capped 4s), and the GLOBAL trades feed
+  (no user / condition / event / side / window filter) is kept in the isolate
+  for `FEED_TTL_MS` (20s) and served to every read no bigger than the one
+  cached, so the scan, the sport price pass, the active-sports probe and the
+  per-market lookups of one cycle share one paged read. The 5-min cron no
+  longer dies on a failed scan: `runScan` is wrapped, the failure lands in
+  `cronStatus.scan.error` (`fromCache: true`) and the cycle carries on with
+  the last stored signals (KV `signals`). Tests: test/data-api.test.mjs (26).
 - `src/gamma.js` — Gamma API settlement (`findGammaMarket` handles
   closed markets + multi-market moneyline preference).
 - D1 database `polymarket-scanner` — settled signals (`signals` table);

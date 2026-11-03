@@ -1,5 +1,6 @@
 // Polymarket Data API v2 behind the v1 shapes (src/data-api.js). Run with: node test/data-api.test.mjs
-import { dataApi, v2Request, v1Row, camel, DATA_API, V2_PAGE_MAX } from "../src/data-api.js";
+import { dataApi, v2Request, v1Row, camel, DATA_API, V2_PAGE_MAX, FEED_TTL_MS, RETRY_MAX, _resetFeedCache } from "../src/data-api.js";
+const noSleep = async () => {};
 let pass = 0, fail = 0;
 const check = (n, c, x) => { if (c) pass++; else { fail++; console.error("FAIL:", n, x ?? ""); } };
 const json = (b, status = 200) => ({ ok: status < 400, status, json: async () => b, text: async () => JSON.stringify(b) });
@@ -46,27 +47,59 @@ const json = (b, status = 200) => ({ ok: status < 400, status, json: async () =>
     if (url.pathname === "/v2/activity") return json({ error: "nope" }, 500);
     return json({}, 404);
   };
-  const t = await dataApi(`${DATA_API}/trades?limit=2300`, { fetchImpl });
+  const t = await dataApi(`${DATA_API}/trades?limit=2300`, { fetchImpl, sleep: noSleep });
   const rows = await t.json();
   check("trades: three pages followed by cursor until the v1 limit, trimmed to it, rows in v1 shape", t.ok && rows.length === 2300 && rows[0].proxyWallet === "w0" && rows[2299].proxyWallet === "w2299" && calls.filter(c => c.startsWith("/v2/trades")).length === 3 && calls[0] === "/v2/trades?limit=1000" && /cursor=c1/.test(calls[1]) && /cursor=c2/.test(calls[2]), { n: rows.length, calls });
   calls.length = 0;
-  const p = await dataApi(`${DATA_API}/positions?user=0xw&limit=500&offset=0`, { fetchImpl });
+  const p = await dataApi(`${DATA_API}/positions?user=0xw&limit=500&offset=0`, { fetchImpl, sleep: noSleep });
   const prow = await p.json();
   check("positions: OPEN then REDEEMABLE, one list like v1, no offset sent", p.ok && prow.length === 5 && prow[0].size === 0 && prow[2].size === 10 && calls.length === 2 && /status=OPEN/.test(calls[0]) && /status=REDEEMABLE/.test(calls[1]) && !/offset/.test(calls[0]), { prow, calls });
   calls.length = 0;
-  const c = await dataApi(`${DATA_API}/closed-positions?user=0xw&limit=50&offset=50`, { fetchImpl });
+  const c = await dataApi(`${DATA_API}/closed-positions?user=0xw&limit=50&offset=50`, { fetchImpl, sleep: noSleep });
   check("closed-positions: status=CLOSED", c.ok && (await c.json()).length === 1 && /status=CLOSED/.test(calls[0]), calls);
-  const e = await dataApi(`${DATA_API}/activity?user=0xw&limit=100`, { fetchImpl });
+  const e = await dataApi(`${DATA_API}/activity?user=0xw&limit=100`, { fetchImpl, sleep: noSleep });
   check("a failed first page: ok false with the venue's status, like fetch", e.ok === false && e.status === 500 && (await e.json()) === null);
-  const legacy = await dataApi(`${DATA_API}/trades?limit=10`, { fetchImpl: async () => json([{ proxyWallet: "old", slug: "s" }]) });
+  _resetFeedCache();
+  const legacy = await dataApi(`${DATA_API}/trades?limit=10`, { fetchImpl: async () => json([{ proxyWallet: "old", slug: "s" }]), sleep: noSleep });
   check("a bare-array body (v1-shaped test mock) is passed through untouched", (await legacy.json())[0].proxyWallet === "old");
   let seen = null;
   const pt = await dataApi(`${DATA_API}/v2/user-pnl?user=0xw&interval=all&fidelity=1d`, { fetchImpl: async (u) => { seen = String(u); return json({ data: { points: [] } }); } });
   check("a /v2 URL passes straight through with its raw body", seen === `${DATA_API}/v2/user-pnl?user=0xw&interval=all&fidelity=1d` && (await pt.json()).data.points.length === 0);
   // a later page failing keeps what was read
   let n = 0;
-  const partial = await dataApi(`${DATA_API}/trades?limit=1500`, { fetchImpl: async () => (++n === 1 ? json(page(1000, 0, true, "c1")) : json({}, 503)) });
+  _resetFeedCache();
+  const partial = await dataApi(`${DATA_API}/trades?limit=1500`, { fetchImpl: async () => (++n === 1 ? json(page(1000, 0, true, "c1")) : json({}, 503)), sleep: noSleep });
   check("a later page failing keeps the rows already read", partial.ok && (await partial.json()).length === 1000);
+}
+
+// ---------- rate limits: retries with a wait, and the shared global feed ----------
+{
+  const page = (n, from, hasMore, cursor) => ({ data: Array.from({ length: n }, (_, i) => ({ proxy_wallet: `w${from + i}` })), pagination: { has_more: hasMore, next_cursor: hasMore ? cursor : null } });
+  const json = (b, status = 200, headers = {}) => ({ ok: status < 400, status, json: async () => b, text: async () => JSON.stringify(b), headers: { get: (k) => headers[k.toLowerCase()] ?? null } });
+  _resetFeedCache();
+  let tries = 0; const waits = [];
+  const r = await dataApi(`${DATA_API}/trades?limit=10`, { fetchImpl: async () => (++tries < 3 ? json({ error: "rate limited" }, 429, { "retry-after": "2" }) : json(page(10, 0, false, null))), sleep: async (ms) => { waits.push(ms); } });
+  check("429: retried after a wait (Retry-After honoured), then served", r.ok && (await r.json()).length === 10 && tries === 3 && waits.length === 2 && waits[0] === 2000 && waits[1] >= 2000, { tries, waits });
+  _resetFeedCache();
+  let hard = 0;
+  const h = await dataApi(`${DATA_API}/activity?user=0xw&limit=5`, { fetchImpl: async () => { hard++; return json({ error: "rate limited" }, 429); }, sleep: noSleep });
+  check("429 on every try: gives up after RETRY_MAX retries with ok false 429", h.ok === false && h.status === 429 && hard === RETRY_MAX + 1, { hard });
+  // the global feed: one paged read serves every smaller read in the window; a filtered read never touches it
+  _resetFeedCache();
+  let calls = 0;
+  const feed = async (u) => { calls++; const cur = new URL(u).searchParams.get("cursor"); return json(cur === "c1" ? page(1000, 1000, false, null) : page(1000, 0, true, "c1")); };
+  const a = await dataApi(`${DATA_API}/trades?limit=2000`, { fetchImpl: feed, sleep: noSleep, nowMs: 1_000_000 });
+  const b = await dataApi(`${DATA_API}/trades?limit=500`, { fetchImpl: feed, sleep: noSleep, nowMs: 1_005_000 });
+  const c = await dataApi(`${DATA_API}/trades?limit=2000`, { fetchImpl: feed, sleep: noSleep, nowMs: 1_010_000 });
+  check("global feed: the 2000-row read paid two requests; the later 500 and 2000 reads in the window paid none", (await a.json()).length === 2000 && (await b.json()).length === 500 && (await b.json())[0].proxyWallet === "w0" && (await c.json()).length === 2000 && calls === 2, { calls });
+  const d = await dataApi(`${DATA_API}/trades?limit=3000`, { fetchImpl: feed, sleep: noSleep, nowMs: 1_012_000 });
+  check("global feed: a bigger read than the one cached is fetched fresh", (await d.json()).length === 2000 && calls === 4, { calls });
+  const e = await dataApi(`${DATA_API}/trades?limit=100`, { fetchImpl: feed, sleep: noSleep, nowMs: 1_012_000 + FEED_TTL_MS + 1 });
+  check("global feed: the window expires", (await e.json()).length === 100 && calls === 5, { calls });
+  const before = calls;
+  await dataApi(`${DATA_API}/trades?user=0xw&limit=100`, { fetchImpl: feed, sleep: noSleep, nowMs: 1_012_000 });
+  await dataApi(`${DATA_API}/trades?market=0xc&limit=100`, { fetchImpl: feed, sleep: noSleep, nowMs: 1_012_000 });
+  check("a user or market read is never served from the global feed", calls === before + 2, { calls });
 }
 
 console.log(`data-api: ${pass} passed, ${fail} failed`);
