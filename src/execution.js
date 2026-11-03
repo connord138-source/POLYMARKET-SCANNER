@@ -1,3 +1,4 @@
+import { dataApi } from './data-api.js';
 // Execution shadow ledger. The paper bot fills at Polymarket's quoted price
 // (Gamma's mid) and exits at the CLOB midpoint, so its P&L pays neither the
 // spread nor the taker fee - it is the most optimistic ledger possible. This
@@ -163,7 +164,7 @@ export async function refreshShadows(env, positions, nowMs = Date.now()) {
     checked++;
     let trades = [];
     try {
-      const res = await fetch(`${POLY_DATA_API}/trades?market=${p.execCond}&limit=300`);
+      const res = await dataApi(`${POLY_DATA_API}/trades?market=${p.execCond}&limit=300`);   // v2: market -> condition, via dataApi
       if (res.ok) trades = await res.json();
     } catch (e) { continue; }
     const st = shadowCheckFills(p.exec, trades, p.execToken, nowMs);

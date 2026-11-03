@@ -1,3 +1,4 @@
+import { dataApi } from './data-api.js';
 // ============================================================
 // COPY.JS — followed wallets, and the 'whale_copy' paper lane
 // ============================================================
@@ -277,7 +278,7 @@ export async function pollCopyWallets(env, config = {}, nowMs = Date.now(), fetc
   const polled = await Promise.all(list.map(async (w) => {
     if (!w.enabled) return null;
     try {
-      const res = await fetchImpl(`${POLY_DATA_API}/activity?user=${w.address}&limit=${ACTIVITY_LIMIT}`);
+      const res = await dataApi(`${POLY_DATA_API}/activity?user=${w.address}&limit=${ACTIVITY_LIMIT}`, { fetchImpl });
       if (!res.ok) return { w, error: `HTTP ${res.status}` };
       const acts = await res.json();
       if (!Array.isArray(acts)) return { w, error: 'bad feed' };

@@ -25,6 +25,7 @@ import { COPY_KEYS, appendCopyLog, listCopyInbox } from './copy.js';
 import { attachShadow, refreshShadows, settleShadow, sideTokenId } from './execution.js';
 import { buildIntent, enqueueIntent } from './executor.js';
 import { sanitizeScalpUpdates } from './scalp.js';
+import { dataApi } from './data-api.js';
 
 const GAMMA_API = 'https://gamma-api.polymarket.com';
 const CLOB_API = 'https://clob.polymarket.com';
@@ -434,7 +435,7 @@ async function detectWhaleExits(env, positions) {
 
   for (const wallet of wallets.slice(0, 30)) {   // cap per run
     try {
-      const res = await fetch(`${POLY_DATA_API}/activity?user=${wallet}&limit=100`);
+      const res = await dataApi(`${POLY_DATA_API}/activity?user=${wallet}&limit=100`);
       if (!res.ok) continue;
       const acts = await res.json();
       if (!Array.isArray(acts)) continue;
