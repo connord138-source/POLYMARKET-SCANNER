@@ -215,7 +215,7 @@ export async function dataApi(urlOrPath, { fetchImpl, maxPages = MAX_PAGES, slee
 
 // ---------- the scan's rolling record (KV `scan_history`) ----------
 // One entry per 5-minute cycle: { at, ok, signals, ms, error?, cached? }.
-export const SCAN_HISTORY_MAX = 48;   // four hours of cycles
+export const SCAN_HISTORY_MAX = 288;   // a day of 5-minute cycles
 export function pushScanHistory(list, entry, max = SCAN_HISTORY_MAX) {
   const out = Array.isArray(list) ? list.filter(e => e && e.at) : [];
   out.push(entry);
