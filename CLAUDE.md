@@ -403,6 +403,20 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   an old line, "check the line" instead of value (frontend
   `src/lib/edges.js`): on Oct 30 a Pacers row carried a 30-hour-old 39%
   line while injury news took the market from 34c to 27c.
+  Offers, not displayed prices (Nov 4 2026, owner's "when there are no
+  active bids dont show that as value": an untraded CBB market listed
+  Virginia Tech at 86c with nobody selling it, and the Odds page showed an
+  8% value bet). Every value check prices a side at what a buyer pays:
+  global Polymarket through `gammaSideQuote` (gamma.js; Gamma's bestAsk for
+  outcome 0, 1 - bestBid for outcome 1, nothing when closed / not accepting
+  orders), Polymarket US through `usGameQuote`'s `cost` (ask on the long
+  side, 1 - bid on the short side, no longer the mid as a fallback). A side
+  with no offer carries `noAsk` and gets no edge (`edgesAgainstVegas` /
+  `payOf`), the scanner does not book it (global rows are now booked at the
+  ask), a game priced only from the trade tape gets no value bet, and the
+  re-price marks an open row `noOffer` when its side has no seller
+  (`edgeReprice.noOffers`; the pages hide it as "no offers"). Gamma's
+  `shown` keeps the displayed probability for reference.
 - `src/wallet-ledger.js` — point-in-time wallet skill in D1 (`signal_wallets`
   joined to `signals_log`): excess = win rate minus average entry price over a
   wallet's settled bets, trusted from `LEDGER_MIN_N` (10). `GET /wallets/ledger`

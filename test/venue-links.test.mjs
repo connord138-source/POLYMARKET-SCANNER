@@ -1,6 +1,6 @@
 // Polymarket US page links and quotes, Gamma game lookup. Run with: node test/venue-links.test.mjs
 import { slimEvents, findUsGame, usEventUrl, usCategoryUrl, usLinkFor, usMatchForGame, usGameQuote } from "../src/polymarket-us.js";
-import { gammaMoneylineFromSearch } from "../src/gamma.js";
+import { gammaMoneylineFromSearch, gammaSideQuote } from "../src/gamma.js";
 import { teamNamesOverlap } from "../src/odds.js";
 let pass = 0, fail = 0;
 const check = (n, c, x) => { if (c) pass++; else { fail++; console.error("FAIL:", n, x ?? ""); } };
@@ -52,6 +52,31 @@ const game = { id: "x", awayTeam: "Cleveland Cavaliers", homeTeam: "Atlanta Hawk
 const gm = gammaMoneylineFromSearch(search, "nba", game, { teamNamesOverlap });
 check("gamma: the dated nba-* event on the game's day, moneyline market, sides by nickname", gm && gm.slug === "nba-cle-atl-2026-10-29" && gm.moneyline.away.price === 49 && gm.moneyline.home.price === 52 && gm.url === "https://polymarket.com/event/nba-cle-atl-2026-10-29", gm);
 check("gamma: nothing on the day -> null", gammaMoneylineFromSearch(search, "nba", { ...game, commenceTime: "2026-12-01T00:00:00Z" }, { teamNamesOverlap }) === null);
+
+// Nov 4 2026: price = the offer a buyer pays; a side nobody is selling has none.
+// The real listing (gamma public-search, Mercer vs Virginia Tech, untraded): outcomePrices
+// 14/86, bestAsk 0.28 (Mercer), bestBid null, so Virginia Tech had no seller ("--" on Polymarket).
+{
+  const merc = { slug: "cbb-merc-vtech-2026-11-05", sportsMarketType: "moneyline", outcomes: '["Mercer Bears", "Virginia Tech Hokies"]', outcomePrices: '["0.14", "0.86"]', bestBid: null, bestAsk: 0.28, lastTradePrice: null, volume: null, acceptingOrders: true, closed: false };
+  const q0 = gammaSideQuote(merc, 0), q1 = gammaSideQuote(merc, 1);
+  check("gammaSideQuote: outcome 0 buys at bestAsk, outcome 1 has no seller when bestBid is null", q0.book && q0.ask === 0.28 && q0.bid === null && q1.book && q1.ask === null && Math.abs(q1.bid - 0.72) < 1e-9, { q0, q1 });
+  const two = gammaSideQuote({ bestBid: 0.47, bestAsk: 0.49 }, 1);
+  check("gammaSideQuote: outcome 1 buys at 1 - bestBid, sells at 1 - bestAsk", Math.abs(two.ask - 0.53) < 1e-9 && Math.abs(two.bid - 0.51) < 1e-9, two);
+  check("gammaSideQuote: no book fields -> book false (older data keeps its displayed price)", gammaSideQuote({ outcomePrices: '["0.4","0.6"]' }, 0).book === false);
+  check("gammaSideQuote: closed or not accepting orders -> no offers", gammaSideQuote({ bestBid: 0.4, bestAsk: 0.42, closed: true }, 0).ask === null && gammaSideQuote({ bestBid: 0.4, bestAsk: 0.42, acceptingOrders: false }, 1).ask === null);
+  check("gammaSideQuote: an ask of 1 (100c) is not an offer", gammaSideQuote({ bestBid: null, bestAsk: 1 }, 0).ask === null);
+  const ml = gammaMoneylineFromSearch({ events: [{ slug: "cbb-merc-vtech-2026-11-05", title: "Mercer vs Virginia Tech", markets: [merc] }] }, "ncaab", { id: "g", awayTeam: "Mercer Bears", homeTeam: "Virginia Tech Hokies", commenceTime: "2026-11-06T00:00:00Z" }, { teamNamesOverlap });
+  check("gamma moneyline: Virginia Tech (no seller) has no price and noAsk, its displayed 86 kept as `shown`", ml && ml.moneyline.home && ml.moneyline.home.price === null && ml.moneyline.home.noAsk === true && ml.moneyline.home.shown === 86 && ml.moneyline.home.bid === 72, ml && ml.moneyline.home);
+  check("gamma moneyline: Mercer priced at its offer, 28 (what Polymarket's buy button shows), not the displayed 14", ml && ml.moneyline.away.price === 28 && ml.moneyline.away.ask === 28 && ml.moneyline.away.shown === 14 && ml.moneyline.away.noAsk === false, ml && ml.moneyline.away);
+}
+// Polymarket US: a one-sided book (asks only) -> the short side has no offer
+{
+  const env1 = { SIGNALS_CACHE: kv() };
+  const oneSided = async (u) => ({ ok: true, status: 200, json: async () => (String(u).includes("/bbo") ? { marketData: { bestAsk: { value: "0.30" } } } : { events: [] }) });
+  const q1 = await usGameQuote(env1, "nba", m, { fetchImpl: oneSided, nowMs: now });
+  const longSide = q1 && [q1.teamA, q1.teamB].find(x => x && x.long), shortSide = q1 && [q1.teamA, q1.teamB].find(x => x && !x.long);
+  check("usGameQuote: one-sided book - the long side costs the ask (30), the short side has no offer (cost null, noAsk) instead of the mid", longSide && longSide.cost === 30 && longSide.noAsk === false && shortSide && shortSide.cost === null && shortSide.noAsk === true, q1);
+}
 
 console.log(`venue-links: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

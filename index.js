@@ -9,7 +9,7 @@ import {
 import {
   parseGammaArray, matchOutcomeIndex, fetchGammaJson, findGammaMarket, settleWithGamma
 } from "./src/gamma.js";
-import { gammaGameMoneyline } from "./src/gamma.js";
+import { gammaGameMoneyline, gammaSideQuote } from "./src/gamma.js";
 import { usLinkFor, usMatchForGame, usGameQuote, fetchLeagueEvents as fetchUsLeagueEvents, LEAGUES as US_LEAGUES } from "./src/polymarket-us.js";
 import { enterCopyPicksNow,
   getAutotraderConfig, updateAutotraderConfig, getOpenPositions,
@@ -3864,11 +3864,15 @@ async function buildOddsComparison(env, sport) {
 // Second pass over the compared games: global Polymarket for the games the trade tape
 // missed (Gamma search), and Polymarket US (the regulated venue, its own book) for every
 // game. Each game then says which venue lists it, so the page can label the two.
+// Edge against what a buyer pays (Nov 4 2026): the venue's offer (Polymarket US `cost`, global
+// Polymarket `price` = its ask), never a displayed price; a side nobody is selling has no edge.
+const payOf = (s) => (!s || s.noAsk) ? null : (typeof s.cost === "number" && s.cost > 0 ? s.cost : (s.price || null));
 const edgesAgainstVegas = (g, home, away) => {
   const vh = g.vegas && g.vegas.moneyline && g.vegas.moneyline.home ? g.vegas.moneyline.home.prob : null;
   const va = g.vegas && g.vegas.moneyline && g.vegas.moneyline.away ? g.vegas.moneyline.away.prob : null;
-  const homeEdge = home && home.price && vh !== null && vh !== undefined ? vh - home.price : null;
-  const awayEdge = away && away.price && va !== null && va !== undefined ? va - away.price : null;
+  const ph = payOf(home), pa = payOf(away);
+  const homeEdge = ph !== null && vh !== null && vh !== undefined ? vh - ph : null;
+  const awayEdge = pa !== null && va !== null && va !== undefined ? va - pa : null;
   let bestBet = null;
   if (homeEdge !== null && homeEdge >= 5) bestBet = { team: g.homeTeam, edge: homeEdge, type: 'moneyline' };
   else if (awayEdge !== null && awayEdge >= 5) bestBet = { team: g.awayTeam, edge: awayEdge, type: 'moneyline' };
@@ -3898,6 +3902,8 @@ async function annotateVenues(env, sport, games) {
       const slug = (ml.home && ml.home.slug) || (ml.away && ml.away.slug) || '';
       if (slug && !g.polymarket.url) g.polymarket.url = `https://polymarket.com/event/${slug.replace(/-spread.*$/, '')}`;
       g.polymarket.source = 'trades';
+      // a last trade is not an offer: without a live book, no value bet (the edges stay for reference)
+      if (g.edge) g.edge = { ...g.edge, bestBet: null };
     }
     g.hasPolymarketUs = false;
     try {
@@ -3976,7 +3982,7 @@ var EDGE_ALERT_MIN = 4;   // net devigged points to log as an opportunity
 function usEdgeFor(sport, g, side) {
   const pm = g.polymarketUs && g.polymarketUs.moneyline ? g.polymarketUs.moneyline[side] : null;
   const vegProb = g.vegas && g.vegas.moneyline ? (g.vegas.moneyline[side] || {}).prob : null;
-  if (!pm || !pm.price || vegProb === null || vegProb === undefined) return null;
+  if (!pm || !pm.price || pm.noAsk || vegProb === null || vegProb === undefined) return null;   // nobody offering this side
   const startMs = g.commenceTime ? new Date(g.commenceTime).getTime() : 0;
   if (!startMs || startMs - Date.now() > EDGE_BOOK_MAX_DAYS_OUT * 24 * 3600 * 1000) return null;
   if (startMs - Date.now() < EDGE_PREGAME_MIN_MINUTES * 60 * 1000) return null;
@@ -4090,6 +4096,9 @@ async function scanEdges(env) {
             const foundG = await findGammaMarket(pm.slug, teamName);
             const baseG = gammaBaselineForDirection(foundG, teamName);
             if (typeof baseG.marketProb === "number") livePrice = Math.round(baseG.marketProb * 100);
+            // Nov 4 2026: book at the offer a buyer would pay; a side nobody is selling is not booked
+            const q = foundG && foundG.market && baseG.winIndex >= 0 ? gammaSideQuote(foundG.market, baseG.winIndex) : { book: false };
+            if (q.book) livePrice = q.ask == null ? null : Math.round(q.ask * 100);
           } catch (e) {}
           if (livePrice === null || livePrice <= 3 || livePrice >= 97) continue;
           const liveEdge = vegProb != null ? vegProb - livePrice : null;
@@ -4198,7 +4207,7 @@ async function repriceEdgeOpportunities(env, { max = EDGE_REPRICE_MAX } = {}) {
   const liveEdgeOf = (o) => (typeof o.lastEdgeNet === "number" ? o.lastEdgeNet : o.edgeNet) || 0;
   const open = opps.filter(o => !o.outcome && o.commenceTime && new Date(o.commenceTime).getTime() > now)
     .sort((a, b) => liveEdgeOf(b) - liveEdgeOf(a)).slice(0, max);
-  let repriced = 0, failed = 0, skipped = 0;
+  let repriced = 0, failed = 0, noOffers = 0, skipped = 0;
   for (const o of open) {
     try {
       // the books' side first: it applies even when the venue price cannot be refreshed
@@ -4212,21 +4221,28 @@ async function repriceEdgeOpportunities(env, { max = EDGE_REPRICE_MAX } = {}) {
         if (typeof prob === "number") { o.lastVegasProb = prob; o.lineUpdatedAt = line.updatedAt; o.lineCheckedAt = odds.at || new Date().toISOString(); o.lineMissing = false; linesRefreshed++; }
         else { o.lineMissing = true; linesMissing++; }
       }
-      // the venue side
-      let live = null, priceable = true;
+      // the venue side: the offer a buyer would pay now. noOffer (Nov 4 2026) = the venue has a
+      // book and nobody is selling this side, so the row is not value whatever the line says
+      // (the pages hide it as "no offers"); null = unknown, the flag is left as it was.
+      let live = null, priceable = true, noOffer = null;
       if ((o.venue || "global") === "us") {
         if (typeof o.usLong !== "boolean" || !o.usSlug) priceable = false;
         else {
           const bbo = await usTopOfBook(o.usSlug);
           const cost = bbo ? (o.usLong ? bbo.ask : (bbo.bid != null ? 1 - bbo.bid : null)) : null;
+          if (bbo) noOffer = !(typeof cost === "number" && cost > 0 && cost < 1);
           if (typeof cost === "number" && cost > 0) live = Math.round(cost * 100);
         }
       } else if (o.polySlug) {
         const foundG = await findGammaMarket(o.polySlug, o.team);
         const baseG = gammaBaselineForDirection(foundG, o.team);
-        if (typeof baseG.marketProb === "number") live = Math.round(baseG.marketProb * 100);
+        const q = foundG && foundG.market && baseG.winIndex >= 0 ? gammaSideQuote(foundG.market, baseG.winIndex) : { book: false };
+        if (q.book) { noOffer = q.ask == null; if (q.ask != null) live = Math.round(q.ask * 100); }
+        else if (typeof baseG.marketProb === "number") live = Math.round(baseG.marketProb * 100);
       } else priceable = false;
+      if (noOffer !== null) o.noOffer = noOffer;
       if (!priceable) skipped++;
+      else if (noOffer) noOffers++;
       else if (live === null || live <= 0 || live >= 100) failed++;
       else { o.lastPolyPrice = live; o.pricedAt = new Date().toISOString(); repriced++; }
       const vegas = typeof o.lastVegasProb === "number" ? o.lastVegasProb : o.vegasProb;
@@ -4235,7 +4251,7 @@ async function repriceEdgeOpportunities(env, { max = EDGE_REPRICE_MAX } = {}) {
     } catch (e) { failed++; }
   }
   if (repriced || linesRefreshed || linesMissing) await env.SIGNALS_CACHE.put("edge_opportunities", JSON.stringify(opps), { expirationTtl: 7 * 24 * 3600 });
-  const summary = { at: now, open: open.length, repriced, failed, skipped, linesRefreshed, linesMissing };
+  const summary = { at: now, open: open.length, repriced, failed, skipped, noOffers, linesRefreshed, linesMissing };
   await env.SIGNALS_CACHE.put("edge_reprice_last", JSON.stringify(summary), { expirationTtl: 3600 });
   return summary;
 }
