@@ -61,15 +61,26 @@ jobs:
             "scalp|/xvenue/scalp?hours=168"
             "cryptoFv|/crypto/fairvalue"
             "business|/admin/business"
+            "scanServe|/scan?hours=24&minScore=15"
           )
           args=(--arg fetchedAt "$(date -u +%FT%TZ)")
           prog='{fetchedAt: $fetchedAt}'
           for e in "${endpoints[@]}"; do
             name="${e%%|*}"; path="${e#*|}"
+            t0=$(date +%s%N)
             if ! curl -sf --max-time 45 -H "Authorization: Bearer ${ADMIN_TOKEN}" "$BASE$path" -o "/tmp/snap/$name.json" \
                || ! jq -e . "/tmp/snap/$name.json" >/dev/null 2>&1; then
               echo '{"error":"fetch failed"}' > "/tmp/snap/$name.json"
               echo "WARN: $path failed"
+            fi
+            # The pages' scan route (Today, Scanner, Vegas Odds): keep its timing,
+            # age and counts only, not the ~700 signals.
+            if [ "$name" = "scanServe" ]; then
+              ms=$(( ($(date +%s%N) - t0) / 1000000 ))
+              jq --argjson ms "$ms" '{ms: $ms, error, success, scanTime, hoursScanned, totalSignals, signalsWithWinners, criticalCount,
+                whaleSkill: (if (.whaleSkill|type) == "object" then (.whaleSkill | {annotated, wallets, error}) else .whaleSkill end),
+                debug: ((._debug // {}) | {servedFrom, storedAt, ageS, minScoreUsed, cachedSignalsCount, filteredByTimeWindow})}' \
+                "/tmp/snap/$name.json" > "/tmp/snap/$name.slim" && mv "/tmp/snap/$name.slim" "/tmp/snap/$name.json"
             fi
             args+=(--slurpfile "$name" "/tmp/snap/$name.json")
             prog+=" + {\"$name\": \$$name[0]}"
