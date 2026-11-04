@@ -142,7 +142,7 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   inbox (`drainCopyInbox`) right after loading positions, before the exit
   checks, so the two crons never write the positions list together. Each
   copy carries `copyLagS` (seconds behind the whale's last fill) and
-  `whaleAt`. `getCopyState` lists inbox copies as open and carries `poll`. Amounts (Oct 30 2026): `POST /agents/copy/settings` writes the lane's
+  `whaleAt`. `getCopyState` lists inbox copies as open and carries `poll`. A queued pick kept for the next try (a cap, the slip limit) is stamped by `copyWaitStamp` with `waitReason` / `waitCap` / `waitLive` / `waitAt` / `dropAt` (Nov 4 2026, owner's "show the daily limit reason on the queued rows"), and the Followed wallets page shows it on the row. Amounts (Oct 30 2026): `POST /agents/copy/settings` writes the lane's
   copy* config keys through `copySettingsUpdates` (stake default, smallest
   bet to copy, caps, slip, age; floors/ceilings in `COPY_SETTINGS`), and
   `POST /agents/copy/wallets/size` gives one wallet its own stake
