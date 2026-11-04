@@ -274,6 +274,28 @@ const deps = (signals = []) => ({
   check("minute entry: bot off / lane off / live mode -> nothing opened", (await enterCopyPicksNow(env, { ...cfg, enabled: false }, NOW)).skips["bot off"] === 1 && (await enterCopyPicksNow(env, { ...cfg, copyEntries: false }, NOW)).skips["copy lane off"] === 1 && (await enterCopyPicksNow(env, { ...cfg, paperTradeMode: false }, NOW)).skips["paper only"] === 1);
 }
 
+// copy queue: a kept pick says why it waits (Nov 4 2026, "show the daily limit reason on the queued rows")
+{
+  const { enterCopyPicksNow, copyWaitStamp } = await import("../src/autotrader.js");
+  installFetch(MARKETS.map(m => ({ ...m, clobTokenIds: '["11","22"]' })));
+  const W = "0x" + "d".repeat(40);
+  const pick = { id: `${W}:cfb-jmad-gas-2026-10-10:james madison:9`, wallet: W, nickname: "heater", marketSlug: "cfb-jmad-gas-2026-10-10", title: "James Madison vs. Georgia Southern", outcome: "James Madison", usd: 5000, price: 62, lastTs: NOW - 10 * 60e3 };
+  const today = new Date(NOW).toISOString();
+  const env = makeEnv({ copy_picks: JSON.stringify([pick]), "copy_inbox:at_x": JSON.stringify({ id: "at_x", strategySource: "whale_copy", marketSlug: "other-market", size: 5, openedAt: today }) });
+  const cfg = { ...J(env, "autotrader_config"), copyMaxPerDay: 1, copyMaxAgeMin: 60 };
+  const e = await enterCopyPicksNow(env, cfg, NOW);
+  const q = J(env, "copy_picks");
+  check("copy queue: the daily limit keeps the pick queued, stamped with the reason, the limit and when it drops (an hour after the wallet's buy)", e.entered === 0 && e.skips["copy daily cap"] === 1 && q.length === 1 && q[0].id === pick.id && q[0].waitReason === "copy daily cap" && q[0].waitCap === 1 && q[0].waitAt === new Date(NOW).toISOString() && q[0].dropAt === new Date(pick.lastTs + 60 * 60e3).toISOString(), q[0]);
+  // the price ran away: the live price and the slip limit travel on the pick
+  env.store.copy_picks = JSON.stringify([{ ...pick, price: 50 }]);
+  for (const k of Object.keys(env.store)) if (k.startsWith("copy_inbox:")) delete env.store[k];
+  const e2 = await enterCopyPicksNow(env, { ...cfg, copyMaxPerDay: 10, copyMaxSlipPts: 4 }, NOW);
+  const q2 = J(env, "copy_picks");
+  check("copy queue: a price that ran away keeps the pick queued with the live price and the slip limit", e2.entered === 0 && q2.length === 1 && q2[0].waitReason === "price ran away" && q2[0].waitLive === 62 && q2[0].waitCap === 4, q2[0]);
+  const st = copyWaitStamp({ id: "p", lastTs: 1000 }, { skip: "max open positions", cap: 10 }, { now: 5000, maxAgeMin: 30 });
+  check("copyWaitStamp: reason, cap, no live price, drop time from the wallet's fill", st.waitReason === "max open positions" && st.waitCap === 10 && st.waitLive === null && st.dropAt === new Date(1000 + 30 * 60e3).toISOString() && st.waitAt === new Date(5000).toISOString(), st);
+}
+
 // lanes: the whale-signal lane paused on its own, the crew lane still places
 {
   installFetch(MARKETS);

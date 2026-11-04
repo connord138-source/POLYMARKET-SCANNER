@@ -3103,13 +3103,13 @@ async function openCopyPick(env, config, pick, { stillOpen, counts, now = Date.n
   const maxSlip = config.copyMaxSlipPts ?? 4;
   const maxAgeMs = (config.copyMaxAgeMin ?? 60) * 60e3;
   if (now - (pick.lastTs || 0) > maxAgeMs) return { skip: 'too old', drop: true };
-  if ((counts.copyOpened || 0) >= maxPerDay) return { skip: 'copy daily cap' };
+  if ((counts.copyOpened || 0) >= maxPerDay) return { skip: 'copy daily cap', cap: maxPerDay };
   if (stillOpen.some(p => p.marketSlug === pick.marketSlug)) return { skip: 'already holding market', drop: true };
   // The wallet's own stake when it has one (set on the Followed wallets page), else the lane default.
   const size = Math.round((pick.betSize > 0 ? pick.betSize : (config.copyBetSize ?? 5)) * 100) / 100;
-  if (config.maxDailyTrades > 0 && counts.tradesOpened >= config.maxDailyTrades) return { skip: 'daily trade cap' };
-  if (config.maxDailySpend > 0 && counts.totalSpent + size > config.maxDailySpend) return { skip: 'daily spend cap' };
-  if (laneOpenCap(config, 'whale_copy') > 0 && laneOpenCount(stillOpen, 'whale_copy') >= laneOpenCap(config, 'whale_copy')) return { skip: 'max open positions' };
+  if (config.maxDailyTrades > 0 && counts.tradesOpened >= config.maxDailyTrades) return { skip: 'daily trade cap', cap: config.maxDailyTrades };
+  if (config.maxDailySpend > 0 && counts.totalSpent + size > config.maxDailySpend) return { skip: 'daily spend cap', cap: config.maxDailySpend };
+  if (laneOpenCap(config, 'whale_copy') > 0 && laneOpenCount(stillOpen, 'whale_copy') >= laneOpenCap(config, 'whale_copy')) return { skip: 'max open positions', cap: laneOpenCap(config, 'whale_copy') };
 
   // Honest fill: the live Gamma price of the outcome the wallet bought.
   let gamma = null;
@@ -3123,7 +3123,7 @@ async function openCopyPick(env, config, pick, { stillOpen, counts, now = Date.n
   if (idx < 0 || typeof gamma.gammaPrices[idx] !== 'number' || isNaN(gamma.gammaPrices[idx])) return { skip: 'no outcome match', drop: true };
   const live = Math.round(gamma.gammaPrices[idx] * 1000) / 10;
   if (live <= 5 || live >= 95) return { skip: 'price extreme', drop: true };
-  if (typeof pick.price === 'number' && live - pick.price > maxSlip) return { skip: 'price ran away' };
+  if (typeof pick.price === 'number' && live - pick.price > maxSlip) return { skip: 'price ran away', live, cap: maxSlip };
 
   const category = categorizeMarket(pick.title || '');
   const position = {
@@ -3160,6 +3160,20 @@ async function openCopyPick(env, config, pick, { stillOpen, counts, now = Date.n
   return { position, reason, category, size, live };
 }
 
+// A queued pick that is kept for the next try, stamped with why it is waiting
+// (Nov 4 2026, owner: "show the daily limit reason on the queued rows"; the
+// page read "queued" for 25 minutes while the daily copy cap blocked it):
+// waitReason = the gate's skip, waitCap = the limit involved, waitLive = the
+// live price when it ran away, waitAt = this try, dropAt = when the age gate
+// drops it (the wallet's last fill + copyMaxAgeMin).
+export function copyWaitStamp(pick, r, { now = Date.now(), maxAgeMin = 60 } = {}) {
+  const out = { ...pick, waitReason: r && r.skip ? r.skip : null, waitAt: new Date(now).toISOString() };
+  out.waitCap = r && r.cap != null ? r.cap : null;
+  out.waitLive = r && r.live != null ? r.live : null;
+  out.dropAt = new Date((pick.lastTs || now) + maxAgeMin * 60e3).toISOString();
+  return out;
+}
+
 async function copyQueueAndEntered(env) {
   let queue = [], enteredIds = [];
   try { queue = await env.SIGNALS_CACHE.get(COPY_KEYS.PICKS, { type: 'json' }) || []; } catch (e) {}
@@ -3187,7 +3201,7 @@ async function enterCopyPicks(env, config, dailyStats, stillOpen, results) {
   for (const pick of queue) {
     if (entered.has(pick.id)) continue;
     const r = await openCopyPick(env, config, pick, { stillOpen, counts: dailyStats });
-    if (!r.position) { skip(r.skip); if (r.drop) entered.add(pick.id); else remaining.push(pick); continue; }
+    if (!r.position) { skip(r.skip); if (r.drop) entered.add(pick.id); else remaining.push(copyWaitStamp(pick, r, { maxAgeMin: config.copyMaxAgeMin ?? 60 })); continue; }
     stillOpen.push(r.position);
     entered.add(pick.id);
     stat.entered++;
@@ -3228,9 +3242,9 @@ export async function enterCopyPicksNow(env, config, nowMs = Date.now()) {
   for (const pick of queue) {
     if (entered.has(pick.id)) continue;
     const r = await openCopyPick(env, config, pick, { stillOpen, counts, now: nowMs });
-    if (!r.position) { skip(r.skip); if (r.drop) entered.add(pick.id); else remaining.push(pick); continue; }
+    if (!r.position) { skip(r.skip); if (r.drop) entered.add(pick.id); else remaining.push(copyWaitStamp(pick, r, { now: nowMs, maxAgeMin: config.copyMaxAgeMin ?? 60 })); continue; }
     const pos = { ...r.position, _copyLog: { reason: r.reason, category: r.category } };
-    try { await env.SIGNALS_CACHE.put(COPY_KEYS.INBOX + pos.id, JSON.stringify(pos), { expirationTtl: 2 * 24 * 3600 }); } catch (e) { skip('inbox write failed'); remaining.push(pick); continue; }
+    try { await env.SIGNALS_CACHE.put(COPY_KEYS.INBOX + pos.id, JSON.stringify(pos), { expirationTtl: 2 * 24 * 3600 }); } catch (e) { skip('inbox write failed'); remaining.push(copyWaitStamp(pick, { skip: 'inbox write failed' }, { now: nowMs, maxAgeMin: config.copyMaxAgeMin ?? 60 })); continue; }
     stillOpen.push(pos);
     entered.add(pick.id);
     stat.entered++;
