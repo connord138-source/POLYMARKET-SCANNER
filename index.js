@@ -4493,7 +4493,7 @@ export default {
         // token still runs a full live scan.
         const { hours, minScore } = scanParams(url.searchParams.get("hours"), url.searchParams.get("minScore"));
         const live = url.searchParams.get("live") === "1" && isAdminAuthorized(request, env);
-        const result = (!live && await scanFromStored(env, hours, minScore)) || await runScan(hours, minScore, env);
+        const result = (!live && await scanFromStored(env, hours, minScore, ctx)) || await runScan(hours, minScore, env);
         return new Response(JSON.stringify(viewer.policy ? degradeFor("scan", result, viewer.plan) : result), {
           headers: { ...corsHeaders, "Content-Type": "application/json" }
         });
@@ -7626,12 +7626,41 @@ export default {
 // the scan's own filter, annotates the whale record, and returns runScan's
 // shape. Kept in the isolate SCAN_SERVE_TTL_MS per (hours, minScore). null
 // when there is no stored list, and the route falls back to a live scan.
+// Shared copy (Nov 4 2026): a cold build annotates every signal's wallets
+// (~1,400 signals, ~1,900 wallets) and took 7.7s live, and Cloudflare spreads
+// visitors over many isolates, so the isolate cache alone left most visitors
+// waiting. The built answer is also kept in KV `scan_serve:<hours>:<minScore>`
+// for SCAN_SERVE_KV_TTL_S; a copy younger than SCAN_SERVE_KV_FRESH_MS is
+// served as is, an older one is served at once and rebuilt in the background
+// (one rebuild per key per minute, `scan_serve_lock:<key>`).
 const SCAN_SERVE_TTL_MS = 60 * 1000;
+const SCAN_SERVE_KV_FRESH_MS = 2 * 60 * 1000;
+const SCAN_SERVE_KV_TTL_S = 15 * 60;
 const scanServeCache = new Map();
-async function scanFromStored(env, hoursBack, minScore) {
+async function scanFromStored(env, hoursBack, minScore, ctx) {
   const key = `${hoursBack}:${minScore}`;
   const hit = scanServeCache.get(key);
   if (hit && Date.now() - hit.at < SCAN_SERVE_TTL_MS) return hit.result;
+  let shared = null;
+  try { shared = await env.SIGNALS_CACHE.get(`scan_serve:${key}`, { type: "json" }); } catch (e) { shared = null; }
+  if (shared && shared.result && Number.isFinite(shared.builtAt)) {
+    scanServeCache.set(key, { at: Date.now(), result: shared.result });
+    if (Date.now() - shared.builtAt >= SCAN_SERVE_KV_FRESH_MS && ctx && typeof ctx.waitUntil === "function") {
+      ctx.waitUntil((async () => {
+        try {
+          if (await env.SIGNALS_CACHE.get(`scan_serve_lock:${key}`)) return;
+          await env.SIGNALS_CACHE.put(`scan_serve_lock:${key}`, "1", { expirationTtl: 60 });
+          await buildScanServe(env, hoursBack, minScore);
+        } catch (e) { /* the next visitor tries again */ }
+      })());
+    }
+    return shared.result;
+  }
+  return buildScanServe(env, hoursBack, minScore, ctx);
+}
+// ctx given (a visitor waiting): the shared copy is written in the background.
+async function buildScanServe(env, hoursBack, minScore, ctx = null) {
+  const key = `${hoursBack}:${minScore}`;
   let stored = null, savedAt = null;
   try {
     [stored, savedAt] = await Promise.all([
@@ -7647,10 +7676,12 @@ async function scanFromStored(env, hoursBack, minScore) {
   const ageS = savedAt ? Math.round((Date.now() - Date.parse(savedAt)) / 1000) : null;
   const result = scanResultShape(final, {
     hoursBack, scanTime: savedAt || new Date().toISOString(), whaleSkill,
-    debug: { servedFrom: "stored", storedAt: savedAt, ageS, minScoreUsed: minScore, cachedSignalsCount: stored.length, filteredByTimeWindow: windowed.length, afterEventStartedFilter: notStarted.length },
+    debug: { servedFrom: "stored", storedAt: savedAt, ageS, builtAt: new Date().toISOString(), minScoreUsed: minScore, cachedSignalsCount: stored.length, filteredByTimeWindow: windowed.length, afterEventStartedFilter: notStarted.length },
   });
   scanServeCache.set(key, { at: Date.now(), result });
   if (scanServeCache.size > 32) scanServeCache.delete(scanServeCache.keys().next().value);
+  const write = env.SIGNALS_CACHE.put(`scan_serve:${key}`, JSON.stringify({ builtAt: Date.now(), result }), { expirationTtl: SCAN_SERVE_KV_TTL_S }).catch(() => null);   // the isolate copy still serves
+  if (ctx && typeof ctx.waitUntil === "function") ctx.waitUntil(write); else await write;
   return result;
 }
 
