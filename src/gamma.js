@@ -273,6 +273,26 @@ export {
   fetchGammaJson, findGammaMarket, settleWithGamma
 };
 
+// What a buyer pays for outcome i of a two-outcome Gamma market (0-1), or null
+// when nobody is selling it. Nov 4 2026: an untraded college basketball market
+// listed Virginia Tech at 86c (outcomePrices) with no seller at all (bestBid
+// null, so Polymarket's own buy button read "--"), and the Odds page called it
+// an 8% value bet. Gamma's bestBid / bestAsk are the first outcome's book:
+// outcome 0 buys at bestAsk, outcome 1 at 1 - bestBid. A closed market or one
+// not accepting orders has no offers. `book` is false when the market carries
+// neither field (older data), and the caller keeps its displayed price.
+export function gammaSideQuote(market, i) {
+  const has = !!market && (('bestBid' in market) || ('bestAsk' in market));
+  if (!has) return { book: false, ask: null, bid: null };
+  if (market.closed === true || market.acceptingOrders === false) return { book: true, ask: null, bid: null };
+  const bb = Number(market.bestBid), ba = Number(market.bestAsk);
+  const bidOk = market.bestBid != null && Number.isFinite(bb) && bb > 0 && bb < 1;
+  const askOk = market.bestAsk != null && Number.isFinite(ba) && ba > 0 && ba < 1;
+  const ask = i === 0 ? (askOk ? ba : null) : (bidOk ? 1 - bb : null);
+  const bid = i === 0 ? (bidOk ? bb : null) : (askOk ? 1 - ba : null);
+  return { book: true, ask, bid };
+}
+
 // A game's moneyline on global Polymarket, from Gamma's public search ("Cavaliers Hawks").
 // The trade tape only shows games with recent whale trades, so the Odds vs books page looks
 // the rest up here. Pure part first (testable), fetch wrapper after.
@@ -291,7 +311,15 @@ export function gammaMoneylineFromSearch(data, sport, game, { teamNamesOverlap }
     let outcomes, prices;
     try { outcomes = JSON.parse(ml.outcomes || '[]'); prices = JSON.parse(ml.outcomePrices || '[]'); } catch (x) { continue; }
     if (!Array.isArray(outcomes) || outcomes.length !== 2) continue;
-    const side = (i) => ({ price: Math.round(Number(prices[i]) * 100), slug: e.slug, team: outcomes[i] });
+    // price = what a buyer pays (the offer, as on Polymarket's buy button); `shown` is the
+    // displayed probability; noAsk = nobody is selling this side, so it has no price to beat.
+    const side = (i) => {
+      const shown = Math.round(Number(prices[i]) * 100);
+      const q = gammaSideQuote(ml, i);
+      if (!q.book) return { price: shown, shown, slug: e.slug, team: outcomes[i] };
+      const ask = q.ask == null ? null : Math.round(q.ask * 100);
+      return { price: ask, ask, bid: q.bid == null ? null : Math.round(q.bid * 100), shown, noAsk: ask == null, slug: e.slug, team: outcomes[i] };
+    };
     let h = null, a = null;
     outcomes.forEach((o, i) => { if (!h && teamNamesOverlap(o, home)) h = side(i); else if (!a && teamNamesOverlap(o, away)) a = side(i); });
     if (!h && !a) continue;

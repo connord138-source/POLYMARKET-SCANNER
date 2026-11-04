@@ -412,9 +412,11 @@ export async function usGameQuote(env, league, hit, deps = {}) {
     if (mid == null) return null;
     const long = hit.drawable || !!s.long;
     const yes = long ? mid : 1 - mid;
-    // what a taker pays for this side right now: the ask on the long side, 1 - bid on the short side
-    const cost = long ? (bbo.ask || mid) : (bbo.bid ? 1 - bbo.bid : mid);
-    return { price: Math.round(yes * 100), cost: Math.round(cost * 100), slug, bid: bbo.bid, ask: bbo.ask, last: bbo.last, team: s.team, long };
+    // what a taker pays for this side right now: the ask on the long side, 1 - bid on the short
+    // side; null (noAsk) when nobody is offering that side (Nov 4 2026: it used to fall back to
+    // the mid, which read as a price you could buy at)
+    const offer = long ? (bbo.ask || null) : (bbo.bid ? 1 - bbo.bid : null);
+    return { price: Math.round(yes * 100), cost: offer == null ? null : Math.round(offer * 100), noAsk: offer == null, slug, bid: bbo.bid, ask: bbo.ask, last: bbo.last, team: s.team, long };
   };
   const [a, b] = await Promise.all([sidePrice(hit.aIdx), sidePrice(1 - hit.aIdx)]);
   if (!a && !b) return null;
