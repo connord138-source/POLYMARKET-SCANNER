@@ -79,7 +79,7 @@ jobs:
               ms=$(( ($(date +%s%N) - t0) / 1000000 ))
               jq --argjson ms "$ms" '{ms: $ms, error, success, scanTime, hoursScanned, totalSignals, signalsWithWinners, criticalCount,
                 whaleSkill: (if (.whaleSkill|type) == "object" then (.whaleSkill | {annotated, wallets, error}) else .whaleSkill end),
-                debug: ((._debug // {}) | {servedFrom, storedAt, ageS, minScoreUsed, cachedSignalsCount, filteredByTimeWindow})}' \
+                debug: ((._debug // {}) | {servedFrom, storedAt, ageS, builtAt, minScoreUsed, cachedSignalsCount, filteredByTimeWindow})}' \
                 "/tmp/snap/$name.json" > "/tmp/snap/$name.slim" && mv "/tmp/snap/$name.slim" "/tmp/snap/$name.json"
             fi
             args+=(--slurpfile "$name" "/tmp/snap/$name.json")

@@ -503,8 +503,13 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   (`scanParams`, hours 1-168, minScore 0-1000). GET /scan (Nov 4 2026) is
   served from the cron's work by `scanFromStored` in index.js: KV `signals`
   cut to the request's window, the whale record annotated, kept 60s per
-  (hours, minScore) in the isolate, `scanTime` = KV `signals_saved_at` (the
-  last successful cron save), `_debug.servedFrom: 'stored'` with `ageS`. It
+  (hours, minScore) in the isolate and 15 min in KV `scan_serve:<h>:<m>`
+  for every isolate (a cold build annotates ~1,900 wallets and took 7.7s
+  live; a copy older than 2 min is served at once and rebuilt in the
+  background via ctx.waitUntil, one rebuild per key per minute through
+  `scan_serve_lock:<key>`), `scanTime` = KV `signals_saved_at` (the last
+  successful cron save), `_debug.servedFrom: 'stored'` with `ageS` and
+  `builtAt`; the snapshot carries the route slim as `scanServe` (`ms`). It
   used to run a full live scan per page load (45-160s, refused ~40% of the
   time by Data API v2, and the Scanner re-fetched it every two minutes), so
   the Today page, Scanner and Vegas Odds needed refreshes to load.
