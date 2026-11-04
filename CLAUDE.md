@@ -497,6 +497,19 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   with a shared secret) or ingesting Polymarket's real-time trade socket
   into our own store; both are the owner's call. Tests:
   test/data-api.test.mjs (43).
+- `src/scan-window.js` — the whale scan's window (`scanWindow`, shared by
+  runScan, the cron's failed-scan fallback and GET /scan), the route's
+  answer shape (`scanResultShape`, runScan's keys) and its clamped params
+  (`scanParams`, hours 1-168, minScore 0-1000). GET /scan (Nov 4 2026) is
+  served from the cron's work by `scanFromStored` in index.js: KV `signals`
+  cut to the request's window, the whale record annotated, kept 60s per
+  (hours, minScore) in the isolate, `scanTime` = KV `signals_saved_at` (the
+  last successful cron save), `_debug.servedFrom: 'stored'` with `ageS`. It
+  used to run a full live scan per page load (45-160s, refused ~40% of the
+  time by Data API v2, and the Scanner re-fetched it every two minutes), so
+  the Today page, Scanner and Vegas Odds needed refreshes to load.
+  `?live=1` with the admin token still runs a live scan; with no stored list
+  the route falls back to one. Tests: test/scan-window.test.mjs (15).
 - `src/gamma.js` — Gamma API settlement (`findGammaMarket` handles
   closed markets + multi-market moneyline preference).
 - D1 database `polymarket-scanner` — settled signals (`signals` table);

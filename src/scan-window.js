@@ -30,3 +30,37 @@ export function scanWindow(signals, { hoursBack, minScore, nowMs = Date.now(), i
   const final = active.filter(s => s.score >= minScore).sort((a, b) => b.score - a.score);
   return { windowed, notStarted, active, final };
 }
+
+// The scan route's answer from a windowed list, in the shape runScan returns
+// (Nov 4 2026: GET /scan used to run a full live scan on every page load,
+// 45-160s each and refused about 40% of the time by Data API v2, so the
+// Today page, the Scanner and Vegas Odds sat on their loaders and needed
+// refreshes; the route now serves the list the 5-minute cron keeps fresh).
+// Call after the wallet-skill annotation, which sets hasWinningWallet.
+export function scanResultShape(final, { hoursBack, scanTime, whaleSkill = null, debug = {} } = {}) {
+  const list = Array.isArray(final) ? final : [];
+  return {
+    success: true,
+    scanTime,
+    hoursScanned: hoursBack,
+    totalSignals: list.length,
+    signalsWithWinners: list.filter((s) => s.hasWinningWallet).length,
+    whaleSkill,
+    criticalCount: list.filter((s) => s.score >= 100).length,
+    highRiskCount: list.filter((s) => s.score >= 80 && s.score < 100).length,
+    mediumRiskCount: list.filter((s) => s.score >= 60 && s.score < 80).length,
+    totalSuspiciousVolume: list.reduce((sum, s) => sum + (Number(s.suspiciousVolume) || 0), 0),
+    signals: list,
+    _debug: debug,
+  };
+}
+
+// The route's parameters, clamped: hours 1-168 (the stored list is 7 days),
+// minScore 0-1000; anything unreadable takes the route's defaults.
+export function scanParams(hoursRaw, minScoreRaw, { hours = 48, minScore = 40 } = {}) {
+  const h = parseInt(hoursRaw, 10), m = parseInt(minScoreRaw, 10);
+  return {
+    hours: Number.isFinite(h) && h > 0 ? Math.min(h, 168) : hours,
+    minScore: Number.isFinite(m) && m >= 0 ? Math.min(m, 1000) : minScore,
+  };
+}
