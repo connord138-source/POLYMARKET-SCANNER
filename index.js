@@ -34,7 +34,7 @@ import { sampleXvenue, xvenueReport, XV_SCHEMA, usTopOfBook } from "./src/xvenue
 import { US_LANE_SCHEMA, recordUsLaneEvents, markUsLaneEvents, settleUsLaneEvents, usLaneReport } from "./src/us-lane.js";
 import { SCALP_SCHEMA, runScalpLane, scalpReport, setScalpHalt } from "./src/scalp.js";
 import { dataApi, dataApiStats, describeFailure, pushScanHistory, scanHistorySummary } from "./src/data-api.js";
-import { scanWindow } from "./src/scan-window.js";
+import { scanWindow, scanResultShape, scanParams } from "./src/scan-window.js";
 import { getExecReport } from "./src/execution.js";
 import { runExecutor, getExecutorReport, setHalt } from "./src/executor.js";
 import { getCryptoFairValue, refreshCryptoFairValue, annotateCryptoFairValue } from "./src/crypto-fv.js";
@@ -4489,9 +4489,11 @@ export default {
 
     try {
       if (path === "/scan" || path === "/api/scan") {
-        const hours = parseInt(url.searchParams.get("hours") || "48");
-        const minScore = parseInt(url.searchParams.get("minScore") || "40");
-        const result = await runScan(hours, minScore, env);
+        // Served from the cron's work (scanFromStored); ?live=1 with the admin
+        // token still runs a full live scan.
+        const { hours, minScore } = scanParams(url.searchParams.get("hours"), url.searchParams.get("minScore"));
+        const live = url.searchParams.get("live") === "1" && isAdminAuthorized(request, env);
+        const result = (!live && await scanFromStored(env, hours, minScore)) || await runScan(hours, minScore, env);
         return new Response(JSON.stringify(viewer.policy ? degradeFor("scan", result, viewer.plan) : result), {
           headers: { ...corsHeaders, "Content-Type": "application/json" }
         });
@@ -7615,6 +7617,43 @@ export default {
   }
 };
 
+// GET /scan from the cron's work (Nov 4 2026). The route used to run a full
+// live scan per page load: 45-160s each, refused ~40% of the time by Data API
+// v2, and the Scanner re-fetched it every two minutes, so pages sat on their
+// loaders, needed refreshes, and spent the rate limit the cron needs. The
+// 5-minute cron's runScan keeps KV `signals` (the 7-day merged list) and
+// `signals_saved_at` fresh; this cuts that list to the request's window with
+// the scan's own filter, annotates the whale record, and returns runScan's
+// shape. Kept in the isolate SCAN_SERVE_TTL_MS per (hours, minScore). null
+// when there is no stored list, and the route falls back to a live scan.
+const SCAN_SERVE_TTL_MS = 60 * 1000;
+const scanServeCache = new Map();
+async function scanFromStored(env, hoursBack, minScore) {
+  const key = `${hoursBack}:${minScore}`;
+  const hit = scanServeCache.get(key);
+  if (hit && Date.now() - hit.at < SCAN_SERVE_TTL_MS) return hit.result;
+  let stored = null, savedAt = null;
+  try {
+    [stored, savedAt] = await Promise.all([
+      env.SIGNALS_CACHE.get("signals", { type: "json" }),
+      env.SIGNALS_CACHE.get("signals_saved_at"),
+    ]);
+  } catch (e) { return null; }
+  if (!Array.isArray(stored) || !stored.length) return null;
+  const { windowed, notStarted, final } = scanWindow(stored, { hoursBack, minScore, isStarted: scanEventStarted, isOver: scanEventOver });
+  let whaleSkill = null;
+  try { whaleSkill = await annotateSignalWalletSkill(env, final); }
+  catch (e) { whaleSkill = { error: String(e && e.message || e).slice(0, 80) }; }
+  const ageS = savedAt ? Math.round((Date.now() - Date.parse(savedAt)) / 1000) : null;
+  const result = scanResultShape(final, {
+    hoursBack, scanTime: savedAt || new Date().toISOString(), whaleSkill,
+    debug: { servedFrom: "stored", storedAt: savedAt, ageS, minScoreUsed: minScore, cachedSignalsCount: stored.length, filteredByTimeWindow: windowed.length, afterEventStartedFilter: notStarted.length },
+  });
+  scanServeCache.set(key, { at: Date.now(), result });
+  if (scanServeCache.size > 32) scanServeCache.delete(scanServeCache.keys().next().value);
+  return result;
+}
+
 // The scan's event-date checks, passed to scanWindow (src/scan-window.js).
 function scanEventStarted(s) {
   return hasEventStarted(s.marketTitle, s.marketSlug, s.avgEntryPrice / 100);
@@ -8392,6 +8431,8 @@ function formatDirectionForDisplay(direction, marketTitle, marketSlug) {
       await env.SIGNALS_CACHE.put("signals", JSON.stringify(allSignals), {
         expirationTtl: 60 * 60 * 24 * 7 // 7 days
       });
+      // when the list was last refreshed: GET /scan serves it with this time (scanFromStored)
+      try { await env.SIGNALS_CACHE.put("signals_saved_at", new Date(now).toISOString(), { expirationTtl: 60 * 60 * 24 * 7 }); } catch (e) {}
       console.log(`Saved ${allSignals.length} signals to KV`);
     } catch (e) {
       console.log("KV write error:", e.message);

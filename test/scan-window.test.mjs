@@ -1,5 +1,5 @@
 // The whale scan's window (src/scan-window.js). Run with: node test/scan-window.test.mjs
-import { scanWindow } from "../src/scan-window.js";
+import { scanWindow, scanResultShape, scanParams } from "../src/scan-window.js";
 let pass = 0, fail = 0;
 const check = (n, c, x) => { if (c) pass++; else { fail++; console.error("FAIL:", n, x ?? ""); } };
 
@@ -36,6 +36,28 @@ const week = Array.from({ length: 15000 }, (_, i) => sig(`s${i}`, (i % 168) + 0.
 const cut = scanWindow(week, { hoursBack: 48, minScore: 30, nowMs: now }).final;
 check("a week of 15,000 stored signals is cut to the last 48h (~2/7 of them), never the whole list", cut.length > 4000 && cut.length < 4400 && cut.every(s => Date.parse(s.firstTradeTime) >= now - 48 * 3600e3), cut.length);
 check("final is sorted best first", cut.every((s, i) => i === 0 || cut[i - 1].score >= s.score));
+
+// the route's answer from the stored list: runScan's shape
+{
+  const final = [
+    { id: "a", score: 120, suspiciousVolume: 50000, hasWinningWallet: true },
+    { id: "b", score: 90, suspiciousVolume: 20000 },
+    { id: "c", score: 65, suspiciousVolume: "1000" },
+    { id: "d", score: 45 },
+  ];
+  const r = scanResultShape(final, { hoursBack: 24, scanTime: "2026-11-04T01:00:00Z", whaleSkill: { annotated: 4 }, debug: { servedFrom: "stored" } });
+  const keys = ["success", "scanTime", "hoursScanned", "totalSignals", "signalsWithWinners", "whaleSkill", "criticalCount", "highRiskCount", "mediumRiskCount", "totalSuspiciousVolume", "signals", "_debug"];
+  check("scanResultShape carries every key runScan returns", keys.every(k => k in r), Object.keys(r));
+  check("scanResultShape counts: total, winners, bands, volume (a missing or string volume does not poison the sum)", r.success === true && r.totalSignals === 4 && r.signalsWithWinners === 1 && r.criticalCount === 1 && r.highRiskCount === 1 && r.mediumRiskCount === 1 && r.totalSuspiciousVolume === 71000 && r.hoursScanned === 24 && r.scanTime === "2026-11-04T01:00:00Z" && r.signals === final && r._debug.servedFrom === "stored", r);
+  check("scanResultShape on nothing", scanResultShape(null, { hoursBack: 48 }).totalSignals === 0 && scanResultShape(null, {}).signals.length === 0);
+}
+// the route's parameters
+{
+  const d = scanParams(null, null);
+  check("scanParams: defaults 48h / 40 when absent", d.hours === 48 && d.minScore === 40, d);
+  check("scanParams: the pages' values pass through", JSON.stringify(scanParams("24", "15")) === JSON.stringify({ hours: 24, minScore: 15 }));
+  check("scanParams: hours clamped to the stored week, junk takes the defaults, 0 minScore kept", scanParams("9999", "0").hours === 168 && scanParams("9999", "0").minScore === 0 && scanParams("abc", "-5").hours === 48 && scanParams("abc", "-5").minScore === 40 && scanParams("0", "x").hours === 48);
+}
 
 console.log(`scan-window: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
