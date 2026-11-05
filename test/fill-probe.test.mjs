@@ -29,6 +29,16 @@ const json = (b, status = 200) => ({ ok: status < 400, status, json: async () =>
     { venue: "us", probe: null }, { venue: "us" },
   ]);
   check("summary: per venue and look, rates over the reads that answered, median size when there, average move when gone, seconds after the sample", sum.us.n === 3 && sum.us.t0.n === 3 && sum.us.t0.read === 2 && sum.us.t0.noBook === 1 && sum.us.t0.there === 2 && sum.us.t0.thereRate === 1 && sum.us.t0.enough === 1 && sum.us.t0.enoughRate === 0.5 && sum.us.t0.qtyMed === 80 && sum.us.t0.avgS === 4 && sum.us.t1.thereRate === Math.round(100 / 3) / 100 && sum.us.t1.goneAvgMoveC === 3 && sum.kalshi.n === 1 && sum.kalshi.t0.thereRate === 1 && sum.kalshi.t0.enoughRate === null, JSON.stringify(sum));
+  const pnl = summarizeProbes([
+    { venue: "us", pnlC: -1, pnlUsd: -0.3, usd: 10, probe: { t0: { there: true }, t1: { there: true } } },
+    { venue: "us", pnlC: 3, pnlUsd: 0.9, usd: 10, probe: { t0: { there: true }, t1: { there: false, moveC: 2 } } },
+    { venue: "us", pnlC: 20, pnlUsd: 6, usd: 10, probe: { t0: { there: false, moveC: 8 }, t1: { there: false, moveC: 9 } } },
+    { venue: "us", probe: { t0: { there: true }, t1: { there: true } } },
+    { venue: "us", pnlC: 5, pnlUsd: 1.5, usd: 10, probe: { t0: { there: null, note: "no book" }, t1: { there: true } } },
+  ]);
+  const t0p = pnl.us.t0, t1p = pnl.us.t1;
+  check("summary: closed scalps split by the look's answer (open rows and unread looks left out of the split)", t0p.pnlThere.n === 2 && t0p.pnlThere.wins === 1 && t0p.pnlThere.avgPnlC === 1 && t0p.pnlThere.pnlUsd === 0.6 && t0p.pnlThere.roiPct === 3 && t0p.pnlGone.n === 1 && t0p.pnlGone.avgPnlC === 20 && t0p.pnlGone.hitRate === 1 && t1p.pnlThere.n === 2 && t1p.pnlThere.avgPnlC === 2 && t1p.pnlGone.n === 2 && t1p.pnlGone.avgPnlC === 11.5, JSON.stringify(pnl));
+  check("summary: no closed scalps -> empty splits", sum.us.t0.pnlThere.n === 0 && sum.us.t0.pnlThere.avgPnlC === null && sum.us.t0.pnlGone.roiPct === null, JSON.stringify(sum.us.t0));
   check("summary: nothing probed -> empty", Object.keys(summarizeProbes([{ venue: "us" }])).length === 0 && Object.keys(summarizeProbes(null)).length === 0);
 }
 

@@ -70,8 +70,15 @@ export async function runFillProbe(env, positions, { fetchImpl, nowMs = Date.now
 // with enough size behind it, the median contracts left when it was, the
 // average move against us when it was not, and how many seconds after the
 // sampler's look the read happened.
+// pnlThere / pnlGone (Nov 5 2026): the closed scalps' dry result split by that
+// look's answer. A live order only fills when the price is still there, so
+// pnlThere at t0 is the record a live lane would have booked; the 27 most
+// recent Polymarket US scalps read -0.25c a share where it was there and
+// +21.3c where it was gone, i.e. the dry profit can sit in quotes a live
+// order never gets.
 export function summarizeProbes(rows) {
-  const mk = () => ({ n: 0, there: 0, sized: 0, enough: 0, qtys: [], moveSum: 0, moveN: 0, sSum: 0, sN: 0, noBook: 0 });
+  const pk = () => ({ n: 0, wins: 0, cSum: 0, usd: 0, staked: 0 });
+  const mk = () => ({ n: 0, there: 0, sized: 0, enough: 0, qtys: [], moveSum: 0, moveN: 0, sSum: 0, sN: 0, noBook: 0, pThere: pk(), pGone: pk() });
   const out = {};
   for (const r of rows || []) {
     const p = r && r.probe; if (!p || !p.t0) continue;
@@ -85,12 +92,17 @@ export function summarizeProbes(rows) {
       if (x.there == null) { s.noBook++; continue; }
       if (x.there) { s.there++; if (x.qty != null) { s.sized++; s.qtys.push(x.qty); if (x.enough) s.enough++; } }
       else if (x.moveC != null) { s.moveSum += x.moveC; s.moveN++; }
+      if (r.pnlC != null && r.pnlUsd != null) {
+        const b = x.there ? s.pThere : s.pGone;
+        b.n++; b.cSum += r.pnlC; b.usd += r.pnlUsd; b.staked += r.usd || 0; if (r.pnlUsd > 0) b.wins++;
+      }
     }
   }
   const fin = (s) => {
     const read = s.n - s.noBook;
     const q = [...s.qtys].sort((a, b) => a - b);
-    return { n: s.n, read, there: s.there, thereRate: read ? r2(s.there / read) : null, enough: s.enough, enoughRate: s.sized ? r2(s.enough / s.sized) : null, qtyMed: q.length ? q[Math.floor(q.length / 2)] : null, goneAvgMoveC: s.moveN ? r2(s.moveSum / s.moveN) : null, avgS: s.sN ? r2(s.sSum / s.sN) : null, noBook: s.noBook };
+    const pf = (b) => ({ n: b.n, wins: b.wins, hitRate: b.n ? r2(b.wins / b.n) : null, avgPnlC: b.n ? r2(b.cSum / b.n) : null, pnlUsd: r2(b.usd), roiPct: b.staked ? r2(100 * b.usd / b.staked) : null });
+    return { n: s.n, read, there: s.there, thereRate: read ? r2(s.there / read) : null, enough: s.enough, enoughRate: s.sized ? r2(s.enough / s.sized) : null, qtyMed: q.length ? q[Math.floor(q.length / 2)] : null, goneAvgMoveC: s.moveN ? r2(s.moveSum / s.moveN) : null, avgS: s.sN ? r2(s.sSum / s.sN) : null, noBook: s.noBook, pnlThere: pf(s.pThere), pnlGone: pf(s.pGone) };
   };
   return Object.fromEntries(Object.entries(out).map(([v, o]) => [v, { n: o.n, t0: fin(o.t0), t1: fin(o.t1) }]));
 }
