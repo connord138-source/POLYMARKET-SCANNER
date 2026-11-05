@@ -324,8 +324,13 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   results sit on the position as `probe` and travel onto the `scalp_trades`
   row (`probe` JSON, migration 0014). `scalpReport.probe` =
   `summarizeProbes` per venue: t0/t1 `{ n, read, there, thereRate, enough,
-  enoughRate, qtyMed, goneAvgMoveC, avgS, noBook }`; the card shows it in one
-  line. Rule: a live flip of a venue is only worth it when t0 thereRate is
+  enoughRate, qtyMed, goneAvgMoveC, avgS, noBook, pnlThere, pnlGone }`; the
+  card shows it in one line. `pnlThere` / `pnlGone` (Nov 5 2026) split the
+  closed scalps' dry result by that look's answer (n, wins, hitRate,
+  avgPnlC, pnlUsd, roiPct): a live order only fills where the price is still
+  there, so t0 `pnlThere` is the record to read for a live flip, not the
+  whole dry record (the 27 most recent US scalps read -0.25c a share where it
+  was there and +21.3c where it was gone). Rule: a live flip of a venue is only worth it when t0 thereRate is
   high (say 70%+) with the size there; a low t1 rate says the edge is
   short-lived and a faster sampler would be needed first. Live entries are
   not probed (their fill is the evidence).
