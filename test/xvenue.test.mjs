@@ -1,5 +1,5 @@
 // Cross-venue sampler. Run with: node test/xvenue.test.mjs
-import { teamMatch, matchPairs, attachUs, isLive, analyzeSeries, sampleXvenue, xvenueReport, collectCrosses, kalshiFee, usFee, XV_LIVE_BEFORE_MS, XV_LIVE_AFTER_MS } from "../src/xvenue.js";
+import { teamMatch, teamMatchScore, orientLegs, matchPairs, attachUs, isLive, analyzeSeries, sampleXvenue, xvenueReport, collectCrosses, kalshiFee, usFee, XV_LIVE_BEFORE_MS, XV_LIVE_AFTER_MS } from "../src/xvenue.js";
 let pass = 0, fail = 0;
 const check = (n, c, x) => { if (c) pass++; else { fail++; console.error("FAIL:", n, x ?? ""); } };
 
@@ -23,6 +23,18 @@ const P = (q, outs, start, toks = ["t0", "t1"], extra = {}) => ({ question: q, o
   check("live window", !isLive(p0, p0.startMs - XV_LIVE_BEFORE_MS - 1) && isLive(p0, p0.startMs - 60e3) && isLive(p0, p0.startMs + 2 * 3600e3) && !isLive(p0, p0.startMs + XV_LIVE_AFTER_MS + 1));
   const n = attachUs("nfl", pairs, [{ slug: "aec-nfl-lar-buf-2026-10-12", startMs: Date.parse("2026-10-13T00:15:00Z"), teams: ["Los Angeles Rams", "Buffalo Bills"] }, { slug: "aec-nfl-x", startMs: Date.parse("2026-10-20T00:00:00Z"), teams: ["Miami Dolphins", "Buffalo Bills"] }]);
   check("attachUs: US market attached with the long side mapped to the right leg", n === 1 && pairs[0].usSlug === "aec-nfl-lar-buf-2026-10-12" && pairs[0].usLongIdx === 1 && pairs[1].usSlug === undefined, JSON.stringify(pairs.map(p => [p.usSlug, p.usLongIdx])));
+}
+{
+  // Nov 8 2026: Tulsa and Tulane share "tul", so the loose college rule passes both ways round and the
+  // sampler paired Kalshi's Tulsa leg with Polymarket's Tulane (a 57c "cross" for 176 minutes).
+  check("team: shared-prefix college names pass the loose rule but score far below the exact name", teamMatch("cfb", "Tulsa", "Tulane") && teamMatchScore("cfb", "Tulsa", "Tulsa") === 100 && teamMatchScore("cfb", "Tulsa", "Tulane") === 1 && teamMatchScore("cfb", "Kansas St", "Kansas State") === 5 && teamMatchScore("cfb", "Kansas", "Kansas State") === 0 && teamMatchScore("nfl", "Buffalo", "Bills") === 50 && teamMatchScore("cfb", "Miami (FL)", "Miami") === 50);
+  const evt = "KXNCAAFGAME-26NOV07TULTLSA", exp = "2026-11-08T04:00:00Z", start = "2026-11-08T00:00:00Z";
+  const kal = [{ ...K(evt, "Tulane", exp, "0.62", "0.63"), ticker: `${evt}-TULN` }, { ...K(evt, "Tulsa", exp, "0.37", "0.38"), ticker: `${evt}-TLSA` }];
+  const pairs = matchPairs("cfb", kal, [P("Tulsa vs. Tulane", ["Tulsa", "Tulane"], start, ["tTulsa", "tTulane"])], Date.parse("2026-11-07T22:00:00Z"));
+  check("match: Kalshi's Tulane leg pairs with Polymarket's Tulane, not Tulsa", pairs.length === 1 && pairs[0].legs[0].team === "Tulane" && pairs[0].legs[0].pToken === "tTulane" && pairs[0].legs[0].kTicker === `${evt}-TULN` && pairs[0].legs[1].team === "Tulsa" && pairs[0].legs[1].pToken === "tTulsa", JSON.stringify(pairs));
+  const n = attachUs("cfb", pairs, [{ slug: "aec-cfb-tulsa-tulane-2026-11-07", startMs: Date.parse(start), teams: ["Tulsa", "Tulane"] }]);
+  check("attachUs: the US long side (Tulsa) maps to the Tulsa leg", n === 1 && pairs[0].usSlug === "aec-cfb-tulsa-tulane-2026-11-07" && pairs[0].usLongIdx === 1, JSON.stringify(pairs[0]));
+  check("orient: a tie both ways round is ambiguous and skipped; a clear pairing returns its map", orientLegs("cfb", ["Tulsa", "Tulsa"], ["Tulsa", "Tulsa"]) === null && orientLegs("nfl", ["Buffalo", "Los Angeles"], ["Rams", "Bills"]).map.join() === "1,0" && orientLegs("nfl", ["Buffalo", "Miami"], ["Rams", "Bills"]) === null);
 }
 {
   check("kalshi fee", Math.abs(kalshiFee(0.5) - 0.0175) < 1e-9);

@@ -9,7 +9,7 @@
 // sells, makers below $10M/month earn nothing. Retail limit 25 req/s per IP.
 // Secrets PMUS_KEY_ID / PMUS_SECRET_KEY are pushed by
 // .github/workflows/push-polymarket-us-key.yml (keys at polymarket.us/developer).
-import { teamMatch } from './xvenue.js';
+import { teamMatchScore } from './xvenue.js';
 
 export const PMUS_API = 'https://api.polymarket.us';
 export const PMUS_GATEWAY = 'https://gateway.polymarket.us';
@@ -162,8 +162,10 @@ export function nameScore(a, b) {
   return short.every(w => (sig(w) ? long.includes(w) : long.some(x => x.startsWith(w)))) ? 1 : 0;
 }
 export const nameMatch = (a, b) => nameScore(a, b) > 0;
-const sideScore = (league, side, name) => (ALIAS_LEAGUES.has(league) ? (teamMatch(league, side.team, name) || (side.alt && teamMatch(league, side.alt, name)) ? 2 : 0) : Math.max(nameScore(side.team, name), nameScore(side.alt, name)));
-const sameName = (league, a, b) => (ALIAS_LEAGUES.has(league) ? teamMatch(league, a, b) : nameScore(a, b) > 0);
+// Graded for the alias leagues (xvenue's teamMatchScore: exact 100 beats a looser match), so a
+// shared-prefix college pair (Tulsa / Tulane, Nov 8 2026) routes to the exact side, not the first one.
+const sideScore = (league, side, name) => (ALIAS_LEAGUES.has(league) ? Math.max(teamMatchScore(league, side.team, name), side.alt ? teamMatchScore(league, side.alt, name) : 0) : Math.max(nameScore(side.team, name), nameScore(side.alt, name)));
+const nameStrength = (league, a, b) => (ALIAS_LEAGUES.has(league) ? teamMatchScore(league, a, b) : nameScore(a, b));
 const sideOf = (s) => ({ team: (s.team && s.team.name) || s.description || '', alt: s.description || '', long: !!s.long });
 // Events -> matchable rows. A two-sided moneyline keeps its long/short sides; a soccer match (one
 // Yes/No market per team plus the draw) becomes one row whose sides each carry their own market slug.
@@ -237,7 +239,8 @@ export async function resolveUsMarket(env, intent, deps = {}) {
     const leg = legOfIntent(intent);
     if (!leg) return { ok: false, reason: 'cannot tell which team the intent is long' };
     const teams = teamsOfTitle(intent.marketTitle);
-    const opponent = teams.length === 2 ? (sameName(leagues[0], teams[0], leg.team) ? teams[1] : teams[0]) : null;
+    // the opponent is the title team that names the leg less well (both can pass the loose rule)
+    const opponent = teams.length === 2 ? (nameStrength(leagues[0], teams[0], leg.team) >= nameStrength(leagues[0], teams[1], leg.team) ? teams[1] : teams[0]) : null;
     const nowMs = deps.nowMs || Date.now();
     let hit = null; const errs = [];
     for (const league of leagues) {

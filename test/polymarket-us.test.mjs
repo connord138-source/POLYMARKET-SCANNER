@@ -46,6 +46,10 @@ const check = (n, c, x) => { if (c) pass++; else { fail++; console.error("FAIL:"
   const hitL = matchUsEvent("nfl", ev, "Bills", "Rams", now), hitS = matchUsEvent("nfl", ev, "Rams", "Bills", now);
   check("match: the team's side decides long/short; opponent must match", hitL && hitL.slug === "aec-nfl-buf-lar-2026-10-25" && hitL.side === "long" && hitS && hitS.side === "short" && matchUsEvent("nfl", ev, "Bills", "Jets", now) === null && matchUsEvent("nfl", ev, "Jets", null, now).side === "long", JSON.stringify([hitL, hitS]));
   check("match: outside the time window -> none", matchUsEvent("nfl", ev, "Bills", null, now + 5 * 86400e3) === null);
+  // Nov 8 2026: Tulsa / Tulane share a prefix and both pass the loose college rule; each routes to its own side.
+  const tul = slimEvents({ events: [{ title: "Tulane vs. Tulsa", startDate: "2026-11-08T00:00:00Z", markets: [{ slug: "aec-cfb-tulane-tulsa-2026-11-07", sportsMarketTypeV2: "SPORTS_MARKET_TYPE_MONEYLINE", marketSides: [{ description: "Tulane", long: true, team: { name: "Tulane" } }, { description: "Tulsa", long: false, team: { name: "Tulsa" } }] }] }] });
+  const tT = Date.parse("2026-11-07T22:00:00Z"), hitTulsa = matchUsEvent("cfb", tul, "Tulsa", "Tulane", tT), hitTulane = matchUsEvent("cfb", tul, "Tulane", "Tulsa", tT);
+  check("match: shared-prefix college teams route to their own side, whichever is listed first", hitTulsa && hitTulsa.team === "Tulsa" && hitTulsa.side === "short" && hitTulane && hitTulane.team === "Tulane" && hitTulane.side === "long", JSON.stringify([hitTulsa, hitTulane]));
 }
 // ---- wider league map (Oct 25 2026): tennis / soccer / UFC / esports ----
 {
