@@ -210,9 +210,10 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   US big four + CFB/WNBA/CBB, tennis atp/wta/itf, UFC/boxing, esports
   lol/cs2/dota2/valorant/cod, ~45 soccer leagues; `marketKind` keeps
   totals/spreads/handicaps/game winners out; `legOfIntent` turns NO on
-  "Will X win" into X's other side; big-four names go through xvenue's
-  `teamMatch`, everything else through `nameScore` (normalized tokens,
-  exact beats subset); soccer is one Yes/No market per team, so
+  "Will X win" into X's other side; big-four and college names go through
+  xvenue's `teamMatchScore` (graded, exact 100 beats a looser match, so a
+  shared-prefix pair like Tulsa / Tulane routes to the exact side), everything
+  else through `nameScore` (normalized tokens, exact beats subset); soccer is one Yes/No market per team, so
   `slimEvents` rows carry a slug per side (`drawable`)),
   `usLevels` (effective-price levels for long/short x buy/sell),
   `buildUsOrder`, `fillFromExecutions`. 25 req/s per IP; 429 -> 1s retry.
@@ -224,7 +225,13 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   cross Polymarket US after both fees (`kUsCross`; `crosses`, Oct 30 2026,
   lists those minutes with next-row persistence, the US shares shown and the
   games they came from, since one game carrying most of a sport's crosses is a
-  mis-mapped Kalshi leg). `boot` shows the last
+  mis-mapped Kalshi leg). Pairing (Nov 8 2026): `teamMatch` alone passes
+  both ways round for college names that share a three-letter start (Tulsa /
+  Tulane: the sampler paired Kalshi's Tulsa leg with Polymarket's Tulane and
+  read a 57c cross for 176 minutes), so `matchPairs` and `attachUs` pick the
+  orientation with the higher `teamMatchScore` (`orientLegs`: exact 100, pro
+  alias 50, college per-word 3 same / 2 abbreviation / 1 shared start) and
+  skip a tie. `boot` shows the last
   stage the minute cron reached (`xv_boot`). Pregame scans
   (Oct 2026) found no cross-venue or neg-risk arbitrage — see
   `docs/PROFIT-AVENUES.md` Part 2 before proposing structural-arb features.

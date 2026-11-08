@@ -83,11 +83,43 @@ export function teamMatch(sport, kalshiTeam, polyOutcome) {
   return false;
 }
 
+// How strongly a label names a Polymarket outcome, 0 = not the same team.
+// teamMatch alone can pass both ways round in one game: in college the
+// per-word rule takes a shared three-letter start, so "Tulsa" passes for
+// "Tulane" (Nov 8 2026: the sampler paired Kalshi's Tulsa leg with
+// Polymarket's Tulane and read a 57c Kalshi/US cross for 176 minutes). So
+// an exact name scores 100, a pro city / nickname / extra-word match 50, and
+// a college per-word match sums 3 for the same word, 2 for an abbreviation
+// (one word the start of the other: "St" / "State"), 1 for a shared start;
+// the callers take the stronger pairing.
+export function teamMatchScore(sport, kalshiTeam, polyOutcome) {
+  const k = norm(kalshiTeam).replace(/ wins?$/, ''), p = norm(polyOutcome);
+  if (!k || !p) return 0;
+  if (k === p) return 100;
+  if (!teamMatch(sport, kalshiTeam, polyOutcome)) return 0;
+  const kw = k.split(' '), pw = p.split(' ');
+  if (sport !== 'cfb' || kw.length !== pw.length) return 50;
+  return kw.reduce((s, w, i) => s + (w === pw[i] ? 3 : (w.startsWith(pw[i]) || pw[i].startsWith(w)) ? 2 : 1), 0);
+}
+
+// Pure: which way two labels pair with two outcomes. { map: [0, 1] } = label
+// i is outcome i, { map: [1, 0] } = crossed, with the pairing's score; null
+// when neither way pairs both, or both ways score the same (ambiguous: the
+// game is skipped rather than guessed).
+export function orientLegs(sport, labels, outcomes) {
+  const s = (i, j) => teamMatchScore(sport, labels[i], outcomes[j]);
+  const a = s(0, 0) && s(1, 1) ? s(0, 0) + s(1, 1) : 0;
+  const b = s(0, 1) && s(1, 0) ? s(0, 1) + s(1, 0) : 0;
+  if (a === b) return null;
+  return a > b ? { map: [0, 1], score: a } : { map: [1, 0], score: b };
+}
+
 const parseArr = (v) => { if (Array.isArray(v)) return v; try { return JSON.parse(v || '[]'); } catch { return []; } };
 
 // Pure: Kalshi open game markets (two per event) + Polymarket moneyline
 // markets -> matched legs. Both teams must match and the start times must be
-// within 14h (Kalshi's expected_expiration is game end + settlement buffer).
+// within 14h (Kalshi's expected_expiration is game end + settlement buffer);
+// the strongest pairing wins (orientLegs), then the nearest start.
 export function matchPairs(sport, kalshiMarkets, polyMarkets, nowMs = Date.now()) {
   const byEvent = new Map();
   for (const m of kalshiMarkets || []) {
@@ -113,12 +145,10 @@ export function matchPairs(sport, kalshiMarkets, polyMarkets, nowMs = Date.now()
     let best = null;
     for (const p of poly) {
       if (Number.isFinite(kEnd) && Math.abs(p.start - kEnd) > 14 * 3600e3) continue;
-      let map = null;
-      if (teamMatch(sport, teams[0], p.outcomes[0]) && teamMatch(sport, teams[1], p.outcomes[1])) map = [0, 1];
-      else if (teamMatch(sport, teams[0], p.outcomes[1]) && teamMatch(sport, teams[1], p.outcomes[0])) map = [1, 0];
-      if (!map) continue;
+      const o = orientLegs(sport, teams, p.outcomes);
+      if (!o) continue;
       const dt = Number.isFinite(kEnd) ? Math.abs(p.start - kEnd) : 0;
-      if (!best || dt < best.dt) best = { p, map, dt };
+      if (!best || o.score > best.score || (o.score === best.score && dt < best.dt)) best = { p, map: o.map, dt, score: o.score };
     }
     if (!best) continue;
     const { p, map } = best;
@@ -192,19 +222,23 @@ async function usLeagueGames(league) {
 }
 
 // Pure: attach each pair's Polymarket US market (slug + which leg is the US
-// instrument's long side). Both teams must match and kickoffs be within 6h.
+// instrument's long side). Both teams must match and kickoffs be within 6h;
+// the strongest pairing wins (orientLegs), so a long side is never mapped to
+// the wrong leg on a shared-prefix match.
 export function attachUs(sport, pairs, usGames) {
   let n = 0;
   for (const p of pairs || []) {
     if (!p || !Array.isArray(p.legs) || p.legs.length !== 2) continue;
+    let best = null;
     for (const g of usGames || []) {
       if (!Number.isFinite(g.startMs) || Math.abs(g.startMs - p.startMs) > 6 * 3600e3) continue;
-      let longIdx = -1;
-      if (teamMatch(sport, g.teams[0], p.legs[0].team) && teamMatch(sport, g.teams[1], p.legs[1].team)) longIdx = 0;
-      else if (teamMatch(sport, g.teams[0], p.legs[1].team) && teamMatch(sport, g.teams[1], p.legs[0].team)) longIdx = 1;
-      if (longIdx < 0) continue;
-      p.usSlug = g.slug; p.usLongIdx = longIdx; n++; break;
+      const o = orientLegs(sport, g.teams || [], [p.legs[0].team, p.legs[1].team]);
+      if (!o) continue;
+      const dt = Math.abs(g.startMs - p.startMs);
+      if (!best || o.score > best.score || (o.score === best.score && dt < best.dt)) best = { g, longIdx: o.map[0], score: o.score, dt };
     }
+    if (!best) continue;
+    p.usSlug = best.g.slug; p.usLongIdx = best.longIdx; n++;
   }
   return n;
 }
