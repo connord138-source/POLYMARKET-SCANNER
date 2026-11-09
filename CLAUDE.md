@@ -322,6 +322,35 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   proposal: 200 dry Kalshi scalps positive after fees at > 50% hit, read by
   the daily routine; the flip is the owner's and needs the Kalshi keys
   (push-kalshi-key.yml).
+- `src/scalp-accounts.js` — member scalpers (Nov 9 2026, owner's "he would
+  have access to his own auto-scalper that he would connect his own
+  polymarket us account to via his desk interface on our site", free, the
+  site never holds or moves member money). A Desk member connects his own
+  Polymarket US key (`POST /scalper/me/connect` {keyId, secretKey}): checked
+  with a balance read on his key, sealed AES-GCM (HKDF from the worker secret
+  `MEMBER_KEY_SECRET`, else `ADMIN_TOKEN`; the user id is the additional
+  data; rotating that secret means members reconnect), KV
+  `scalper_acct:<userId>` + index `scalper_accts`; never returned (only
+  `keyTail`). The minute cron runs `runMemberScalpers` right after the
+  owner's lane on the same stale US quotes: each member's lane is
+  `runScalpLane(credsEnv(env, creds), { account: userId })`, i.e. the same
+  code on his key (Kalshi never), with his own KV keys (`scalpKeys(userId)`:
+  `scalp_open@<id>` etc.), the owner's lane rules (hold, min edge, shares
+  shown, sports) and his own size / open / daily cap / loss stop within
+  `MEMBER_LIMITS` (`memberConfig`); D1 rows carry `account` (migration
+  0015; the owner's report reads `account IS NULL`), no fill probe. LIVE for
+  a member only when the owner allows it (`POST /scalper/accounts/live`
+  {userId, liveAllowed}, admin; `effectiveMode` runs a live pick dry with
+  `liveBlocked` until then). Member routes (`/scalper/me*`, signed in + Desk
+  plan, `scalperMember` in index.js): GET state (`memberState`: his account,
+  balance refreshed once a minute, key errors, his lane slim), POST connect /
+  settings {mode off|dry|live, maxUsd, maxOpen, maxPerDay, dailyLossUsd} /
+  resume (clears his own halt) / disconnect (refused while a scalp is open:
+  switch Off first). `GET /scalper/accounts` (admin) lists them; snapshot
+  key `scalpers` (no emails or keys, user id cut to 8). Pending the owner's
+  question to Polymarket US on third-party use of a member's key. Also fixed
+  that day: `runScalpLane` returned before the exits when every venue was
+  off, stranding open scalps. Tests: test/scalp-accounts.test.mjs (29).
 - `src/fill-probe.js` — the fill probe (Nov 2 2026, owner's "Lets do it!").
   The dry record assumes the order fills at the quote the sampler saw once a
   minute; a live order goes out seconds later and stale quotes get picked

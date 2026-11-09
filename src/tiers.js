@@ -55,6 +55,8 @@ export const ROUTE_POLICY = [
   { test: (p) => p.startsWith('/wallet') || p.startsWith('/wallets') || p.startsWith('/signals') || p.startsWith('/history') || p.startsWith('/analytics'), tier: 'pro' },
   { test: (p) => p.startsWith('/autotrader') || p.startsWith('/paper') || p.startsWith('/forge') || p.startsWith('/speed') || p.startsWith('/xvenue'), tier: 'pro' },
   { test: (p) => p.startsWith('/api/'), tier: 'desk' },
+  // A member's own auto-scalper on his own Polymarket US account (src/scalp-accounts.js).
+  { test: (p) => p.startsWith('/scalper/me'), tier: 'desk' },
 ];
 
 export function policyFor(path, method = 'GET') {

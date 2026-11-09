@@ -45,6 +45,14 @@ import { kalshiAuthConfigured, kalshiPlaceOrder, kalshiPositionQty, KalshiError 
 import { runFillProbe, summarizeProbes, PROBE_DELAY_MS } from './fill-probe.js';
 
 export const SCALP_KEYS = { OPEN: 'scalp_open', HALT: 'scalp_halt', LAST: 'scalp_last', DAY: 'scalp_day:', RECENT: 'scalp_recent' };
+// Storage keys per account (Nov 9 2026, member scalpers, src/scalp-accounts.js):
+// null = the owner's lane (the keys above); a member's lane keeps its own open
+// scalps, day, halt, last pass and recent list under `<key>@<userId>`.
+export function scalpKeys(account = null) {
+  if (!account) return SCALP_KEYS;
+  const a = String(account);
+  return { OPEN: `scalp_open@${a}`, HALT: `scalp_halt@${a}`, LAST: `scalp_last@${a}`, DAY: `scalp_day@${a}:`, RECENT: `scalp_recent@${a}` };
+}
 export const SCALP_VENUES = { us: 'Polymarket US', kalshi: 'Kalshi' };
 export const SCALP_DEFAULTS = {
   scalpMode: 'dry',          // off | dry | live: the Polymarket US venue
@@ -72,6 +80,8 @@ export const SCALP_SCHEMA = [
   `ALTER TABLE scalp_trades ADD COLUMN venue TEXT`,                      // 'us' | 'kalshi' (null = us); migrations/0013_scalp_venue.sql
   `ALTER TABLE scalp_trades ADD COLUMN k_ticker TEXT`,                   // the Kalshi market the scalp traded
   `ALTER TABLE scalp_trades ADD COLUMN probe TEXT`,                      // fill probe JSON (src/fill-probe.js); migrations/0014_scalp_probe.sql
+  `ALTER TABLE scalp_trades ADD COLUMN account TEXT`,                    // null = the owner's lane, else the member's user id; migrations/0015_scalp_account.sql
+  `CREATE INDEX IF NOT EXISTS idx_scalp_trades_account ON scalp_trades(account, ts_entry)`,
 ];
 const MAX_EXIT_TRIES = 3;
 const RECENT_KEEP = 60;
@@ -166,16 +176,16 @@ export function scalpPnl(pos, exitPx) {
 }
 export const legKey = (l) => `${l.sport}|${l.game}|${l.team}`;
 
-async function recordTrade(env, row) {
+async function recordTrade(env, row, K = SCALP_KEYS) {
   if (env.DB) {
     try {
-      await env.DB.prepare(`INSERT OR REPLACE INTO scalp_trades (id, mode, ts_entry, ts_exit, sport, game, team, us_slug, side, entry_px, exit_px, shares, usd, fee_entry_usd, fee_exit_usd, pnl_c, pnl_usd, edge_c, dp_c, shown_qty, hold_s, exit_kind, live, order_id, exit_order_id, note, venue, k_ticker, probe) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-        .bind(row.id, row.mode, row.tsEntry, row.tsExit, row.sport, row.game, row.team, row.usSlug, row.side, row.entryPx, row.exitPx, row.shares, row.usd, row.feeEntryUsd, row.feeExitUsd, row.pnlC, row.pnlUsd, row.edgeC, row.dpC, row.shownQty, row.holdS, row.exitKind, row.live ? 1 : 0, row.orderId || null, row.exitOrderId || null, row.note || null, row.venue || 'us', row.kTicker || null, row.probe ? JSON.stringify(row.probe) : null).run();
+      await env.DB.prepare(`INSERT OR REPLACE INTO scalp_trades (id, mode, ts_entry, ts_exit, sport, game, team, us_slug, side, entry_px, exit_px, shares, usd, fee_entry_usd, fee_exit_usd, pnl_c, pnl_usd, edge_c, dp_c, shown_qty, hold_s, exit_kind, live, order_id, exit_order_id, note, venue, k_ticker, probe, account) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+        .bind(row.id, row.mode, row.tsEntry, row.tsExit, row.sport, row.game, row.team, row.usSlug, row.side, row.entryPx, row.exitPx, row.shares, row.usd, row.feeEntryUsd, row.feeExitUsd, row.pnlC, row.pnlUsd, row.edgeC, row.dpC, row.shownQty, row.holdS, row.exitKind, row.live ? 1 : 0, row.orderId || null, row.exitOrderId || null, row.note || null, row.venue || 'us', row.kTicker || null, row.probe ? JSON.stringify(row.probe) : null, row.account || null).run();
     } catch (e) { row.note = `${row.note || ''} (d1: ${String(e.message).slice(0, 60)})`.trim(); }
   }
-  const recent = await kvJson(env, SCALP_KEYS.RECENT, []);
+  const recent = await kvJson(env, K.RECENT, []);
   recent.push(row);
-  await kvPut(env, SCALP_KEYS.RECENT, recent.slice(-RECENT_KEEP), 30 * 24 * 3600);
+  await kvPut(env, K.RECENT, recent.slice(-RECENT_KEEP), 30 * 24 * 3600);
 }
 
 // ---------- live venue calls (Polymarket US), each confirmed or reconciled ----------
@@ -269,24 +279,31 @@ async function kalshiExit(env, pos, quote, { fetchImpl, nowMs, market = false })
 // live leg the sampler quoted this minute (for exits and marks).
 const mkDayVenue = () => ({ entries: 0, exits: 0, wins: 0, pnlUsd: 0, feesUsd: 0 });
 const mkDay = (nowMs) => ({ date: dayOf(nowMs), entries: 0, exits: 0, wins: 0, pnlUsd: 0, livePnlUsd: 0, feesUsd: 0, events: 0, kalshiEvents: 0, skipped: {}, byVenue: { us: mkDayVenue(), kalshi: mkDayVenue() } });
-export async function runScalpLane(env, { events = [], kalshiEvents = [], legs = [], nowMs = Date.now(), config = {}, fetchImpl = fetch, probe = {} } = {}) {
+// account: null = the owner's lane; a member's user id runs that member's lane
+// (its own keys via scalpKeys, its trade rows tagged `account`, no fill probe:
+// the owner's lane probes the same events). The caller passes an env carrying
+// that member's Polymarket US key (src/scalp-accounts.js).
+export async function runScalpLane(env, { events = [], kalshiEvents = [], legs = [], nowMs = Date.now(), config = {}, fetchImpl = fetch, probe = {}, account = null } = {}) {
+  const K = scalpKeys(account);
   const cfg = scalpConfig(config);
   const modes = scalpModes(env, cfg);
   const { mode, liveAsked, liveBlocked } = modes.us;
   const nowIso = new Date(nowMs).toISOString();
   const last = { at: nowIso, mode, liveAsked, liveBlocked, modes, entries: 0, exits: 0, open: 0, skipped: {}, events: events.length, kalshiEvents: kalshiEvents.length, byVenue: { us: { entries: 0, exits: 0, open: 0 }, kalshi: { entries: 0, exits: 0, open: 0 } } };
-  if (modes.us.mode === 'off' && modes.kalshi.mode === 'off') { await kvPut(env, SCALP_KEYS.LAST, last, 86400); return last; }
-  const halt = await kvJson(env, SCALP_KEYS.HALT, { halted: false });
+  const open = await kvJson(env, K.OPEN, []);
+  // both venues off: nothing to enter, but scalps still open must close (Nov 9 2026:
+  // this returned before the exits, so switching a lane off stranded its open scalps)
+  if (modes.us.mode === 'off' && modes.kalshi.mode === 'off' && !open.length) { await kvPut(env, K.LAST, last, 86400); return last; }
+  const halt = await kvJson(env, K.HALT, { halted: false });
   let halted = !!(halt && halt.halted);
-  const open = await kvJson(env, SCALP_KEYS.OPEN, []);
-  const dayKey = SCALP_KEYS.DAY + dayOf(nowMs);
+  const dayKey = K.DAY + dayOf(nowMs);
   const day = { ...mkDay(nowMs), ...(await kvJson(env, dayKey, {})) };
   day.byVenue = { us: { ...mkDayVenue(), ...((day.byVenue && day.byVenue.us) || {}) }, kalshi: { ...mkDayVenue(), ...((day.byVenue && day.byVenue.kalshi) || {}) } };
   // the day keeps what the lane saw and why it passed, so a quiet venue can be told from a blind one
   day.events = (day.events || 0) + events.length; day.kalshiEvents = (day.kalshiEvents || 0) + kalshiEvents.length; day.skipped = day.skipped || {};
   const legMap = new Map((legs || []).map(l => [legKey(l), l]));
   const skip = (why) => { last.skipped[why] = (last.skipped[why] || 0) + 1; day.skipped[why] = (day.skipped[why] || 0) + 1; };
-  const setHalt = async (why) => { halted = true; await kvPut(env, SCALP_KEYS.HALT, { halted: true, at: nowIso, why }); last.haltedWhy = why; };
+  const setHalt = async (why) => { halted = true; await kvPut(env, K.HALT, { halted: true, at: nowIso, why }); last.haltedWhy = why; };
 
   // 1. exits (and marks) on the open scalps; exits run whatever the venue's mode is now
   const still = [];
@@ -307,10 +324,10 @@ export async function runScalpLane(env, { events = [], kalshiEvents = [], legs =
       const row = {
         id: part ? `${pos.id}-p${part.n}` : pos.id, venue, mode: pos.live ? 'live' : 'dry', tsEntry: Math.floor(pos.entryMs / 1000), tsExit: Math.floor(nowMs / 1000), sport: pos.sport, game: pos.game, team: pos.team, usSlug: pos.usSlug || null, kTicker: pos.kTicker || null, side: pos.side,
         entryPx: pos.px, exitPx: exitPx ?? null, shares, usd: r2(pos.usd * scale), feeEntryUsd, feeExitUsd: p ? p.feeExitUsd : null, pnlC: p ? p.pnlC : null, pnlUsd: p ? p.pnlUsd : null,
-        edgeC: pos.edgeC, dpC: pos.dpC, shownQty: pos.shownQty, holdS: Math.round((nowMs - pos.entryMs) / 1000), exitKind, live: !!pos.live, orderId: pos.orderId || null, probe: pos.probe || null, ...extra,
+        edgeC: pos.edgeC, dpC: pos.dpC, shownQty: pos.shownQty, holdS: Math.round((nowMs - pos.entryMs) / 1000), exitKind, live: !!pos.live, orderId: pos.orderId || null, probe: pos.probe || null, account: account || null, ...extra,
         entryAt: new Date(pos.entryMs).toISOString(), exitAt: nowIso,
       };
-      await recordTrade(env, row);
+      await recordTrade(env, row, K);
       const dv = day.byVenue[venue];
       day.exits++; dv.exits++;
       if (p) {
@@ -402,22 +419,22 @@ export async function runScalpLane(env, { events = [], kalshiEvents = [], legs =
   // 3. the fill probe (src/fill-probe.js): re-read the venue's book for each
   // dry entry now and again after the delay, so the dry record can say whether
   // the stale quote was still there to hit. Never fatal.
-  if (fresh.length) {
+  if (fresh.length && !account) {
     try { const r = await runFillProbe(env, fresh, { fetchImpl, nowMs, delayMs: probe.delayMs ?? PROBE_DELAY_MS, sleep: probe.sleep, clock: probe.clock }); last.probe = r; }
     catch (e) { last.probe = { error: String(e.message).slice(0, 80) }; }
   }
 
-  await kvPut(env, SCALP_KEYS.OPEN, still, 7 * 86400);
+  await kvPut(env, K.OPEN, still, 7 * 86400);
   await kvPut(env, dayKey, day, 3 * 86400);
   last.open = still.length; last.byVenue.us.open = still.filter(p => venueOf(p) === 'us').length; last.byVenue.kalshi.open = still.filter(p => venueOf(p) === 'kalshi').length;
   last.halted = halted; last.day = day;
-  await kvPut(env, SCALP_KEYS.LAST, last, 86400);
+  await kvPut(env, K.LAST, last, 86400);
   return last;
 }
 
-export async function setScalpHalt(env, on, why = 'operator') {
+export async function setScalpHalt(env, on, why = 'operator', account = null) {
   const v = { halted: !!on, at: new Date().toISOString(), why: on ? why : null };
-  await kvPut(env, SCALP_KEYS.HALT, v);
+  await kvPut(env, scalpKeys(account).HALT, v);
   return v;
 }
 
@@ -440,15 +457,23 @@ export function summarizeScalps(rows) {
 const parseJson = (v) => { if (v == null) return null; if (typeof v !== 'string') return v; try { return JSON.parse(v); } catch (e) { return null; } };
 const rowFromD1 = (r) => ({ id: r.id, venue: r.venue || 'us', probe: parseJson(r.probe), mode: r.mode, entryAt: new Date(r.ts_entry * 1000).toISOString(), exitAt: r.ts_exit ? new Date(r.ts_exit * 1000).toISOString() : null, sport: r.sport, game: r.game, team: r.team, usSlug: r.us_slug, kTicker: r.k_ticker || null, side: r.side, entryPx: r.entry_px, exitPx: r.exit_px, shares: r.shares, usd: r.usd, feeEntryUsd: r.fee_entry_usd, feeExitUsd: r.fee_exit_usd, pnlC: r.pnl_c, pnlUsd: r.pnl_usd, edgeC: r.edge_c, dpC: r.dp_c, shownQty: r.shown_qty, holdS: r.hold_s, exitKind: r.exit_kind, live: !!r.live, orderId: r.order_id, exitOrderId: r.exit_order_id, note: r.note });
 
-export async function scalpReport(env, config = {}, { hours = 168, nowMs = Date.now() } = {}) {
+// account: null = the owner's lane (rows with no account), else that member's.
+export async function scalpReport(env, config = {}, { hours = 168, nowMs = Date.now(), account = null } = {}) {
+  const K = scalpKeys(account);
   const cfg = scalpConfig(config);
   const modes = scalpModes(env, cfg);
   const { mode, liveAsked, liveBlocked } = modes.us;
-  const [halt, open, last, recent] = await Promise.all([kvJson(env, SCALP_KEYS.HALT, { halted: false }), kvJson(env, SCALP_KEYS.OPEN, []), kvJson(env, SCALP_KEYS.LAST, null), kvJson(env, SCALP_KEYS.RECENT, [])]);
-  const day = { ...mkDay(nowMs), ...(await kvJson(env, SCALP_KEYS.DAY + dayOf(nowMs), {})) };
+  const [halt, open, last, recent] = await Promise.all([kvJson(env, K.HALT, { halted: false }), kvJson(env, K.OPEN, []), kvJson(env, K.LAST, null), kvJson(env, K.RECENT, [])]);
+  const day = { ...mkDay(nowMs), ...(await kvJson(env, K.DAY + dayOf(nowMs), {})) };
   let rows = [];
   if (env.DB) {
-    try { const q = await env.DB.prepare(`SELECT * FROM scalp_trades WHERE ts_entry >= ? ORDER BY ts_entry DESC LIMIT 2000`).bind(Math.floor(nowMs / 1000) - hours * 3600).all(); rows = ((q && q.results) || []).map(rowFromD1); }
+    try {
+      const since = Math.floor(nowMs / 1000) - hours * 3600;
+      const q = account
+        ? await env.DB.prepare(`SELECT * FROM scalp_trades WHERE ts_entry >= ? AND account = ? ORDER BY ts_entry DESC LIMIT 2000`).bind(since, String(account)).all()
+        : await env.DB.prepare(`SELECT * FROM scalp_trades WHERE ts_entry >= ? AND account IS NULL ORDER BY ts_entry DESC LIMIT 2000`).bind(since).all();
+      rows = ((q && q.results) || []).map(rowFromD1);
+    }
     catch (e) { rows = (recent || []).filter(r => Date.parse(r.entryAt) >= nowMs - hours * 3600e3); }
   } else rows = (recent || []).filter(r => Date.parse(r.entryAt) >= nowMs - hours * 3600e3);
   const sum = summarizeScalps(rows);
