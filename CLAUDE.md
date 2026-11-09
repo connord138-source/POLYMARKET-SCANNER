@@ -287,7 +287,13 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   pnlUsd, feesUsd, roiPct), recent. exitKind x5 | late_last_quote | no_quote
   | x_live | x_live_unpriced | settling. The Auto-trader page's SCALP LANE
   card shows it and (admin) sets the modes and sizes. The live flip is the
-  owner's; the lane went in dry.
+  owner's; the lane went in dry. LIVE since Nov 9 2026 (owner's "Yes, set it
+  live for me"): config/autotrader.json carries scalpMode 'live',
+  scalpKalshiMode 'off', scalpMaxPerDay 40, scalpMaxUsd 10, scalpMaxOpen 3,
+  scalpDailyLossUsd 15, applied by the Apply Autotrader Config workflow. A
+  live venue's daily loss stop reads the day's LIVE realized P&L
+  (`day.livePnlUsd`, added on each live close), so the flip day's dry
+  results neither hide a live loss nor stop live entries.
   Kalshi venue (Nov 1 2026, owner's "build the kalshi NHL scalp lane", after
   the sampler's stale-Kalshi read crossed its threshold for NHL: 298 moves,
   Kalshi still crossable after its fee on 9.7% at 8.4c): the sampler now

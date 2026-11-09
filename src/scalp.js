@@ -124,7 +124,12 @@ export const scalpModes = (env, cfg) => ({ us: scalpModeFor(env, cfg, 'us'), kal
 // Entry for one sampler event (us-lane.js detectUsLaneEvent / detectKalshiLaneEvent
 // shape: venue, side buy|sell, px = the quote in long/YES terms, qty shown (US),
 // fee per share, edgeC, usSlug / kTicker).
-export function scalpEntryFor(ev, { cfg, open = [], day = {}, nowMs = Date.now(), minQtyVenue = 1 } = {}) {
+// live: this venue runs live. The daily loss stop then reads the day's LIVE
+// realized P&L only (day.livePnlUsd): on the day of a flip the dry scalps'
+// result is still in day.pnlUsd, and +$21.71 of dry profit on Nov 9 would have
+// let real money lose ~$37 before a $15 stop fired (and a dry loss would stop
+// real money for no reason).
+export function scalpEntryFor(ev, { cfg, open = [], day = {}, nowMs = Date.now(), minQtyVenue = 1, live = false } = {}) {
   const venue = venueOf(ev);
   if (!ev || (venue === 'kalshi' ? !ev.kTicker : !ev.usSlug)) return { ok: false, reason: venue === 'kalshi' ? 'no Kalshi market' : 'no Polymarket US market' };
   const sports = venue === 'kalshi' ? cfg.scalpKalshiSports : cfg.scalpSports;
@@ -136,7 +141,7 @@ export function scalpEntryFor(ev, { cfg, open = [], day = {}, nowMs = Date.now()
   if (open.some(p => p.sport === ev.sport && p.game === ev.game)) return { ok: false, reason: 'already in this game' };
   const dayV = (day.byVenue && day.byVenue[venue]) || (venue === 'us' ? day : {});
   if ((dayV.entries || 0) >= cfg.scalpMaxPerDay) return { ok: false, reason: 'daily scalp cap' };
-  if ((day.pnlUsd || 0) <= -Math.abs(cfg.scalpDailyLossUsd)) return { ok: false, reason: 'daily loss stop' };
+  if (((live ? day.livePnlUsd : day.pnlUsd) || 0) <= -Math.abs(cfg.scalpDailyLossUsd)) return { ok: false, reason: 'daily loss stop' };
   const cost = ev.side === 'buy' ? ev.px : 1 - ev.px;           // what one contract costs us (long/YES at the ask; short/NO at 1 - bid)
   const maxUsd = venue === 'kalshi' ? cfg.scalpKalshiMaxUsd : cfg.scalpMaxUsd;
   const step = Number(minQtyVenue) > 0 ? Number(minQtyVenue) : 1;
@@ -263,7 +268,7 @@ async function kalshiExit(env, pos, quote, { fetchImpl, nowMs, market = false })
 // = this minute's stale Kalshi quotes (same call, `kalshi`), `legs` = every
 // live leg the sampler quoted this minute (for exits and marks).
 const mkDayVenue = () => ({ entries: 0, exits: 0, wins: 0, pnlUsd: 0, feesUsd: 0 });
-const mkDay = (nowMs) => ({ date: dayOf(nowMs), entries: 0, exits: 0, wins: 0, pnlUsd: 0, feesUsd: 0, events: 0, kalshiEvents: 0, skipped: {}, byVenue: { us: mkDayVenue(), kalshi: mkDayVenue() } });
+const mkDay = (nowMs) => ({ date: dayOf(nowMs), entries: 0, exits: 0, wins: 0, pnlUsd: 0, livePnlUsd: 0, feesUsd: 0, events: 0, kalshiEvents: 0, skipped: {}, byVenue: { us: mkDayVenue(), kalshi: mkDayVenue() } });
 export async function runScalpLane(env, { events = [], kalshiEvents = [], legs = [], nowMs = Date.now(), config = {}, fetchImpl = fetch, probe = {} } = {}) {
   const cfg = scalpConfig(config);
   const modes = scalpModes(env, cfg);
@@ -311,6 +316,7 @@ export async function runScalpLane(env, { events = [], kalshiEvents = [], legs =
       if (p) {
         const fees = r2(feeEntryUsd + (row.feeExitUsd != null ? row.feeExitUsd : p.feeExitUsd));
         day.pnlUsd = r2(day.pnlUsd + p.pnlUsd); day.feesUsd = r2(day.feesUsd + fees); dv.pnlUsd = r2(dv.pnlUsd + p.pnlUsd); dv.feesUsd = r2(dv.feesUsd + fees);
+        if (pos.live) day.livePnlUsd = r2((day.livePnlUsd || 0) + p.pnlUsd);
         if (p.pnlUsd > 0) { day.wins++; dv.wins++; }
       }
       last.exits++; last.byVenue[venue].exits++;
@@ -368,7 +374,7 @@ export async function runScalpLane(env, { events = [], kalshiEvents = [], legs =
   for (const ev of sorted) {
     const venue = venueOf(ev);
     if (halted) { skip('lane halted'); continue; }
-    const dec = scalpEntryFor(ev, { cfg, open: still, day, nowMs });
+    const dec = scalpEntryFor(ev, { cfg, open: still, day, nowMs, live: modes[venue].mode === 'live' });
     if (!dec.ok) { skip(dec.reason); continue; }
     let pos = {
       id: `sc_${nowMs}_${Math.random().toString(36).slice(2, 7)}`, venue, sport: ev.sport, game: ev.game, team: ev.team, usSlug: ev.usSlug || null, kTicker: ev.kTicker || null, pToken: ev.pToken || null,

@@ -38,6 +38,8 @@ const ev = (extra = {}) => ({ ts: Math.floor(T0 / 1000), sport: "nba", game: "La
     [scalpEntryFor(ev({ qty: 60, px: 0.9 }), { cfg: { ...cfg, scalpMaxUsd: 0.5 } }).reason, "size below one contract"],
   ];
   check("entry: every gate names itself", reasons.every(([got, want]) => got === want), reasons.filter(([g, w]) => g !== w));
+  // Nov 9 2026: the flip day carries dry results; a live venue's stop reads the live P&L only
+  check("loss stop: a live venue reads the day's live P&L, not dry profit or dry loss", scalpEntryFor(ev(), { cfg, day: { pnlUsd: 21.71, livePnlUsd: -15 }, live: true }).reason === "daily loss stop" && scalpEntryFor(ev(), { cfg, day: { pnlUsd: 21.71, livePnlUsd: -15 } }).ok === true && scalpEntryFor(ev(), { cfg, day: { pnlUsd: -20, livePnlUsd: 0 }, live: true }).ok === true && scalpEntryFor(ev(), { cfg, day: { pnlUsd: -20 }, live: true }).ok === true);
   check("exit price: a buy closes at the bid, a sell at the ask, missing -> null", scalpExitPrice({ side: "buy" }, leg(0.43, 0.45)) === 0.43 && scalpExitPrice({ side: "sell" }, leg(0.43, 0.45)) === 0.45 && scalpExitPrice({ side: "buy" }, leg(null, 0.45)) === null && scalpExitPrice({ side: "buy" }, null) === null);
   const p = scalpPnl({ side: "buy", px: 0.40, shares: 25 }, 0.44);
   check("pnl: both fees, cents a share x shares", p && p.pnlC === rtPnlC({ side: "buy", px: 0.40, fee: usFee(0.40) }, 0.44) && Math.abs(p.pnlUsd - p.pnlC / 100 * 25) < 0.011, p);
@@ -126,6 +128,17 @@ const ev = (extra = {}) => ({ ts: Math.floor(T0 / 1000), sport: "nba", game: "La
   const r5 = await run(env, { events: [], legs: [leg(0.44, 0.46)], nowMs: m(5), config: cfg, fetchImpl });
   const row = env.DB.rows[0];
   check("live exit: close-position sent at the hold, the venue's fill priced the exit, fees from the venue", r5.exits === 1 && calls.some(c => /close-position/.test(c.u)) && row && row.exit_kind === "x_live" && row.exit_px === 0.44 && row.live === 1 && row.exit_order_id === "o-exit" && row.fee_exit_usd === 0.17 && row.mode === "live", { r5, row });
+  const dayL = JSON.parse(env.SIGNALS_CACHE.m.get(SCALP_KEYS.DAY + new Date(m(5)).toISOString().slice(0, 10)));
+  check("live exit: the day keeps the live P&L apart (livePnlUsd) for the stop", dayL.livePnlUsd === row.pnl_usd && dayL.pnlUsd === row.pnl_usd, dayL);
+  // the flip day: +$21.71 dry profit and -$16 live -> the live stop holds; a dry loss alone does not stop live entries
+  const envF = mkEnv({ PMUS_KEY_ID: "key-1", PMUS_SECRET_KEY: Buffer.alloc(32, 9).toString("base64") });
+  const dk = SCALP_KEYS.DAY + new Date(m(0)).toISOString().slice(0, 10);
+  envF.SIGNALS_CACHE.m.set(dk, JSON.stringify({ date: new Date(m(0)).toISOString().slice(0, 10), entries: 30, exits: 30, wins: 20, pnlUsd: 5.71, livePnlUsd: -16, feesUsd: 9 }));
+  const f1 = await run(envF, { events: [ev()], legs: [leg(0.40, 0.40)], nowMs: m(0), config: cfg, fetchImpl });
+  check("flip day: dry profit does not hide a live loss past the stop", f1.entries === 0 && f1.skipped["daily loss stop"] === 1, f1);
+  envF.SIGNALS_CACHE.m.set(dk, JSON.stringify({ date: new Date(m(0)).toISOString().slice(0, 10), entries: 30, exits: 30, wins: 5, pnlUsd: -20, feesUsd: 9 }));
+  const f2 = await run(envF, { events: [ev()], legs: [leg(0.40, 0.40)], nowMs: m(1), config: cfg, fetchImpl });
+  check("flip day: a dry loss does not stop live entries", f2.entries === 1 && !f2.skipped["daily loss stop"], f2);
   // the venue refuses the close (market over): the scalp is marked settling, not retried forever
   closeMode = "closed";
   await run(env, { events: [ev({ game: "G2", team: "T2", usSlug: "nba-lal-bos" })], legs: [], nowMs: m(10), config: cfg, fetchImpl });
