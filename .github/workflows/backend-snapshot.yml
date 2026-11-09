@@ -62,6 +62,7 @@ jobs:
             "cryptoFv|/crypto/fairvalue"
             "business|/admin/business"
             "scanServe|/scan?hours=24&minScore=15"
+            "scalpers|/scalper/accounts"
           )
           args=(--arg fetchedAt "$(date -u +%FT%TZ)")
           prog='{fetchedAt: $fetchedAt}'
@@ -80,6 +81,13 @@ jobs:
               jq --argjson ms "$ms" '{ms: $ms, error, success, scanTime, hoursScanned, totalSignals, signalsWithWinners, criticalCount,
                 whaleSkill: (if (.whaleSkill|type) == "object" then (.whaleSkill | {annotated, wallets, error}) else .whaleSkill end),
                 debug: ((._debug // {}) | {servedFrom, storedAt, ageS, builtAt, minScoreUsed, cachedSignalsCount, filteredByTimeWindow})}' \
+                "/tmp/snap/$name.json" > "/tmp/snap/$name.slim" && mv "/tmp/snap/$name.slim" "/tmp/snap/$name.json"
+            fi
+            # Member scalpers: no emails or keys in the snapshot, the user id cut to 8.
+            if [ "$name" = "scalpers" ]; then
+              jq '{error, last, accounts: [(.accounts // [])[] | {user: ((.account.userId // "")[0:8]), mode: .account.mode, effectiveMode: .account.effectiveMode,
+                liveAllowed: .account.liveAllowed, settings: .account.settings, balance: (.account.balance // null | if . then {currentBalance, at} else null end),
+                keyError: (.account.keyError // null), halted, open, today, all, byMode}]}' \
                 "/tmp/snap/$name.json" > "/tmp/snap/$name.slim" && mv "/tmp/snap/$name.slim" "/tmp/snap/$name.json"
             fi
             args+=(--slurpfile "$name" "/tmp/snap/$name.json")

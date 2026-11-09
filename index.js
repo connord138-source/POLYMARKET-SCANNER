@@ -33,6 +33,7 @@ import { collectBooks, MM_SCHEMA } from "./src/mm-collector.js";
 import { sampleXvenue, xvenueReport, XV_SCHEMA, usTopOfBook } from "./src/xvenue.js";
 import { US_LANE_SCHEMA, recordUsLaneEvents, markUsLaneEvents, settleUsLaneEvents, usLaneReport } from "./src/us-lane.js";
 import { SCALP_SCHEMA, runScalpLane, scalpReport, setScalpHalt } from "./src/scalp.js";
+import { runMemberScalpers, memberState, connectAccount, updateAccountSettings, disconnectAccount, resumeAccount, setLiveAllowed, listAccounts } from "./src/scalp-accounts.js";
 import { dataApi, dataApiStats, describeFailure, pushScanHistory, scanHistorySummary } from "./src/data-api.js";
 import { scanWindow, scanResultShape, scanParams } from "./src/scan-window.js";
 import { getExecReport } from "./src/execution.js";
@@ -3654,6 +3655,16 @@ const gateEnabled = (env) => String(env.AUTH_GATE || "").toLowerCase() === "on";
 
 // The member behind a request for per-member state: the operator's token is
 // one member ("admin"), a signed-in user is its id, anyone else null.
+// A Desk member for the member-scalper routes: signed in (a Supabase user; the
+// admin token is not a member) and on the Desk plan, else the 401/402 answer.
+async function scalperMember(request, env) {
+  const user = await getUser(request, env).catch(() => null);
+  if (!user) return atJson({ success: false, error: "sign_in_required", requiredPlan: "desk" }, 401);
+  const plan = planOf(await getEntitlement(env, user.id));
+  if (!hasPlan(plan, "desk")) return atJson({ success: false, error: "plan_required", plan, requiredPlan: "desk" }, 402);
+  return user;
+}
+
 async function viewerId(request, env) {
   if (isAdminAuthorized(request, env)) return "admin";
   const user = await getUser(request, env).catch(() => null);
@@ -3685,6 +3696,7 @@ function requiresAdmin(path, url, method) {
   if (path.startsWith("/agents/crew") && method === "POST") return true; // crew orders steer paper bets
   if (path.startsWith("/agents/copy") && method === "POST" && path !== "/agents/copy/seen") return true; // which wallets the bot copies (the seen mark is per member)
   if (path === "/xvenue/scalp/halt") return true;                   // the scalp lane's kill switch
+  if (path.startsWith("/scalper/accounts")) return true;            // the owner's list of member scalpers and their live switch
   if (path === "/waitlist" && method === "GET") return true;        // lists sign-up emails (PII); POST stays public
   if (path === "/crypto/fairvalue" && url.searchParams.get("refresh")) return true; // forces 12 upstream fetches
   if (path.startsWith("/admin")) return true;                       // /admin/ping, /admin/reprocess-wallets, ...
@@ -5360,6 +5372,32 @@ export default {
       if (path === "/xvenue/scalp/halt" && request.method === "POST") {
         const body = await request.json().catch(() => ({}));
         return atJson({ success: true, halt: await setScalpHalt(env, body.on !== false, body.why || 'operator') });
+      }
+      // Member scalpers (src/scalp-accounts.js, Nov 9 2026): a Desk member connects his
+      // own Polymarket US key and runs the scalp lane on his own account. /scalper/me*
+      // is the member's own (signed in, Desk plan); /scalper/accounts* is the owner's.
+      if (path.startsWith("/scalper/me")) {
+        const who = await scalperMember(request, env);
+        if (who instanceof Response) return who;
+        const body = request.method === "POST" ? await request.json().catch(() => ({})) : {};
+        const ownerCfg = await getAutotraderConfig(env);
+        const done = async (r) => (r && r.ok === false ? atJson({ success: false, error: r.error, open: r.open }, r.status || 400) : atJson(await memberState(env, who.id, ownerCfg)));
+        if (path === "/scalper/me" && request.method === "GET") return atJson(await memberState(env, who.id, ownerCfg));
+        if (path === "/scalper/me/connect" && request.method === "POST") return done(await connectAccount(env, who, body));
+        if (path === "/scalper/me/settings" && request.method === "POST") return done(await updateAccountSettings(env, who.id, body));
+        if (path === "/scalper/me/resume" && request.method === "POST") { await resumeAccount(env, who.id); return done({ ok: true }); }
+        if (path === "/scalper/me/disconnect" && request.method === "POST") {
+          const r = await disconnectAccount(env, who.id);
+          return r.ok ? atJson({ success: true, connected: false, removed: r.removed }) : atJson({ success: false, error: r.error, open: r.open }, r.status || 409);
+        }
+        return atJson({ success: false, error: "not found" }, 404);
+      }
+      if (path === "/scalper/accounts" && request.method === "GET") return atJson(await listAccounts(env, await getAutotraderConfig(env)));
+      if (path === "/scalper/accounts/live" && request.method === "POST") {
+        const body = await request.json().catch(() => ({}));
+        if (!body.userId) return atJson({ success: false, error: "userId required" }, 400);
+        const r = await setLiveAllowed(env, String(body.userId), body.liveAllowed === true);
+        return r.ok ? atJson(await listAccounts(env, await getAutotraderConfig(env))) : atJson({ success: false, error: r.error }, r.status || 400);
       }
       if (path === "/autotrader/positions") {
         const positions = await getOpenPositions(env);
@@ -7263,9 +7301,14 @@ export default {
           const rec = await recordUsLaneEvents(env, legs, now);
           const marks = await markUsLaneEvents(env, now);
           let scalp = null;
-          try { const s = await runScalpLane(env, { events: rec.list || [], kalshiEvents: rec.kalshi || [], legs, nowMs: now, config: await getAutotraderConfig(env) }); scalp = { mode: s.mode, kalshiMode: s.modes && s.modes.kalshi ? s.modes.kalshi.mode : null, entries: s.entries, exits: s.exits, open: s.open, halted: !!s.halted, skipped: s.skipped, byVenue: s.byVenue, kalshiEvents: s.kalshiEvents }; }
+          const cfg = await getAutotraderConfig(env);
+          try { const s = await runScalpLane(env, { events: rec.list || [], kalshiEvents: rec.kalshi || [], legs, nowMs: now, config: cfg }); scalp = { mode: s.mode, kalshiMode: s.modes && s.modes.kalshi ? s.modes.kalshi.mode : null, entries: s.entries, exits: s.exits, open: s.open, halted: !!s.halted, skipped: s.skipped, byVenue: s.byVenue, kalshiEvents: s.kalshiEvents }; }
           catch (e) { scalp = { error: String(e.message).slice(0, 80) }; }
-          return { events: rec.events, compared: rec.compared, kalshiEvents: (rec.kalshi || []).length, ...marks, scalp };
+          // then every connected member's own scalper, on the same stale quotes (src/scalp-accounts.js)
+          let members = null;
+          try { const m = await runMemberScalpers(env, { events: rec.list || [], legs, nowMs: now, ownerConfig: cfg }); members = m.accounts ? { accounts: m.accounts, ran: m.ran, live: m.live, entries: m.entries, exits: m.exits, errors: m.errors.length } : null; }
+          catch (e) { members = { error: String(e.message).slice(0, 80) }; }
+          return { events: rec.events, compared: rec.compared, kalshiEvents: (rec.kalshi || []).length, ...marks, scalp, members };
         };
         const r = await sampleXvenue(env, Date.now(), { afterSample: usLane });
         console.log("xvenue:", JSON.stringify(r).slice(0, 300));
