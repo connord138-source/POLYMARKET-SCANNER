@@ -1,0 +1,59 @@
+name: Grant Plan
+
+# Sets a member's plan by email through the worker (POST /admin/grant), e.g. a
+# comped Desk seat. Prints the member's plan and period end before and after.
+# Needs the ADMIN_TOKEN repo secret. A grant is a comp (status "comped", $0)
+# lasting `days`; a paying Stripe subscription is not touched by Stripe, but
+# this overwrites the stored entitlement, so do not run it on a paying member.
+
+on:
+  workflow_dispatch:
+    inputs:
+      email:
+        description: "Member email (the account they signed up with)"
+        required: true
+      plan:
+        description: "free, pro or desk"
+        required: true
+        default: "desk"
+      days:
+        description: "How many days the comp lasts"
+        required: true
+        default: "3650"
+      dry_run:
+        description: "true = only show the member's current plan, change nothing"
+        required: false
+        default: "false"
+
+jobs:
+  grant:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Grant the plan
+        env:
+          ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
+          EMAIL: ${{ inputs.email }}
+          PLAN: ${{ inputs.plan }}
+          DAYS: ${{ inputs.days }}
+          DRY: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          [ -n "$ADMIN_TOKEN" ] || { echo "::error::ADMIN_TOKEN repo secret is not set"; exit 1; }
+          case "$PLAN" in free|pro|desk) ;; *) echo "::error::plan must be free, pro or desk"; exit 1;; esac
+          [[ "$DAYS" =~ ^[0-9]+$ ]] || { echo "::error::days must be a whole number"; exit 1; }
+          BASE="https://polymarket-scanner.connord138.workers.dev"
+          q=$(jq -rn --arg e "$EMAIL" '$e|@uri')
+          find_member() {
+            curl -sf --max-time 30 -H "Authorization: Bearer $ADMIN_TOKEN" "$BASE/admin/users?q=$q&limit=50" \
+              | jq -c --arg e "$EMAIL" '[.users[] | select((.email // "" | ascii_downcase) == ($e | ascii_downcase))]'
+          }
+          match=$(find_member)
+          n=$(echo "$match" | jq length)
+          [ "$n" = "1" ] || { echo "::error::expected exactly one account with that email, found $n (has the member signed up?)"; exit 1; }
+          id=$(echo "$match" | jq -r '.[0].id')
+          echo "Before:"; echo "$match" | jq '.[0] | {email, plan, status, periodEnd, lastSignInAt}'
+          if [ "$DRY" = "true" ]; then echo "Dry run: nothing changed."; exit 0; fi
+          body=$(jq -nc --arg u "$id" --arg p "$PLAN" --argjson d "$DAYS" '{userId: $u, plan: $p, days: $d}')
+          resp=$(curl -sf --max-time 30 -X POST "$BASE/admin/grant" -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" --data "$body")
+          echo "$resp" | jq -e '.success == true' >/dev/null || { echo "::error::grant failed: $resp"; exit 1; }
+          echo "After:"; find_member | jq '.[0] | {email, plan, status, periodEnd}'
