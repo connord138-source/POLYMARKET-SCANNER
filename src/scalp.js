@@ -207,7 +207,17 @@ async function liveEnter(env, ev, dec, { fetchImpl, nowMs }) {
   let fill = fillFromExecutions(res && res.executions, dec.side);
   if (!fill && res && res.id) {
     try { const o = await getUsOrder(env, res.id, { fetchImpl }); const f = fillFromOrder(o, dec.side); if (f && f.shares > 0) fill = f; else return { ok: false, reason: `order ${res.id} ${f && f.state ? f.state : 'unfilled'} (FOK)` }; }
-    catch (e) { return { ok: false, halt: true, reason: `order ${res.id} sent, state unknown` }; }
+    catch (e) {
+      // The order's state could not be read (Nov 10 2026: the first live order, a FOK that did not
+      // fill, came back with no executions and its state read failed, and the lane halted although
+      // nothing had filled). The account's position settles it: unchanged = nothing filled, moved =
+      // that many contracts filled; halt only when the position cannot be read either.
+      const why = String(e.message).slice(0, 80);
+      let after = null; try { after = await usPositionQty(env, ev.usSlug, { fetchImpl }); } catch (e2) { after = null; }
+      if (before != null && after != null && after === before) return { ok: false, reason: `order ${res.id} not filled (state read failed: ${why}; position unchanged)` };
+      if (before != null && after != null) return { ok: true, fill: { shares: Math.abs(after - before), effectivePx: dec.cost, feeUsd: r2(usFee(ev.px) * Math.abs(after - before)) }, orderId: res.id, note: `state read failed (${why.slice(0, 60)}); position moved ${before} -> ${after}` };
+      return { ok: false, halt: true, reason: `order ${res.id} sent, state unknown (${why})` };
+    }
   }
   if (!fill) return { ok: false, reason: 'no executions returned' };
   return { ok: true, fill, orderId: res && res.id ? res.id : null };

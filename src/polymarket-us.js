@@ -319,7 +319,13 @@ export async function fetchUsBbo(slug, { fetchImpl = fetch } = {}) {
 
 // ---- trading calls ----
 export const placeUsOrder = (env, order, deps) => pmusRequest(env, 'POST', '/v1/orders', { ...deps, body: order });
-export const getUsOrder = (env, id, deps) => pmusRequest(env, 'GET', `/v1/order/${encodeURIComponent(id)}`, deps);
+// GET /v1/order/{orderId} answers { order: Order } (docs.polymarket.us orders-schema, GetOrderResponse);
+// unwrapped here so fillFromOrder reads cumQuantity / avgPx / state off the Order itself (Nov 10 2026:
+// the wrapped object read as "0 filled", so a real fill would have gone untracked).
+export async function getUsOrder(env, id, deps) {
+  const data = await pmusRequest(env, 'GET', `/v1/order/${encodeURIComponent(id)}`, deps);
+  return (data && data.order) || data;
+}
 export const cancelUsOrder = (env, id, slug, deps) => pmusRequest(env, 'POST', `/v1/order/${encodeURIComponent(id)}/cancel`, { ...deps, body: { marketSlug: slug } });
 export async function getUsOpenOrders(env, slug, deps) {
   const data = await pmusRequest(env, 'GET', '/v1/orders/open', { ...deps, query: slug ? { market: slug } : null });

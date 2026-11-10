@@ -104,6 +104,46 @@ const ev = (extra = {}) => ({ ts: Math.floor(T0 / 1000), sport: "nba", game: "La
   check("live asked without the key: runs dry and says why", blocked.mode === "dry" && blocked.liveAsked && /not on the worker/.test(blocked.liveBlocked), blocked);
 }
 
+// ---------- live: a FOK that comes back without executions (Nov 10 2026, the first live order) ----------
+{
+  const mkVenue = ({ orderGet, posAfter = "0" }) => {
+    const calls = []; let placed = false;
+    const fetchImpl = async (url, init = {}) => {
+      const u = String(url); calls.push({ u, method: init.method || "GET" });
+      const json = (b, status = 200) => ({ ok: status < 400, status, json: async () => b, text: async () => JSON.stringify(b), headers: { get: () => null } });
+      if (/gateway\.polymarket\.us\/v1\/market\/slug\//.test(u)) return json({ market: { orderPriceMinTickSize: "0.01", minimumTradeQty: "1", status: "MARKET_STATUS_OPEN" } });
+      if (/\/v1\/portfolio\/positions/.test(u)) return json({ positions: { "nba-lal-bos": { netPositionDecimal: placed ? posAfter : "0" } } });
+      if (/\/v1\/orders$/.test(u)) { placed = true; return json({ id: "DMF56QZG53YB", executions: [] }); }
+      if (/\/v1\/order\/DMF56QZG53YB$/.test(u)) return orderGet(json);
+      return json({}, 404);
+    };
+    return { calls, fetchImpl };
+  };
+  const keys = { PMUS_KEY_ID: "key-1", PMUS_SECRET_KEY: Buffer.alloc(32, 9).toString("base64") };
+  const m = (k) => T0 + k * 60e3;
+  // the order's state read fails and the position did not move: nothing filled, no halt
+  const v1 = mkVenue({ orderGet: (json) => json({ message: "not found" }, 404) });
+  const e1 = mkEnv(keys);
+  const a = await run(e1, { events: [ev()], legs: [leg(0.40, 0.40)], nowMs: m(0), config: { scalpMode: "live" }, fetchImpl: v1.fetchImpl });
+  check("live FOK, state read fails, position unchanged: skipped as not filled, the lane keeps running", a.entries === 0 && !a.halted && Object.keys(a.skipped).some(k => /not filled \(state read failed.*position unchanged\)/.test(k)) && !e1.SIGNALS_CACHE.m.has(SCALP_KEYS.HALT), a);
+  // the order read answers { order: ... } (the documented shape): a real fill is read off the nested Order
+  const v2 = mkVenue({ orderGet: (json) => json({ order: { id: "DMF56QZG53YB", state: "ORDER_STATE_FILLED", cumQuantity: 25, avgPx: { value: "0.40", currency: "USD" }, commissionNotionalTotalCollected: { value: "0.17", currency: "USD" } } }), posAfter: "25" });
+  const e2 = mkEnv(keys);
+  const b = await run(e2, { events: [ev()], legs: [leg(0.40, 0.40)], nowMs: m(0), config: { scalpMode: "live" }, fetchImpl: v2.fetchImpl });
+  const open2 = JSON.parse(e2.SIGNALS_CACHE.m.get(SCALP_KEYS.OPEN));
+  check("live FOK, order read { order }: the nested fill is taken (25 at 40c, venue fee)", b.entries === 1 && open2[0].live === true && open2[0].shares === 25 && open2[0].px === 0.40 && open2[0].feeEntryUsd === 0.17, { b, open2 });
+  // the order read answers { order } with nothing filled: skipped, no halt
+  const v3 = mkVenue({ orderGet: (json) => json({ order: { id: "DMF56QZG53YB", state: "ORDER_STATE_CANCELED", cumQuantity: 0 } }) });
+  const c = await run(mkEnv(keys), { events: [ev()], legs: [leg(0.40, 0.40)], nowMs: m(0), config: { scalpMode: "live" }, fetchImpl: v3.fetchImpl });
+  check("live FOK killed: the canceled state is named, no entry, no halt", c.entries === 0 && !c.halted && Object.keys(c.skipped).some(k => /ORDER_STATE_CANCELED/.test(k)), c);
+  // the state read fails but the position moved: the fill is taken from the position, no halt
+  const v4 = mkVenue({ orderGet: (json) => json({ message: "boom" }, 500), posAfter: "25" });
+  const e4 = mkEnv(keys);
+  const d = await run(e4, { events: [ev()], legs: [leg(0.40, 0.40)], nowMs: m(0), config: { scalpMode: "live" }, fetchImpl: v4.fetchImpl });
+  const open4 = JSON.parse(e4.SIGNALS_CACHE.m.get(SCALP_KEYS.OPEN));
+  check("live FOK, state read fails, position moved 0 -> 25: the fill is taken from the position", d.entries === 1 && !d.halted && open4[0].live === true && open4[0].shares === 25 && /position moved 0 -> 25/.test(open4[0].note || ""), { d, open4 });
+}
+
 // ---------- live, against a fake venue ----------
 {
   const calls = [];

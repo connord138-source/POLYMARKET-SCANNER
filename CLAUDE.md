@@ -293,7 +293,15 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   scalpDailyLossUsd 15, applied by the Apply Autotrader Config workflow. A
   live venue's daily loss stop reads the day's LIVE realized P&L
   (`day.livePnlUsd`, added on each live close), so the flip day's dry
-  results neither hide a live loss nor stop live entries.
+  results neither hide a live loss nor stop live entries. First live order
+  (Nov 10 2026 00:55 UTC): a FOK that did not fill came back with no
+  executions, its state read failed, and the lane halted although nothing
+  had filled (balance and positions unchanged). Since then `getUsOrder`
+  unwraps the documented `{ order }` reply (the wrapped object had read as
+  0 filled, which would have left a real fill untracked), and a failed
+  state read is settled on the account position before halting: unchanged
+  = not filled, moved = that fill; halt only if the position cannot be
+  read. The halt itself is cleared by the owner (UN-HALT on the card).
   Kalshi venue (Nov 1 2026, owner's "build the kalshi NHL scalp lane", after
   the sampler's stale-Kalshi read crossed its threshold for NHL: 298 moves,
   Kalshi still crossable after its fee on 9.7% at 8.4c): the sampler now
