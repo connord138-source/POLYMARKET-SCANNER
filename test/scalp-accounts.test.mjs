@@ -93,12 +93,12 @@ const venue = ({ balanceStatus = 200 } = {}) => {
   await updateAccountSettings(env, b.id, { mode: "live" });
   await setLiveAllowed(env, b.id, true, { nowMs: m(0) });                      // the owner allows member b
   const before = v.calls.length;
-  const r = await runMemberScalpers(env, { events: [ev()], legs: [leg(0.40, 0.40)], nowMs: m(0), ownerConfig: { scalpMode: "live" }, fetchImpl: v.fetchImpl });
+  const r = await runMemberScalpers(env, { events: [ev()], legs: [leg(0.40, 0.40)], nowMs: m(0), ownerConfig: { scalpMode: "live" }, fetchImpl: v.fetchImpl, drySim: false });
   const orders = v.calls.slice(before).filter(c => /\/v1\/orders$/.test(c.u));
   const openA = JSON.parse(env.SIGNALS_CACHE.m.get(scalpKeys(a.id).OPEN)), openB = JSON.parse(env.SIGNALS_CACHE.m.get(scalpKeys(b.id).OPEN));
   check("minute pass: both lanes ran; a (live not allowed) entered dry, b (allowed) sent one order signed with b's own key", r.ran === 2 && r.live === 1 && r.entries === 2 && openA.length === 1 && openA[0].live === false && openB.length === 1 && openB[0].live === true && orders.length === 1 && orders[0].key === "member-key-5678", { r, orders });
   check("minute pass: the owner's lane keys are untouched", !env.SIGNALS_CACHE.m.has(SCALP_KEYS.OPEN) && !env.SIGNALS_CACHE.m.has(SCALP_KEYS.LAST));
-  await runMemberScalpers(env, { events: [], legs: [leg(0.44, 0.46)], nowMs: m(5), ownerConfig: {}, fetchImpl: v.fetchImpl });
+  await runMemberScalpers(env, { events: [], legs: [leg(0.44, 0.46)], nowMs: m(5), ownerConfig: {}, fetchImpl: v.fetchImpl, drySim: false });
   const closeB = v.calls.find(c => /close-position/.test(c.u));
   const rowsA = env.DB.rows.filter(x => x.account === a.id), rowsB = env.DB.rows.filter(x => x.account === b.id);
   check("minute pass: exits closed each lane; b's close signed with b's key; rows tagged with the member", closeB && closeB.key === "member-key-5678" && rowsA.length === 1 && rowsA[0].live === 0 && rowsB.length === 1 && rowsB[0].live === 1 && rowsB[0].exit_kind === "x_live", { rowsA, rowsB });
@@ -106,24 +106,35 @@ const venue = ({ balanceStatus = 200 } = {}) => {
   check("report: the owner's record leaves the members out; a member's holds only his", ownerRep.all.n === 0 && bRep.all.n === 1 && bRep.byMode.live.n === 1, { owner: ownerRep.all, b: bRep.all });
   // switching off: no new entries, and an open scalp still closes (it used to be stranded when every venue was off)
   await updateAccountSettings(env, a.id, { mode: "dry" });
-  await runMemberScalpers(env, { events: [ev({ game: "G2", team: "T2", usSlug: "s2" })], legs: [], nowMs: m(10), ownerConfig: {}, fetchImpl: v.fetchImpl });
+  await runMemberScalpers(env, { events: [ev({ game: "G2", team: "T2", usSlug: "s2" })], legs: [], nowMs: m(10), ownerConfig: {}, fetchImpl: v.fetchImpl, drySim: false });
   check("disconnect: refused while a scalp is open", (await disconnectAccount(env, a.id)).status === 409);
   await updateAccountSettings(env, a.id, { mode: "off" });
-  const r2 = await runMemberScalpers(env, { events: [ev({ game: "G3", team: "T3", usSlug: "s3" })], legs: [leg(0.44, 0.46)], nowMs: m(30), ownerConfig: {}, fetchImpl: v.fetchImpl });
+  const r2 = await runMemberScalpers(env, { events: [ev({ game: "G3", team: "T3", usSlug: "s3" })], legs: [leg(0.44, 0.46)], nowMs: m(30), ownerConfig: {}, fetchImpl: v.fetchImpl, drySim: false });
   const openA2 = JSON.parse(env.SIGNALS_CACHE.m.get(scalpKeys(a.id).OPEN));
   check("off: no new entry, the open scalp still closed", openA2.length === 0 && env.DB.rows.filter(x => x.account === a.id).length === 2 && r2.entries === 1, { openA2, r2 });   // r2.entries = b's
   const disc = await disconnectAccount(env, a.id);
   check("disconnect: with nothing open the key is deleted and the member leaves the pass", disc.ok && disc.removed && !(await getAccount(env, a.id)) && !(await accountIds(env)).includes(a.id));
-  const r3 = await runMemberScalpers(env, { events: [], legs: [], nowMs: m(40), ownerConfig: {}, fetchImpl: v.fetchImpl });
+  const r3 = await runMemberScalpers(env, { events: [], legs: [], nowMs: m(40), ownerConfig: {}, fetchImpl: v.fetchImpl, drySim: false });
   check("minute pass: an off lane holding nothing is skipped", r3.accounts === 1 && r3.ran === 1);   // only b (live, holding) runs
 }
 
 // ---------- the owner's lane: off with a scalp open still closes it ----------
 {
   const env = mkEnv(), v = venue();
-  await runScalpLane(env, { events: [ev()], legs: [], nowMs: m(0), config: { scalpMode: "dry", scalpKalshiMode: "off" }, fetchImpl: v.fetchImpl, probe: { sleep: async () => {}, clock: () => m(0) } });
-  const r = await runScalpLane(env, { events: [], legs: [leg(0.44, 0.46)], nowMs: m(5), config: { scalpMode: "off", scalpKalshiMode: "off" }, fetchImpl: v.fetchImpl });
+  await runScalpLane(env, { events: [ev()], legs: [], nowMs: m(0), config: { scalpMode: "dry", scalpKalshiMode: "off" }, fetchImpl: v.fetchImpl, probe: { sleep: async () => {}, clock: () => m(0) }, drySim: false });
+  const r = await runScalpLane(env, { events: [], legs: [leg(0.44, 0.46)], nowMs: m(5), config: { scalpMode: "off", scalpKalshiMode: "off" }, fetchImpl: v.fetchImpl, drySim: false });
   check("owner lane: both venues off still closes the open scalp", r.exits === 1 && JSON.parse(env.SIGNALS_CACHE.m.get(SCALP_KEYS.OPEN)).length === 0 && env.DB.rows.length === 1 && env.DB.rows[0].account == null, r);
+}
+
+// ---------- a member's dry lane acts as live too (Nov 12 2026): the order matched on the book at send time ----------
+{
+  const env = mkEnv(), v = venue();
+  const a = { id: "friend-9", email: "z@x" };
+  await connectAccount(env, a, { keyId: "member-key-9999", secretKey: MEMBER_SECRET }, { fetchImpl: v.fetchImpl, nowMs: m(0) });
+  const thin = async (url, init) => (/\/v1\/markets\/nba-lal-bos\/book/.test(String(url)) ? json({ marketData: { bids: [{ px: { value: "0.39" }, qty: "100" }], offers: [{ px: { value: "0.40" }, qty: "5" }] } }) : v.fetchImpl(url, init));
+  const r = await runMemberScalpers(env, { events: [ev()], legs: [leg(0.39, 0.40)], nowMs: m(0), ownerConfig: {}, fetchImpl: thin });
+  const lastA = JSON.parse(env.SIGNALS_CACHE.m.get(scalpKeys(a.id).LAST));
+  check("member dry = live: only 5 offered at the limit, so the FOK would not fill and nothing is entered", r.ran === 1 && r.entries === 0 && Object.keys(lastA.skipped || {}).some(k => /FOK would not fill \(dry\)/.test(k)) && !v.calls.some(c => /\/v1\/orders$/.test(c.u)), { r, skipped: lastA.skipped });
 }
 
 console.log(`scalp-accounts: ${pass} passed, ${fail} failed`);

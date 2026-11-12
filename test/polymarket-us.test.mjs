@@ -1,6 +1,6 @@
 // Polymarket US adapter. Run with: node test/polymarket-us.test.mjs
 import { generateKeyPairSync, verify as nodeVerify, createPublicKey } from "node:crypto";
-import { signingMessage, decodeSecret, seedToPkcs8, importPmusKey, pmusHeaders, pmusRequest, pmusConfigured, leagueOf, leaguesOf, marketKind, legOfIntent, nameScore, teamsOfTitle, teamOfIntent, slimEvents, matchUsEvent, resolveUsMarket, fetchUsBook, fetchUsBbo, usLevels, orderIntent, yesPriceFor, roundYesPrice, roundQty, buildUsOrder, usFeePerContract, fillFromExecutions, fillFromOrder, usBalances, usPositionQty, PmusError } from "../src/polymarket-us.js";
+import { signingMessage, decodeSecret, seedToPkcs8, importPmusKey, pmusHeaders, pmusRequest, pmusConfigured, leagueOf, leaguesOf, marketKind, legOfIntent, nameScore, teamsOfTitle, teamOfIntent, slimEvents, matchUsEvent, resolveUsMarket, fetchUsBook, fetchUsBbo, matchFok, matchClose, usLevels, orderIntent, yesPriceFor, roundYesPrice, roundQty, buildUsOrder, usFeePerContract, fillFromExecutions, fillFromOrder, usBalances, usPositionQty, PmusError } from "../src/polymarket-us.js";
 let pass = 0, fail = 0;
 const check = (n, c, x) => { if (c) pass++; else { fail++; console.error("FAIL:", n, x ?? ""); } };
 
@@ -151,6 +151,26 @@ const check = (n, c, x) => { if (c) pass++; else { fail++; console.error("FAIL:"
   const book = await fetchUsBook("aec-nfl-buf-lar-2026-10-25", { fetchImpl: f });
   const bbo = await fetchUsBbo("aec-nfl-buf-lar-2026-10-25", { fetchImpl: f });
   check("fetchUsBook / fetchUsBbo: unique query string on every read (a cache miss at the edge)", seen.length === 2 && /\/book\?_=[0-9a-z]+$/.test(seen[0]) && /\/bbo\?_=[0-9a-z]+$/.test(seen[1]) && book.offers[0].price === 0.42 && bbo.bid === 0.40, seen);
+}
+
+// ---------- the venue's matching, simulated on a book (dry scalps, Nov 12 2026) ----------
+{
+  const book = { bids: [{ price: 0.38, size: 40 }, { price: 0.37, size: 100 }], offers: [{ price: 0.40, size: 10 }, { price: 0.41, size: 20 }, { price: 0.43, size: 500 }] };
+  const long = buildUsOrder({ slug: "s", action: "BUY", side: "long", effectivePrice: 0.41, tick: 0.01, quantity: 25, minQty: 1 });
+  const f1 = matchFok(book, long, "long");
+  check("matchFok long: 10 at 40c + 15 at 41c, never the 43c level (avg 40.6c), fee per level", f1.filled && f1.shares === 25 && f1.effectivePx === 0.406 && f1.feeUsd === Math.round((10 * usFeePerContract(0.40) + 15 * usFeePerContract(0.41)) * 100) / 100 && f1.limit === 0.41, f1);
+  const f2 = matchFok(book, { ...long, quantity: 31 }, "long");
+  check("matchFok long: 31 wanted, 30 at or under the limit -> killed, available 30", !f2.filled && f2.available === 30 && f2.best === 0.40, f2);
+  const short = buildUsOrder({ slug: "s", action: "BUY", side: "short", effectivePrice: 0.62, tick: 0.01, quantity: 50, minQty: 1 });
+  const f3 = matchFok(book, short, "short");
+  check("matchFok short: YES limit 38c; 40 at a 62c cost on the 38c bid is not 50 -> killed (the 37c bid costs 63c, over the limit)", Number(short.price.value) === 0.38 && !f3.filled && f3.available === 40, { f3, price: short.price });
+  const c1 = matchClose(book, "long", 60);
+  check("matchClose long: sold into the bids best first (40 at 38c, 20 at 37c)", c1 && c1.shares === 60 && c1.effectivePx === 0.3767 && !c1.partial, c1);
+  const c2 = matchClose(book, "long", 200);
+  check("matchClose long on a thin book: 140 of 200 filled, partial", c2 && c2.shares === 140 && c2.partial === true, c2);
+  const c3 = matchClose(book, "short", 15);
+  check("matchClose short: bought back off the YES offers (10 at 40c = 60c return, 5 at 41c = 59c)", c3 && c3.shares === 15 && c3.effectivePx === 0.5967, c3);
+  check("matchClose on an empty side: null", matchClose({ bids: [], offers: [] }, "long", 10) === null);
 }
 
 console.log(`polymarket-us: ${pass} passed, ${fail} failed`);

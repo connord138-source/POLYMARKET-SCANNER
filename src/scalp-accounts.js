@@ -223,7 +223,7 @@ export async function listAccounts(env, ownerCfg = {}, { nowMs = Date.now() } = 
 // Runs every connected member's lane on this minute's stale US quotes, after
 // the owner's. A member whose lane is off and holds nothing is skipped; one
 // member's failure never touches another's.
-export async function runMemberScalpers(env, { events = [], legs = [], nowMs = Date.now(), ownerConfig = {}, fetchImpl = fetch } = {}) {
+export async function runMemberScalpers(env, { events = [], legs = [], nowMs = Date.now(), ownerConfig = {}, fetchImpl = fetch, drySim = true } = {}) {
   const ids = await accountIds(env);
   const out = { at: new Date(nowMs).toISOString(), accounts: ids.length, ran: 0, live: 0, entries: 0, exits: 0, errors: [] };
   for (const id of ids) {
@@ -234,7 +234,7 @@ export async function runMemberScalpers(env, { events = [], legs = [], nowMs = D
       const open = await kvJson(env, scalpKeys(id).OPEN, []);
       if (eff.mode === 'off' && !open.length) continue;
       const creds = await openCreds(env, id, acct.sealed);
-      const r = await runScalpLane(credsEnv(env, creds), { events, kalshiEvents: [], legs, nowMs, config: memberConfig(ownerConfig, acct), fetchImpl, account: id });
+      const r = await runScalpLane(credsEnv(env, creds), { events, kalshiEvents: [], legs, nowMs, config: memberConfig(ownerConfig, acct), fetchImpl, account: id, drySim });
       out.ran++; if (r.mode === 'live') out.live++; out.entries += r.entries || 0; out.exits += r.exits || 0;
     } catch (e) { out.errors.push({ account: String(id).slice(0, 8), error: String(e.message).slice(0, 80) }); }
   }

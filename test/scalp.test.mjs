@@ -1,5 +1,5 @@
 // Polymarket US stale-quote scalp lane. Run with: node test/scalp.test.mjs
-import { runScalpLane, scalpReport, scalpEntryFor, scalpExitPrice, scalpPnl, scalpConfig, scalpModeFor, scalpModes, sanitizeScalpUpdates, summarizeScalps, setScalpHalt, SCALP_DEFAULTS, SCALP_KEYS, US_FRESH_QUOTES_SINCE } from "../src/scalp.js";
+import { runScalpLane, scalpReport, scalpEntryFor, scalpExitPrice, scalpPnl, scalpConfig, scalpModeFor, scalpModes, sanitizeScalpUpdates, summarizeScalps, setScalpHalt, SCALP_DEFAULTS, SCALP_KEYS, US_RECORD_SINCE } from "../src/scalp.js";
 import { generateKeyPairSync } from "node:crypto";
 import { rtPnlC } from "../src/us-lane.js";
 import { usFee, kalshiFee, KALSHI_TAKER_RATE } from "../src/xvenue.js";
@@ -12,7 +12,8 @@ const mkEnv = (extra = {}) => ({ SIGNALS_CACHE: kvStore(), DB: d1(), ...extra })
 // the fill probe (src/fill-probe.js) re-reads the venue's book on every dry entry: tests answer it from here and skip its wait
 let bookImpl = async () => ({ ok: false, status: 404, json: async () => ({}), text: async () => "{}", headers: { get: () => null } });
 const probeOpts = { sleep: async () => {}, clock: () => T0 + 4000 };
-const run = (env, o = {}) => runScalpLane(env, { fetchImpl: (u, i) => bookImpl(u, i), probe: probeOpts, ...o });
+// drySim false: these tests cover the lane's rules on the sampled quotes; the live-like dry (simEnter / simExit) has its own block below
+const run = (env, o = {}) => runScalpLane(env, { fetchImpl: (u, i) => bookImpl(u, i), probe: probeOpts, drySim: false, ...o });
 const T0 = Date.parse("2026-11-01T01:00:00Z");
 const leg = (bid, ask, extra = {}) => ({ ts: Math.floor(T0 / 1000), sport: "nba", game: "Lakers vs. Celtics", team: "Lakers", p_token: "tok", us_slug: "nba-lal-bos", us_long: true, p_bid: 0.45, p_ask: 0.46, us_bid: bid, us_ask: ask, us_bid_qty: 300, us_ask_qty: 300, ...extra });
 const ev = (extra = {}) => ({ ts: Math.floor(T0 / 1000), sport: "nba", game: "Lakers vs. Celtics", team: "Lakers", pToken: "tok", usSlug: "nba-lal-bos", pBid: 0.45, pAsk: 0.46, pMid: 0.455, dpC: 4, side: "buy", px: 0.40, qty: 300, fee: usFee(0.40), edgeC: 2.5, ...extra });
@@ -361,14 +362,80 @@ const kev = (extra = {}) => ({ venue: "kalshi", ts: Math.floor(T0 / 1000), sport
   check("live: a filled FOK is counted sent and filled", f.entries === 1 && d5.liveSent === 1 && d5.liveFilled === 1, d5);
 }
 
+// ---------- dry acts as live (Nov 12 2026): the live order matched on the book read at send time ----------
+{
+  // a venue whose book is whatever `book` holds when it is read; every read is recorded
+  let book = null; const reads = [];
+  const venue = async (url) => {
+    const u = String(url); reads.push(u);
+    const json = (b, status = 200) => ({ ok: status < 400, status, json: async () => b, text: async () => JSON.stringify(b), headers: { get: () => null } });
+    if (/gateway\.polymarket\.us\/v1\/market\/slug\//.test(u)) return json({ market: { orderPriceMinTickSize: "0.01", minimumTradeQty: "1", status: "MARKET_STATUS_OPEN" } });
+    if (/\/v1\/markets\/nba-lal-bos\/book/.test(u)) return book === "down" ? json({}, 503) : json({ marketData: { bids: (book.bids || []).map(([p, q]) => ({ px: { value: String(p) }, qty: String(q) })), offers: (book.offers || []).map(([p, q]) => ({ px: { value: String(p) }, qty: String(q) })) } });
+    return json({}, 404);
+  };
+  const m = (k) => T0 + k * 60e3;
+  const go = (env, o) => runScalpLane(env, { fetchImpl: venue, probe: probeOpts, drySim: true, config: {}, ...o });
+  const dayOf = (env) => JSON.parse(env.SIGNALS_CACHE.m.get(SCALP_KEYS.DAY + "2026-11-01"));
+  const openOf = (env) => JSON.parse(env.SIGNALS_CACHE.m.get(SCALP_KEYS.OPEN) || "[]");
+  // 1. the sampled ask was 40c, but when the order would go out only 10 of the 25 contracts are offered at 40c
+  { const env = mkEnv(); book = { bids: [[0.39, 200]], offers: [[0.40, 10], [0.41, 500]] };
+    const r = await go(env, { events: [ev()], legs: [leg(0.39, 0.40)], nowMs: m(0) });
+    const d = dayOf(env);
+    check("dry = live: a FOK the book cannot fill whole is not entered (10 of 25 at the limit); counted sent, not filled", r.entries === 0 && openOf(env).length === 0 && Object.keys(r.skipped).some(k => /FOK would not fill \(dry\)/.test(k)) && d.drySent === 1 && d.dryFilled === 0, { r, d });
+    check("dry = live: the book is read past the edge cache at send time", reads.some(u => /nba-lal-bos\/book\?_=/.test(u)), reads); }
+  // 2. enough at or under the limit: fills at the levels it takes, venue fee per level
+  { const env = mkEnv(); book = { bids: [[0.38, 200]], offers: [[0.39, 10], [0.40, 50], [0.41, 500]] };
+    const r = await go(env, { events: [ev()], legs: [leg(0.38, 0.40)], nowMs: m(0) });
+    const p = openOf(env)[0]; const d = dayOf(env);
+    const fee = Math.round((10 * usFee(0.39) + 15 * usFee(0.40)) * 100) / 100;
+    check("dry = live: the FOK takes 10 at 39c and 15 at 40c (avg 39.6c), never the 41c level; fee per level", r.entries === 1 && p.sim === true && p.shares === 25 && p.px === 0.396 && p.feeEntryUsd === fee && p.limitPx === 0.40 && d.drySent === 1 && d.dryFilled === 1, { p, d, fee });
+    // exit at the hold: close-position into the bids read now, whole size, best first; the sampled legs do not matter
+    book = { bids: [[0.43, 10], [0.42, 100]], offers: [[0.44, 100]] };
+    const x = await go(env, { events: [], legs: [], nowMs: m(5) });
+    const row = env.DB.rows[0];
+    check("dry = live exit: the position is sold into the book at the hold (10 at 43c, 15 at 42c = 42.4c), no sampled quote needed", x.exits === 1 && openOf(env).length === 0 && row.exit_kind === "x5" && row.exit_px === 0.424 && row.mode === "dry" && row.shares === 25, row); }
+  // 3. a sell event buys the short side: the FOK hits YES bids at 1 - cost
+  { const env = mkEnv(); book = { bids: [[0.60, 100]], offers: [[0.62, 100]] };
+    const r = await go(env, { events: [ev({ side: "sell", px: 0.60 })], legs: [leg(0.60, 0.62)], nowMs: m(0) });
+    const p = openOf(env)[0];
+    check("dry = live: a sell event's FOK buys the short side off the YES bids (entry 60c in YES terms, 25 contracts)", r.entries === 1 && p && p.side === "sell" && p.px === 0.60 && p.shares === 25 && p.usd === 10, p);
+    book = { bids: [[0.54, 100]], offers: [[0.55, 100]] };
+    await go(env, { events: [], legs: [], nowMs: m(5) });
+    check("dry = live exit (short): bought back off the YES offers at 55c, 5c a share less both fees", env.DB.rows[0] && env.DB.rows[0].exit_px === 0.55 && env.DB.rows[0].pnl_c === scalpPnl({ side: "sell", px: 0.60, shares: 25 }, 0.55).pnlC && env.DB.rows[0].pnl_usd > 0, env.DB.rows[0]); }
+  // 4. a thin book at the hold: what is there closes, the rest waits for the next minute
+  { const env = mkEnv(); book = { bids: [[0.39, 200]], offers: [[0.40, 100]] };
+    await go(env, { events: [ev()], legs: [], nowMs: m(0) });
+    book = { bids: [[0.43, 10]], offers: [[0.45, 100]] };
+    const a = await go(env, { events: [], legs: [], nowMs: m(5) });
+    const left = openOf(env);
+    book = { bids: [[0.44, 100]], offers: [[0.45, 100]] };
+    await go(env, { events: [], legs: [], nowMs: m(6) });
+    const kinds = env.DB.rows.map(r => `${r.exit_kind}:${r.shares}@${r.exit_px}`).join(",");
+    check("dry = live exit on a thin book: 10 closed at 43c (x5_part), 15 held and closed the next minute at 44c", a.exits === 1 && left.length === 1 && left[0].shares === 15 && kinds === "x5_part:10@0.43,x5:15@0.44" && openOf(env).length === 0, { kinds, left }); }
+  // 5. nothing to close into for three minutes: where live halts; recorded unpriced, counted
+  { const env = mkEnv(); book = { bids: [[0.39, 200]], offers: [[0.40, 100]] };
+    await go(env, { events: [ev()], legs: [], nowMs: m(0) });
+    book = { bids: [], offers: [[0.45, 100]] };
+    await go(env, { events: [], legs: [], nowMs: m(5) }); await go(env, { events: [], legs: [], nowMs: m(6) });
+    const held = openOf(env).length;
+    await go(env, { events: [], legs: [], nowMs: m(7) });
+    const d = dayOf(env); const row = env.DB.rows[0];
+    check("dry = live exit: no bids for 3 minutes -> unpriced no_quote, day.wouldHalt counts where live would have halted", held === 1 && row && row.exit_kind === "no_quote" && row.pnl_usd == null && /live would have halted/.test(row.note) && d.wouldHalt === 1 && openOf(env).length === 0, { row, d }); }
+  // 6. the book cannot be read at send time: no entry, not counted as sent
+  { const env = mkEnv(); book = "down";
+    const r = await go(env, { events: [ev()], legs: [leg(0.39, 0.40)], nowMs: m(0) });
+    const d = dayOf(env);
+    check("dry = live: book unreadable at send time -> no entry, not counted as an order", r.entries === 0 && r.skipped["dry: book read failed"] === 1 && d.drySent === 0, { r, d }); }
+}
+
 // ---------- report: the US record since quotes are read fresh (Nov 12 2026) ----------
 {
-  const cut = Date.parse(US_FRESH_QUOTES_SINCE) / 1000;
+  const cut = Date.parse(US_RECORD_SINCE) / 1000;
   const row = (id, ts, pnl, extra = {}) => ({ id, mode: "dry", ts_entry: ts, ts_exit: ts + 300, sport: "nba", game: "g", team: "t", us_slug: "s", side: "buy", entry_px: 0.4, exit_px: 0.42, shares: 25, usd: 10, fee_entry_usd: 0.17, fee_exit_usd: 0.17, pnl_c: pnl * 4, pnl_usd: pnl, edge_c: 2, dp_c: 4, shown_qty: 300, hold_s: 300, exit_kind: "x5", live: 0, order_id: null, exit_order_id: null, note: null, venue: "us", k_ticker: null, probe: null, account: null, ...extra });
   const env = mkEnv();
   env.DB.rows.push(row("old1", cut - 3600, 1.5), row("old2", cut - 60, 2), row("new1", cut + 60, -0.4), row("new2", cut + 3600, 0.6), row("k1", cut + 120, 0.3, { venue: "kalshi" }));
   const rep = await scalpReport(env, {}, { nowMs: (cut + 7200) * 1000 });
-  check("report fresh: the US rows from the cutover on only (not the cached-quote rows, not Kalshi)", rep.fresh && rep.fresh.since === US_FRESH_QUOTES_SINCE && rep.fresh.all.n === 2 && Math.abs(rep.fresh.all.pnlUsd - 0.2) < 0.001 && rep.all.n === 5 && /fresh/.test(rep.read), rep.fresh);
+  check("report fresh: the US rows from the cutover on only (not the cached-quote rows, not Kalshi)", rep.fresh && rep.fresh.since === US_RECORD_SINCE && rep.fresh.all.n === 2 && Math.abs(rep.fresh.all.pnlUsd - 0.2) < 0.001 && rep.all.n === 5 && /fresh/.test(rep.read), rep.fresh);
   // a window that starts after the cutover still reads the whole fresh record
   const rep2 = await scalpReport(env, {}, { nowMs: (cut + 3 * 86400) * 1000, hours: 24 });
   check("report fresh: reads past the window back to the cutover", rep2.all.n === 0 && rep2.fresh.all.n === 2, { all: rep2.all, fresh: rep2.fresh.all });
