@@ -185,8 +185,8 @@ export async function setLiveAllowed(env, userId, on, { nowMs = Date.now() } = {
 const slimReport = (r) => ({
   mode: r.mode, liveAsked: r.liveAsked, liveBlocked: r.liveBlocked, halted: r.halted, halt: r.halt,
   open: (r.open || []).map((p) => ({ team: p.team, game: p.game, sport: p.sport, side: p.side, px: p.px, shares: p.shares, usd: p.usd, live: !!p.live, entryAt: p.entryAt, holdLeftS: p.holdLeftS, markUsd: p.markUsd ?? null, lastExitError: p.lastExitError || null })),
-  today: r.today ? { date: r.today.date, entries: r.today.entries, exits: r.today.exits, wins: r.today.wins, pnlUsd: r.today.pnlUsd, livePnlUsd: r.today.livePnlUsd || 0, feesUsd: r.today.feesUsd, skipped: r.today.skipped } : null,
-  all: r.all, byMode: r.byMode, bySport: r.bySport, byKind: r.byKind,
+  today: r.today ? { date: r.today.date, entries: r.today.entries, exits: r.today.exits, wins: r.today.wins, pnlUsd: r.today.pnlUsd, livePnlUsd: r.today.livePnlUsd || 0, feesUsd: r.today.feesUsd, skipped: r.today.skipped, liveSent: r.today.liveSent || 0, liveFilled: r.today.liveFilled || 0, drySent: r.today.drySent || 0, dryFilled: r.today.dryFilled || 0, wouldHalt: r.today.wouldHalt || 0 } : null,
+  all: r.all, byMode: r.byMode, bySport: r.bySport, byKind: r.byKind, fresh: r.fresh ? { since: r.fresh.since, all: r.fresh.all, byMode: r.fresh.byMode } : null,
   recent: (r.recent || []).map((x) => ({ entryAt: x.entryAt, exitAt: x.exitAt, sport: x.sport, game: x.game, team: x.team, side: x.side, entryPx: x.entryPx, exitPx: x.exitPx, shares: x.shares, usd: x.usd, pnlUsd: x.pnlUsd, pnlC: x.pnlC, feesUsd: Math.round(((x.feeEntryUsd || 0) + (x.feeExitUsd || 0)) * 100) / 100, exitKind: x.exitKind, live: !!x.live, mode: x.mode })),
 });
 // A member's own view: his account (no key), his lane's state and record, his balance (refreshed at most once a minute).
