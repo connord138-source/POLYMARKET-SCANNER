@@ -321,10 +321,28 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   after the send is "not filled" even when the read before it failed, the
   day counts `liveSent` / `liveFilled` (US entries that reached the venue /
   filled), and `scalpReport.fresh` is the US record since
-  `US_FRESH_QUOTES_SINCE` (all, byMode, bySport, probe), the one to read.
+  `US_RECORD_SINCE` (all, byMode, bySport, probe), the one to read.
   Back to DRY on Nov 12 2026 (owner's "Dry first"): config/autotrader.json
   scalpMode 'dry' until the fresh record (~100 scalps on real-time prices)
   is read and the owner decides on live again.
+  Dry acts as live (Nov 12 2026, owner's "It needs to be simulating the
+  exact same way it would be acting if live"): a dry US entry used to fill
+  at the sampler's quote for its whole size and close at the next sampled
+  quote. Now `simEnter` builds the very order `liveEnter` sends (market
+  status, venue minimum, tick-rounded limit via `buildUsOrder`) and matches
+  it on the venue's book read at that moment (`fetchUsBook`, past the edge
+  cache) with `matchFok` (polymarket-us.js, pure): the whole size at or
+  better than the limit, levels taken best first, the fee per level, else
+  no entry ('FOK would not fill (dry)'); `today.drySent` / `dryFilled`
+  count them like `liveSent` / `liveFilled`. The exit is close-position on
+  the book read at the hold (`simExit` + `matchClose`: whole position into
+  the best levels, no limit; `x5`, or `x5_part` on a thin book with the
+  rest held a minute; an empty side three minutes running is where live
+  halts: `no_quote` unpriced, `today.wouldHalt`). Members' dry lanes run
+  the same code. `runScalpLane({ drySim })` (default true) is a test
+  switch; Kalshi dry still fills at the sampled quote (the venue is off).
+  The record to read (`fresh`) starts at `US_RECORD_SINCE` (Nov 12 18:00
+  UTC), after both fixes.
   Kalshi venue (Nov 1 2026, owner's "build the kalshi NHL scalp lane", after
   the sampler's stale-Kalshi read crossed its threshold for NHL: 298 moves,
   Kalshi still crossable after its fee on 9.7% at 8.4c): the sampler now

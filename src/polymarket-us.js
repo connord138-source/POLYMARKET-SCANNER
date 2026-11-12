@@ -275,6 +275,30 @@ export function usLevels(book, action, side) {
   const src = useOffers ? (book && book.offers) || [] : (book && book.bids) || [];
   return src.map(l => ({ price: side === 'long' ? l.price : r4(1 - l.price), size: l.size, yesPrice: l.price }));
 }
+// The venue's matching engine, simulated on a book read (Nov 12 2026: the scalp lane's dry mode
+// sends nothing but must act exactly as live would). Pure; prices in effective terms for `side`.
+// A BUY fill-or-kill at the order's limit: every level at or better than the limit, best first,
+// until the quantity is met; the whole quantity or nothing (FOK). Fee per contract at each level.
+export function matchFok(book, order, side, feeCoef = PMUS_FEE) {
+  const qty = Number(order && order.quantity) || 0;
+  const yes = Number(order && order.price && order.price.value);
+  const limit = side === 'long' ? yes : r4(1 - yes);
+  const levels = usLevels(book, 'BUY', side).filter(l => l.size > 0 && l.price <= limit + 1e-9).sort((a, b) => a.price - b.price);
+  let left = qty, cost = 0, fee = 0, took = 0;
+  for (const l of levels) { if (left <= 0) break; const q = Math.min(left, l.size); took += q; cost += q * l.price; fee += q * usFeePerContract(l.price, feeCoef); left -= q; }
+  const best = usLevels(book, 'BUY', side).reduce((m, l) => (m == null || l.price < m ? l.price : m), null);
+  if (!(qty > 0) || left > 1e-9) return { filled: false, qty, available: r4(took), limit, best };
+  return { filled: true, qty, shares: r4(qty), effectivePx: r4(cost / qty), feeUsd: r2(fee), limit, best };
+}
+// close-position: SELL the whole position into the book, best levels first, no limit; what the
+// book holds is filled (shares may come short of the position on a thin book), nothing on an empty side.
+export function matchClose(book, side, shares, feeCoef = PMUS_FEE) {
+  const levels = usLevels(book, 'SELL', side).filter(l => l.size > 0).sort((a, b) => b.price - a.price);
+  let left = Number(shares) || 0, got = 0, fee = 0, took = 0;
+  for (const l of levels) { if (left <= 0) break; const q = Math.min(left, l.size); took += q; got += q * l.price; fee += q * usFeePerContract(l.price, feeCoef); left -= q; }
+  if (!(took > 0)) return null;
+  return { shares: r4(took), effectivePx: r4(got / took), feeUsd: r2(fee), partial: left > 1e-9 };
+}
 export const orderIntent = (action, side) => `ORDER_INTENT_${action === 'BUY' ? 'BUY' : 'SELL'}_${side === 'long' ? 'LONG' : 'SHORT'}`;
 export const yesPriceFor = (side, effectivePrice) => (side === 'long' ? effectivePrice : r4(1 - effectivePrice));
 // Marketable limit: BUY long and SELL short lift offers (round the YES price up); BUY short and SELL long hit bids (round down).
