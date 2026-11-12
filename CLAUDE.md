@@ -322,6 +322,9 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   day counts `liveSent` / `liveFilled` (US entries that reached the venue /
   filled), and `scalpReport.fresh` is the US record since
   `US_FRESH_QUOTES_SINCE` (all, byMode, bySport, probe), the one to read.
+  Back to DRY on Nov 12 2026 (owner's "Dry first"): config/autotrader.json
+  scalpMode 'dry' until the fresh record (~100 scalps on real-time prices)
+  is read and the owner decides on live again.
   Kalshi venue (Nov 1 2026, owner's "build the kalshi NHL scalp lane", after
   the sampler's stale-Kalshi read crossed its threshold for NHL: 298 moves,
   Kalshi still crossable after its fee on 9.7% at 8.4c): the sampler now
