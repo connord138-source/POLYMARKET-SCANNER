@@ -214,7 +214,7 @@ export async function listAccounts(env, ownerCfg = {}, { nowMs = Date.now() } = 
     const acct = await getAccount(env, id);
     if (!acct) continue;
     const rep = await scalpReport(env, memberConfig(ownerCfg, acct), { hours: 168, nowMs, account: id });
-    out.push({ account: publicAccount(acct), halted: rep.halted, open: (rep.open || []).length, today: rep.today ? { entries: rep.today.entries, pnlUsd: rep.today.pnlUsd, livePnlUsd: rep.today.livePnlUsd || 0 } : null, all: rep.all, byMode: rep.byMode });
+    out.push({ account: publicAccount(acct), halted: rep.halted, open: (rep.open || []).length, today: rep.today ? { entries: rep.today.entries, exits: rep.today.exits, wins: rep.today.wins, pnlUsd: rep.today.pnlUsd, livePnlUsd: rep.today.livePnlUsd || 0, events: rep.today.events || 0, drySent: rep.today.drySent || 0, dryFilled: rep.today.dryFilled || 0, liveSent: rep.today.liveSent || 0, liveFilled: rep.today.liveFilled || 0, wouldHalt: rep.today.wouldHalt || 0 } : null, all: rep.all, byMode: rep.byMode, fresh: rep.fresh ? { since: rep.fresh.since, all: rep.fresh.all, byMode: rep.fresh.byMode, bySport: rep.fresh.bySport } : null });
   }
   return { success: true, accounts: out, last: await kvJson(env, ACCT_KEYS.RUN, null) };
 }

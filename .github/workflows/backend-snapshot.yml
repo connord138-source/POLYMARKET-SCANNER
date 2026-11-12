@@ -87,7 +87,7 @@ jobs:
             if [ "$name" = "scalpers" ]; then
               jq '{error, last, accounts: [(.accounts // [])[] | {user: ((.account.userId // "")[0:8]), mode: .account.mode, effectiveMode: .account.effectiveMode,
                 liveAllowed: .account.liveAllowed, settings: .account.settings, balance: (.account.balance // null | if . then {currentBalance, at} else null end),
-                keyError: (.account.keyError // null), halted, open, today, all, byMode}]}' \
+                keyError: (.account.keyError // null), halted, open, today, all, byMode, fresh}]}' \
                 "/tmp/snap/$name.json" > "/tmp/snap/$name.slim" && mv "/tmp/snap/$name.slim" "/tmp/snap/$name.json"
             fi
             args+=(--slurpfile "$name" "/tmp/snap/$name.json")
