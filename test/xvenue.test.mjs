@@ -1,5 +1,5 @@
 // Cross-venue sampler. Run with: node test/xvenue.test.mjs
-import { teamMatch, teamMatchScore, orientLegs, matchPairs, attachUs, isLive, analyzeSeries, sampleXvenue, xvenueReport, collectCrosses, kalshiFee, usFee, XV_LIVE_BEFORE_MS, XV_LIVE_AFTER_MS } from "../src/xvenue.js";
+import { teamMatch, teamMatchScore, orientLegs, matchPairs, attachUs, isLive, analyzeSeries, sampleXvenue, xvenueReport, collectCrosses, kalshiFee, usFee, usTopOfBook, freshUrl, XV_LIVE_BEFORE_MS, XV_LIVE_AFTER_MS } from "../src/xvenue.js";
 let pass = 0, fail = 0;
 const check = (n, c, x) => { if (c) pass++; else { fail++; console.error("FAIL:", n, x ?? ""); } };
 
@@ -168,5 +168,16 @@ const P = (q, outs, start, toks = ["t0", "t1"], extra = {}) => ({ question: q, o
   const signedOk = q && verify(null, Buffer.from(q.h["KALSHI-ACCESS-TIMESTAMP"] + "GET/trade-api/v2/markets"), ed.publicKey, Buffer.from(q.h["KALSHI-ACCESS-SIGNATURE"], "base64"));
   check("signed: series and quote calls carry a valid Kalshi signature; status reports kalshiAuth; Kalshi quotes land", st.kalshiAuth === true && st.kQuoted === 2 && kalshiReqs.length >= 7 && kalshiReqs.every(r => r.h["KALSHI-ACCESS-KEY"] === "kid-1") && signedOk === true && rows[0].a[6] === 0.37, JSON.stringify({ st, nReq: kalshiReqs.length, row: rows[0] && rows[0].a.slice(0, 8) }));
 }
+// ---------- the US gateway's edge cache (Nov 12 2026): every price read carries a unique query string ----------
+{
+  const a = freshUrl("https://gateway.polymarket.us/v1/markets/x/book"), b = freshUrl("https://gateway.polymarket.us/v1/markets/x/book");
+  const c = freshUrl("https://gateway.polymarket.us/v1/markets?limit=5");
+  check("freshUrl: appends a unique _= param (? or &), two calls differ", /\/book\?_=[0-9a-z]+$/.test(a) && a !== b && /\?limit=5&_=[0-9a-z]+$/.test(c), { a, b, c });
+  const seen = [];
+  const f = async (u) => { seen.push(String(u)); if (/\/book\?_=/.test(String(u))) return { ok: false, status: 503, json: async () => ({}) }; return { ok: true, json: async () => ({ marketData: { bestBid: { value: "0.40" }, bestAsk: { value: "0.42" } } }) }; };
+  const q = await usTopOfBook("nba-lal-bos", { fetchImpl: f });
+  check("usTopOfBook: both /book and the /bbo fallback are read past the cache", seen.length === 2 && seen.every(u => /\?_=[0-9a-z]+$/.test(u)) && q && q.bid === 0.40 && q.ask === 0.42, seen);
+}
+
 console.log(`${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
