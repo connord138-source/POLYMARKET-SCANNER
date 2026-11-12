@@ -9,7 +9,7 @@
 // sells, makers below $10M/month earn nothing. Retail limit 25 req/s per IP.
 // Secrets PMUS_KEY_ID / PMUS_SECRET_KEY are pushed by
 // .github/workflows/push-polymarket-us-key.yml (keys at polymarket.us/developer).
-import { teamMatchScore } from './xvenue.js';
+import { teamMatchScore, freshUrl } from './xvenue.js';
 
 export const PMUS_API = 'https://api.polymarket.us';
 export const PMUS_GATEWAY = 'https://gateway.polymarket.us';
@@ -259,7 +259,7 @@ export async function resolveUsMarket(env, intent, deps = {}) {
 
 // ---- book and order math (YES-price convention) ----
 export async function fetchUsBook(slug, { fetchImpl = fetch } = {}) {
-  const res = await fetchImpl(`${PMUS_GATEWAY}/v1/markets/${encodeURIComponent(slug)}/book`);
+  const res = await fetchImpl(freshUrl(`${PMUS_GATEWAY}/v1/markets/${encodeURIComponent(slug)}/book`));   // past the edge cache (xvenue.js freshUrl)
   if (!res.ok) return null;
   const md = ((await res.json()) || {}).marketData || {};
   const lv = (xs) => (xs || []).map(l => ({ price: Number(l.px && l.px.value), size: Number(l.qty) })).filter(l => l.price > 0 && l.size > 0);
@@ -310,7 +310,7 @@ export const usFeePerContract = (effectivePrice, coef = PMUS_FEE) => coef * effe
 // Top of book + tape summary from the public bbo: last trade price and the cumulative shares
 // traded, which together tell a dry resting order whether a print happened at its level.
 export async function fetchUsBbo(slug, { fetchImpl = fetch } = {}) {
-  const res = await fetchImpl(`${PMUS_GATEWAY}/v1/markets/${encodeURIComponent(slug)}/bbo`);
+  const res = await fetchImpl(freshUrl(`${PMUS_GATEWAY}/v1/markets/${encodeURIComponent(slug)}/bbo`));
   if (!res.ok) throw new PmusError(`polymarket.us gateway ${res.status} (bbo ${slug})`, res.status);
   const md = ((await res.json()) || {}).marketData || {};
   const num = (v) => { const x = Number(v && v.value != null ? v.value : v); return Number.isFinite(x) && x > 0 ? x : null; };

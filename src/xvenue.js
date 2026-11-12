@@ -12,6 +12,14 @@ import { KALSHI_API, kalshiHeaders, kalshiAuthConfigured } from './kalshi.js';
 const GAMMA_API = 'https://gamma-api.polymarket.com';
 const CLOB_API = 'https://clob.polymarket.com';
 const US_API = 'https://gateway.polymarket.us';   // Polymarket US public market data (no key)
+// The gateway's market data is served from Cloudflare's edge cache (cache-control: public,
+// max-age=30): on Nov 12 2026 /book and /bbo answered cf-cache-status HIT with age up to 29s,
+// while global Polymarket (CLOB POST /books) and Kalshi are read live. A US quote up to 30s old
+// next to a live global one reads as "the US book has not followed yet" when the venue already
+// has: the US lane's 10 live FOK orders on Nov 11-12 all came back unfilled. A unique query
+// string is a cache miss (cf-cache-status MISS, last-modified = now), i.e. the book as of now.
+// Every US price read (sampler, fill probe, executor, scalp lane) goes through this.
+export const freshUrl = (url) => `${url}${url.includes('?') ? '&' : '?'}_=${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
 export const XV_KEYS = { PAIRS: 'xv_pairs', LAST: 'xv_last', BOOT: 'xv_boot', KALSHI_COOLDOWN: 'xv_kalshi_cooldown' };
 export const XV_KALSHI_COOLDOWN_S = 300;           // after a 429 on the per-minute quote call, skip Kalshi for 5 minutes
@@ -277,7 +285,7 @@ export async function usTopOfBook(slug, { fetchImpl } = {}) {
   const f = fetchImpl || fetch;
   const v = (x) => (x && x.value != null ? Number(x.value) : null);
   try {
-    const res = await f(`${US_API}/v1/markets/${encodeURIComponent(slug)}/book`);
+    const res = await f(freshUrl(`${US_API}/v1/markets/${encodeURIComponent(slug)}/book`));
     if (res.ok) {
       const md = (await res.json()).marketData || {};
       const top = (lv, pick) => { const xs = (lv || []).map(l => ({ px: v(l.px), qty: l.qty != null ? Number(l.qty) : null })).filter(l => l.px > 0); if (!xs.length) return null; return xs.reduce((a, b) => (pick(b.px, a.px) ? b : a)); };
@@ -286,7 +294,7 @@ export async function usTopOfBook(slug, { fetchImpl } = {}) {
       if (b || a) return { bid: b ? b.px : null, ask: a ? a.px : null, last: null, bidQty: b ? b.qty : null, askQty: a ? a.qty : null };
     }
   } catch (e) { /* fall through to /bbo */ }
-  const res = await f(`${US_API}/v1/markets/${encodeURIComponent(slug)}/bbo`);
+  const res = await f(freshUrl(`${US_API}/v1/markets/${encodeURIComponent(slug)}/bbo`));
   if (!res.ok) return null;
   const md = (await res.json()).marketData || {};
   return { bid: v(md.bestBid), ask: v(md.bestAsk), last: v(md.lastTradePx), bidQty: null, askQty: null };

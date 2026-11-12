@@ -237,6 +237,16 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   `docs/PROFIT-AVENUES.md` Part 2 before proposing structural-arb features.
   The sampler reads Polymarket US from `/v1/markets/{slug}/book` (top of
   book + shares shown, `us_bid_qty`/`us_ask_qty`), falling back to `/bbo`.
+  Edge cache (Nov 12 2026): the gateway's market data is served from
+  Cloudflare's cache (`cache-control: public, max-age=30`, `cf-cache-status:
+  HIT`, age up to 29s) while global Polymarket (CLOB POST /books) and Kalshi
+  are read live, so until then a US quote up to 30s old sat next to a live
+  global one and read as "the US book has not followed". Every US price read
+  (sampler, fill probe, executor, `usGameQuote`) now goes through `freshUrl`
+  (xvenue.js: a unique `_=` query string = a cache miss, the book as of now).
+  Every US-lane, scalp, probe and stale-US number before Nov 12 2026 was
+  measured against the cached copy; read the post-fix record (scalp
+  `fresh`) and let the 168h windows roll past it before trusting them.
 - `src/us-lane.js` — Polymarket US stale-quote **paper** lane (Oct 17 2026):
   in-game, the US book lagged global Polymarket by more than its taker fee on
   ~20-30% of 3c+ minute moves (NHL/NBA/CFB). The sampler's `afterSample` hook
@@ -302,6 +312,16 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   state read is settled on the account position before halting: unchanged
   = not filled, moved = that fill; halt only if the position cannot be
   read. The halt itself is cleared by the owner (UN-HALT on the card).
+  First live night (Nov 11-12 2026): 10 FOK entries sent, none filled (2
+  read EXPIRED, 8 answered 404 on the state read: a finished FOK is not
+  kept), and the lane halted at 01:03 UTC when a position read failed once.
+  Cause: the US quotes were the gateway's cached copy (see xvenue.js), so
+  the "stale" price had usually gone already. Since then position reads are
+  tried three times (`positionQty`, `POSITION_RETRY_MS`), a flat position
+  after the send is "not filled" even when the read before it failed, the
+  day counts `liveSent` / `liveFilled` (US entries that reached the venue /
+  filled), and `scalpReport.fresh` is the US record since
+  `US_FRESH_QUOTES_SINCE` (all, byMode, bySport, probe), the one to read.
   Kalshi venue (Nov 1 2026, owner's "build the kalshi NHL scalp lane", after
   the sampler's stale-Kalshi read crossed its threshold for NHL: 298 moves,
   Kalshi still crossable after its fee on 9.7% at 8.4c): the sampler now

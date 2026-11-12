@@ -1,6 +1,6 @@
 // Polymarket US adapter. Run with: node test/polymarket-us.test.mjs
 import { generateKeyPairSync, verify as nodeVerify, createPublicKey } from "node:crypto";
-import { signingMessage, decodeSecret, seedToPkcs8, importPmusKey, pmusHeaders, pmusRequest, pmusConfigured, leagueOf, leaguesOf, marketKind, legOfIntent, nameScore, teamsOfTitle, teamOfIntent, slimEvents, matchUsEvent, resolveUsMarket, fetchUsBook, usLevels, orderIntent, yesPriceFor, roundYesPrice, roundQty, buildUsOrder, usFeePerContract, fillFromExecutions, fillFromOrder, usBalances, usPositionQty, PmusError } from "../src/polymarket-us.js";
+import { signingMessage, decodeSecret, seedToPkcs8, importPmusKey, pmusHeaders, pmusRequest, pmusConfigured, leagueOf, leaguesOf, marketKind, legOfIntent, nameScore, teamsOfTitle, teamOfIntent, slimEvents, matchUsEvent, resolveUsMarket, fetchUsBook, fetchUsBbo, usLevels, orderIntent, yesPriceFor, roundYesPrice, roundQty, buildUsOrder, usFeePerContract, fillFromExecutions, fillFromOrder, usBalances, usPositionQty, PmusError } from "../src/polymarket-us.js";
 let pass = 0, fail = 0;
 const check = (n, c, x) => { if (c) pass++; else { fail++; console.error("FAIL:", n, x ?? ""); } };
 
@@ -144,5 +144,14 @@ const check = (n, c, x) => { if (c) pass++; else { fail++; console.error("FAIL:"
   check("balances: USD row with buying power", bal.currency === "USD" && bal.buyingPower === 140.5 && bal.currentBalance === 150);
   check("position qty by slug", (await usPositionQty(env, "aec-nfl-buf-lar-2026-10-25", { fetchImpl: fetchMock })) === 24);
 }
+// ---------- book reads past the gateway's edge cache (Nov 12 2026) ----------
+{
+  const seen = [];
+  const f = async (u) => { seen.push(String(u)); return { ok: true, json: async () => ({ marketData: { bids: [{ px: { value: "0.40" }, qty: "10" }], offers: [{ px: { value: "0.42" }, qty: "5" }], bestBid: { value: "0.40" }, bestAsk: { value: "0.42" } } }) }; };
+  const book = await fetchUsBook("aec-nfl-buf-lar-2026-10-25", { fetchImpl: f });
+  const bbo = await fetchUsBbo("aec-nfl-buf-lar-2026-10-25", { fetchImpl: f });
+  check("fetchUsBook / fetchUsBbo: unique query string on every read (a cache miss at the edge)", seen.length === 2 && /\/book\?_=[0-9a-z]+$/.test(seen[0]) && /\/bbo\?_=[0-9a-z]+$/.test(seen[1]) && book.offers[0].price === 0.42 && bbo.bid === 0.40, seen);
+}
+
 console.log(`polymarket-us: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

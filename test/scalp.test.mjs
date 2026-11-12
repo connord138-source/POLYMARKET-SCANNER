@@ -1,5 +1,5 @@
 // Polymarket US stale-quote scalp lane. Run with: node test/scalp.test.mjs
-import { runScalpLane, scalpReport, scalpEntryFor, scalpExitPrice, scalpPnl, scalpConfig, scalpModeFor, scalpModes, sanitizeScalpUpdates, summarizeScalps, setScalpHalt, SCALP_DEFAULTS, SCALP_KEYS } from "../src/scalp.js";
+import { runScalpLane, scalpReport, scalpEntryFor, scalpExitPrice, scalpPnl, scalpConfig, scalpModeFor, scalpModes, sanitizeScalpUpdates, summarizeScalps, setScalpHalt, SCALP_DEFAULTS, SCALP_KEYS, US_FRESH_QUOTES_SINCE } from "../src/scalp.js";
 import { generateKeyPairSync } from "node:crypto";
 import { rtPnlC } from "../src/us-lane.js";
 import { usFee, kalshiFee, KALSHI_TAKER_RATE } from "../src/xvenue.js";
@@ -314,6 +314,64 @@ const kev = (extra = {}) => ({ venue: "kalshi", ts: Math.floor(T0 / 1000), sport
   // live asked without the Kalshi key: runs dry and says why
   const blocked = await run(mkEnv(), { events: [], kalshiEvents: [kev()], legs: [], nowMs: m(0), config: cfg });
   check("kalshi live without the key: dry, the reason reported, the dry scalp still opens", blocked.modes.kalshi.mode === "dry" && blocked.modes.kalshi.liveAsked && /push-kalshi-key/.test(blocked.modes.kalshi.liveBlocked) && blocked.entries === 1, blocked.modes);
+}
+
+// ---------- live: position reads retried before a halt; sent / filled counted (Nov 12 2026) ----------
+{
+  // a FOK that comes back without executions, its state read 404 (as on Nov 11-12), positions failing
+  // the first `posFails` reads; posAfter = the position once the order is in
+  const mkVenue = ({ posFails = 0, posAfter = "0", orderGet = (json) => json({ message: "Order not found" }, 404) } = {}) => {
+    let placed = false, posReads = 0;
+    const fetchImpl = async (url, init = {}) => {
+      const u = String(url);
+      const json = (b, status = 200) => ({ ok: status < 400, status, json: async () => b, text: async () => JSON.stringify(b), headers: { get: () => null } });
+      if (/gateway\.polymarket\.us\/v1\/market\/slug\//.test(u)) return json({ market: { orderPriceMinTickSize: "0.01", minimumTradeQty: "1", status: "MARKET_STATUS_OPEN" } });
+      if (/\/v1\/portfolio\/positions/.test(u)) { posReads++; if (posReads <= posFails) return json({ message: "upstream timeout" }, 503); return json({ positions: { "nba-lal-bos": { netPositionDecimal: placed ? posAfter : "0" } } }); }
+      if (/\/v1\/orders$/.test(u)) { placed = true; return json({ id: "DNRF7FR014ET", executions: [] }); }
+      if (/\/v1\/order\/DNRF7FR014ET$/.test(u)) return orderGet(json);
+      return json({}, 404);
+    };
+    return { fetchImpl, reads: () => posReads };
+  };
+  const keys = { PMUS_KEY_ID: "key-1", PMUS_SECRET_KEY: Buffer.alloc(32, 9).toString("base64") };
+  const m = (k) => T0 + k * 60e3;
+  const go = (env, v) => run(env, { events: [ev()], legs: [leg(0.40, 0.40)], nowMs: m(0), config: { scalpMode: "live" }, fetchImpl: v.fetchImpl, retryWaitMs: 0 });
+  // two failed position reads (before the send), the third answers; the order is gone and the position flat
+  const v1 = mkVenue({ posFails: 2 }); const e1 = mkEnv(keys);
+  const a = await go(e1, v1);
+  const d1day = JSON.parse(e1.SIGNALS_CACHE.m.get(SCALP_KEYS.DAY + "2026-11-01"));
+  check("live: a position read that fails twice and then answers does not halt; the unfilled FOK is a skip", a.entries === 0 && !a.halted && !e1.SIGNALS_CACHE.m.has(SCALP_KEYS.HALT) && Object.keys(a.skipped).some(k => /not filled .*position unchanged/.test(k)) && v1.reads() === 4, { a, reads: v1.reads() });
+  check("live: the day counts the order sent and nothing filled", d1day.liveSent === 1 && d1day.liveFilled === 0, d1day);
+  // the read before the send fails three times, the read after answers flat: not filled, no halt
+  const v2 = mkVenue({ posFails: 3 }); const e2 = mkEnv(keys);
+  const b = await go(e2, v2);
+  check("live: position unreadable before the send but flat after it = not filled, no halt", b.entries === 0 && !b.halted && Object.keys(b.skipped).some(k => /not filled .*position flat/.test(k)), b);
+  // unreadable before, moved after: the fill cannot be sized against a known start -> halt (as before)
+  const v3 = mkVenue({ posFails: 3, posAfter: "25" }); const e3 = mkEnv(keys);
+  const c = await go(e3, v3);
+  check("live: position unreadable before and moved after: still halts (state unknown)", c.halted && /state unknown/.test(JSON.parse(e3.SIGNALS_CACHE.m.get(SCALP_KEYS.HALT)).why || ""), c);
+  // every position read fails: halts, as before
+  const v4 = mkVenue({ posFails: 99 }); const e4 = mkEnv(keys);
+  const d = await go(e4, v4);
+  check("live: position unreadable before and after (three tries each): halts", d.halted && v4.reads() === 6, { d, reads: v4.reads() });
+  // a filled FOK counts as sent and filled
+  const v5 = mkVenue({ posAfter: "25", orderGet: (json) => json({ order: { id: "DNRF7FR014ET", state: "ORDER_STATE_FILLED", cumQuantity: 25, avgPx: { value: "0.40" }, commissionNotionalTotalCollected: { value: "0.17" } } }) }); const e5 = mkEnv(keys);
+  const f = await go(e5, v5);
+  const d5 = JSON.parse(e5.SIGNALS_CACHE.m.get(SCALP_KEYS.DAY + "2026-11-01"));
+  check("live: a filled FOK is counted sent and filled", f.entries === 1 && d5.liveSent === 1 && d5.liveFilled === 1, d5);
+}
+
+// ---------- report: the US record since quotes are read fresh (Nov 12 2026) ----------
+{
+  const cut = Date.parse(US_FRESH_QUOTES_SINCE) / 1000;
+  const row = (id, ts, pnl, extra = {}) => ({ id, mode: "dry", ts_entry: ts, ts_exit: ts + 300, sport: "nba", game: "g", team: "t", us_slug: "s", side: "buy", entry_px: 0.4, exit_px: 0.42, shares: 25, usd: 10, fee_entry_usd: 0.17, fee_exit_usd: 0.17, pnl_c: pnl * 4, pnl_usd: pnl, edge_c: 2, dp_c: 4, shown_qty: 300, hold_s: 300, exit_kind: "x5", live: 0, order_id: null, exit_order_id: null, note: null, venue: "us", k_ticker: null, probe: null, account: null, ...extra });
+  const env = mkEnv();
+  env.DB.rows.push(row("old1", cut - 3600, 1.5), row("old2", cut - 60, 2), row("new1", cut + 60, -0.4), row("new2", cut + 3600, 0.6), row("k1", cut + 120, 0.3, { venue: "kalshi" }));
+  const rep = await scalpReport(env, {}, { nowMs: (cut + 7200) * 1000 });
+  check("report fresh: the US rows from the cutover on only (not the cached-quote rows, not Kalshi)", rep.fresh && rep.fresh.since === US_FRESH_QUOTES_SINCE && rep.fresh.all.n === 2 && Math.abs(rep.fresh.all.pnlUsd - 0.2) < 0.001 && rep.all.n === 5 && /fresh/.test(rep.read), rep.fresh);
+  // a window that starts after the cutover still reads the whole fresh record
+  const rep2 = await scalpReport(env, {}, { nowMs: (cut + 3 * 86400) * 1000, hours: 24 });
+  check("report fresh: reads past the window back to the cutover", rep2.all.n === 0 && rep2.fresh.all.n === 2, { all: rep2.all, fresh: rep2.fresh.all });
 }
 
 console.log(`scalp: ${pass} passed, ${fail} failed`);
