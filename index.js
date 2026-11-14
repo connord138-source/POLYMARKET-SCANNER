@@ -22,6 +22,7 @@ import { enterCopyPicksNow,
 } from "./src/autotrader.js";
 import { runForge, maybeRunForge, getForgeReport } from "./src/forge.js";
 import { logSignalWallets, backfillWalletLedger, topWallets, buildWalletLeaderboard, walletSkill, onChainSkill, walletsFromSignal, LEDGER_MIN_N } from "./src/wallet-ledger.js";
+import { buildInvestigatorReport } from "./src/investigator-report.js";
 import { rebuildWalletBook } from "./src/wallet-book.js";
 import { annotateSignalWalletSkill, signalWalletsByMoney } from "./src/signal-skill.js";
 import { pollCopyWallets, getCopyState, addCopyWallet, removeCopyWallet, setCopyWalletEnabled, setCopyWalletMode, listCopyWallets, modeOf as copyModeOf, setCopyWalletSize, copySettingsUpdates, getUnseenBets, markCopySeen } from "./src/copy.js";
@@ -7091,6 +7092,35 @@ export default {
           });
         } catch (e) {
           return new Response(JSON.stringify({ enabled: true, error: e.message, hint: "Did you apply migrations/0001_init.sql?" }), {
+            status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+      }
+
+      // The AI investigator's settled record broken down by kind of market,
+      // price, disagreement size and costs (src/investigator-report.js).
+      // Open rows are annotated with the live price for the drift read.
+      if (path === "/learning/investigator") {
+        if (!env.DB) {
+          return new Response(JSON.stringify({ success: false, error: "No D1 binding configured." }), {
+            status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+        try {
+          const q = await env.DB.prepare(
+            "SELECT inv_key, market_slug, direction_raw, market_title, source, status, agent_prob, confidence, model, " +
+            "market_prob, edge_pts, event_date, investigated_at, y, agent_brier, market_brier, settled_at FROM investigations"
+          ).all();
+          const rows = q.results || [];
+          // live prices for the newest open investigations only (bounded Gamma reads)
+          const open = rows.filter(r => r.status === "done" && r.y !== 0 && r.y !== 1 && r.market_slug)
+            .sort((a, b) => String(b.investigated_at || "").localeCompare(String(a.investigated_at || ""))).slice(0, 60);
+          try { await annotateLivePrices(env, open); } catch (e) { /* the drift read is optional */ }
+          return new Response(JSON.stringify(buildInvestigatorReport(rows)), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        } catch (e) {
+          return new Response(JSON.stringify({ success: false, error: e.message }), {
             status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" }
           });
         }
