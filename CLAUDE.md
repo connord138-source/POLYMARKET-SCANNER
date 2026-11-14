@@ -625,6 +625,43 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   the Today page, Scanner and Vegas Odds needed refreshes to load.
   `?live=1` with the admin token still runs a live scan; with no stored list
   the route falls back to one. Tests: test/scan-window.test.mjs (15).
+- Engine audit (Nov 14 2026, owner's "turning the scalper off is not an
+  option. What is an option is building a better engine that will be
+  profitable"). What every record said that day, so the dead ends are not
+  re-proposed: speed is closed to us (real-time prices: 7 stale Polymarket
+  US quotes in two nights, the one over 1c not fillable; the Kalshi probe
+  found 0 of ~30 stale Kalshi prices still there after ~4s); following
+  whales has no edge before costs (paper `all`: 15,559 settled, +0.6%);
+  Forge's walk-forward mined 124 rules on the signal features and promoted
+  none; the copied "top" wallets regressed to -$15 on $645; the pregame
+  Vegas edge at live fills read -22% on 33; a taker round trip on Polymarket
+  US costs ~4.5c a share at mid prices (two 0.0695 x p(1-p) fees plus the
+  spread, ~9% of the stake; the executor dry run paid $0.54 per $5 round
+  trip), and maker entries are adversely selected (the 88 shadows that never
+  filled were the paper winners). The one record with an edge bigger than
+  costs was the AI investigator (paper `ai_investigator`: +17% on 58,
+  closer than the market on 62% of 99 scored), on global Polymarket's
+  non-sports markets; Polymarket US lists sports only, so its US-legal home
+  is Kalshi. The engine direction from there: research-picked bets held to
+  settlement, tested as-live in dry before any money.
+- `src/investigator-report.js` — the investigator's record broken down
+  (Nov 14 2026, step 1 of that plan). Pure `buildInvestigatorReport(rows)`
+  over D1 `investigations`: each settled row as a bet (`betOf`: backs the
+  direction when edge_pts > 0, the other side when < 0, flat $100, to
+  settlement), `core` (|edge| >= 12, not LOW: the leaderboard's rule) and
+  `wide` (>= 5) with `byKind` (`marketKind`: weather / esports / social /
+  entertainment / crypto / economy / tech / politics / sports / other, a
+  title heuristic; `samples` lists titles to check it), `byEntry`,
+  `byEdge`, `byConfidence`, `bySource`, `bySide`, `byHorizon`, `byModel`,
+  `byMonth`; ROI under four cost scenarios (`COSTS`: recorded price, then
+  1/2/3c worse plus a 0.07 x p(1-p) fee); `events` and `tEvents` (buckets
+  of one event share a `clusterKey`, and the t-stat sums an event's bets
+  first); `byMinEdge` (the rule at each disagreement size); `concentration`
+  (biggest wins, the record without the top three); `calibration.byKind`
+  (Brier, agent vs market); `openDrift` (cents the market moved toward the
+  agent on open investigations; the route annotates the 60 newest with
+  live prices); `pace`. `GET /learning/investigator` (snapshot key
+  `investigator`). Tests: test/investigator-report.test.mjs (24).
 - `src/gamma.js` — Gamma API settlement (`findGammaMarket` handles
   closed markets + multi-market moneyline preference).
 - D1 database `polymarket-scanner` — settled signals (`signals` table);
