@@ -23,6 +23,7 @@ import { enterCopyPicksNow,
 import { runForge, maybeRunForge, getForgeReport } from "./src/forge.js";
 import { logSignalWallets, backfillWalletLedger, topWallets, buildWalletLeaderboard, walletSkill, onChainSkill, walletsFromSignal, LEDGER_MIN_N } from "./src/wallet-ledger.js";
 import { buildInvestigatorReport } from "./src/investigator-report.js";
+import { INV_LANE_SCHEMA, LANE as INV_LANE, recordLaneBet, sweepPool, interleaveByKind, pickFresh, laneReport } from "./src/investigator-lane.js";
 import { rebuildWalletBook } from "./src/wallet-book.js";
 import { annotateSignalWalletSkill, signalWalletsByMoney } from "./src/signal-skill.js";
 import { pollCopyWallets, getCopyState, addCopyWallet, removeCopyWallet, setCopyWalletEnabled, setCopyWalletMode, listCopyWallets, modeOf as copyModeOf, setCopyWalletSize, copySettingsUpdates, getUnseenBets, markCopySeen } from "./src/copy.js";
@@ -1096,6 +1097,7 @@ var SCHEMA_MIGRATIONS = [
   ...XV_SCHEMA,                                               // migrations/0008_xvenue_quotes.sql (Kalshi vs Polymarket live quotes)                                               // migrations/0007_mm_books.sql (market-making depth snapshots)
   ...US_LANE_SCHEMA,                                          // migrations/0009_us_lane_events.sql (Polymarket US stale-quote paper lane)
   ...SCALP_SCHEMA,                                            // migrations/0012_scalp_trades.sql (Polymarket US stale-quote scalp lane)
+  ...INV_LANE_SCHEMA,                                         // migrations/0016_investigator_bets.sql (the investigator's test lane)
 ];
 var schemaEnsured = false;
 async function ensureSchema(env) {
@@ -1830,6 +1832,7 @@ async function investigateSignal(env, sig, opts) {
     return { ok: false, skipped: "foregone_conclusion", investigation: recForegone };
   }
 
+  var researchStartedMs = Date.now();
   var result = await callClaudeInvestigator(env, {
     marketTitle: sig.marketTitle || found.market.question,
     direction: directionRaw,
@@ -1899,6 +1902,12 @@ async function investigateSignal(env, sig, opts) {
     settledBy: null,
     settledAt: null
   });
+
+  // The test lane (src/investigator-lane.js): read the real order book of the
+  // side the agent backs, now that the research is done, and record the bet a
+  // live bot would have placed (or why not). Never fatal.
+  try { await ensureSchema(env); await recordLaneBet(env, rec, { market: found.market, baseline: baseline, startedMs: researchStartedMs }); }
+  catch (e) { console.error("investigator lane error:", e.message); }
 
   return { ok: true, investigation: rec };
 }
@@ -2173,7 +2182,54 @@ async function scanOverround(env) {
 // resolution criteria, priced in a still-uncertain band, resolving within a
 // window (so they'll settle and feed Brier), not short-term gambling, and not
 // already investigated. Rotates via a stored offset to cover the field over time.
+// The short-dated pool (Nov 15 2026, the investigator's test lane): every
+// question the lane's rule can bet, from the busiest markets ending inside the
+// window (Gamma pages of 100, by 24h volume), kinds taken in turn. Rebuilt at
+// most every 30 minutes (KV `sweep_pool`): a dozen 1 MB pages per cron would
+// be waste.
+async function shortDatedSweepPool(env, maxDays) {
+  var now = Date.now();
+  var excl = String(env.SWEEP_EXCLUDE_KINDS != null ? env.SWEEP_EXCLUDE_KINDS : INV_LANE.excludeKinds.join(",")).split(",").map(function (x) { return x.trim().toLowerCase(); }).filter(Boolean);
+  try {
+    var c = await env.SIGNALS_CACHE.get("sweep_pool", { type: "json" });
+    if (c && c.maxDays === maxDays && c.excl === excl.join(",") && now - c.at < 30 * 60 * 1000 && Array.isArray(c.pool)) return c.pool;
+  } catch (e) {}
+  var minIso = new Date(now + 60 * 60 * 1000).toISOString(), maxIso = new Date(now + maxDays * 24 * 60 * 60 * 1000).toISOString();
+  var all = [];
+  var pages = parseInt(env.SWEEP_POOL_PAGES || "12", 10);
+  for (var off = 0; off < pages * 100; off += 100) {
+    var page = await fetchGammaJson("/markets?closed=false&active=true&limit=100&offset=" + off + "&order=volume24hr&ascending=false&end_date_min=" + encodeURIComponent(minIso) + "&end_date_max=" + encodeURIComponent(maxIso));
+    if (!Array.isArray(page) || page.length === 0) break;
+    all = all.concat(page);
+    if (page.length < 100) break;
+  }
+  var pool = interleaveByKind(sweepPool(all, { nowMs: now, maxDays: maxDays, excludeKinds: excl, investigable: isInvestigableSignal }));
+  try { await env.SIGNALS_CACHE.put("sweep_pool", JSON.stringify({ at: now, maxDays: maxDays, excl: excl.join(","), scanned: all.length, pool: pool }), { expirationTtl: 3600 }); } catch (e) {}
+  return pool;
+}
+var sweepEventsKey = function () { return "sweep_events:" + new Date().toISOString().slice(0, 10); };
+
 async function pickSweepCandidates(env, limit) {
+  var maxDaysCfg = parseFloat(env.SWEEP_MAX_DAYS || "45");
+  if (maxDaysCfg <= 7) {
+    // the test lane's sweep: fresh questions from the short-dated pool, at most
+    // SWEEP_PER_EVENT of one event a day
+    var pool = await shortDatedSweepPool(env, maxDaysCfg);
+    if (!pool.length) return [];
+    var doneKeys = new Set();
+    if (env.DB) {
+      try {
+        var since = new Date(Date.now() - 46 * 24 * 60 * 60 * 1000).toISOString();
+        var q = await env.DB.prepare("SELECT inv_key FROM investigations WHERE status IN ('done','error_permanent') AND updated_at >= ?1").bind(since).all();
+        (q.results || []).forEach(function (r) { doneKeys.add(r.inv_key); });
+      } catch (e) {}
+    }
+    var eventCounts = {};
+    try { eventCounts = (await env.SIGNALS_CACHE.get(sweepEventsKey(), { type: "json" })) || {}; } catch (e) {}
+    var nowIso = new Date().toISOString();
+    return pickFresh(pool, { doneKeys: doneKeys, eventCounts: eventCounts, limit: Math.max(1, limit) * 3, perEvent: parseInt(env.SWEEP_PER_EVENT || "2", 10), keyOf: function (c) { return investigationKeyFor(c.marketSlug, c.directionRaw); } })
+      .map(function (c) { return { marketSlug: c.marketSlug, directionRaw: c.directionRaw, marketTitle: c.marketTitle, avgEntryPrice: c.avgEntryPrice, eventDate: c.eventDate, detectedAt: nowIso, cluster: c.cluster }; });
+  }
   var markets = await fetchGammaJson("/markets?closed=false&limit=200&order=volume&ascending=false");
   if (!Array.isArray(markets)) return [];
   var now = Date.now();
@@ -2239,6 +2295,13 @@ async function runMispricingSweep(env, budget, deadlineMs) {
     var r = await investigateSignal(env, sig, { source: "sweep" });
     if (r.ok && r.investigation && r.investigation.status === "done") {
       res.done++;
+      if (sig.cluster) {
+        try {
+          var ec = (await env.SIGNALS_CACHE.get(sweepEventsKey(), { type: "json" })) || {};
+          ec[sig.cluster] = (ec[sig.cluster] || 0) + 1;
+          await env.SIGNALS_CACHE.put(sweepEventsKey(), JSON.stringify(ec), { expirationTtl: 2 * 24 * 60 * 60 });
+        } catch (e) {}
+      }
       var inv = r.investigation;
       if (typeof inv.edgePts === "number" && Math.abs(inv.edgePts) >= edgeThreshold && inv.confidence !== "LOW") {
         var opp = {
@@ -7116,7 +7179,16 @@ export default {
           const open = rows.filter(r => r.status === "done" && r.y !== 0 && r.y !== 1 && r.market_slug)
             .sort((a, b) => String(b.investigated_at || "").localeCompare(String(a.investigated_at || ""))).slice(0, 60);
           try { await annotateLivePrices(env, open); } catch (e) { /* the drift read is optional */ }
-          return new Response(JSON.stringify(buildInvestigatorReport(rows)), {
+          const report = buildInvestigatorReport(rows);
+          // the test lane: the bets a live bot would have placed, read against the outcomes
+          let laneRows = [];
+          try { await ensureSchema(env); laneRows = (await env.DB.prepare("SELECT * FROM investigator_bets ORDER BY ts DESC LIMIT 5000").all()).results || []; } catch (e) { laneRows = []; }
+          report.test = laneReport(laneRows, new Map(rows.map(r => [r.inv_key, { y: r.y, settledAt: r.settled_at }])));
+          let billingDown = false;
+          try { billingDown = !!(await env.SIGNALS_CACHE.get("anthropic_billing_down")); } catch (e) {}
+          const spendNow = await investigationSpendToday(env);
+          report.budget = { usdToday: Math.round((spendNow.usd || 0) * 100) / 100, usdCap: parseFloat(env.INVESTIGATION_DAILY_USD || "5"), researchedToday: spendNow.count, dailyCap: parseInt(env.INVESTIGATION_DAILY_CAP || "50", 10), maxDays: parseFloat(env.SWEEP_MAX_DAYS || "45"), creditsOut: billingDown };
+          return new Response(JSON.stringify(report), {
             headers: { ...corsHeaders, "Content-Type": "application/json" }
           });
         } catch (e) {
@@ -7537,6 +7609,7 @@ export default {
         console.error("Overround scan error:", e.message);
         cronStatus.overround = { error: e.message };
       }
+      let sweepPromise = null;
       if (!anthropicDown && env.ANTHROPIC_API_KEY && (env.SWEEP_ENABLED || "true") !== "false") {
         try {
           const dailyCap = parseInt(env.INVESTIGATION_DAILY_CAP || "50", 10);
@@ -7545,14 +7618,27 @@ export default {
           const spendS = await investigationSpendToday(env);
           const spent = spendS.count;
           const sweepBudget = spendS.usd >= usdCapS ? 0 : Math.max(0, Math.min(sweepPerRun, dailyCap - spent));
-          if (sweepBudget > 0 && Date.now() <= invDeadline) {
-            const sweep = await runMispricingSweep(env, sweepBudget, invDeadline);
-            cronStatus.sweep = sweep;
-            console.log(`Sweep: ${sweep.done} investigated, ${sweep.opportunities} opportunities`);
+          // The research call takes a minute or more. At ten dollars a day it
+          // runs in most cycles, so it no longer holds the cycle up: it starts
+          // here, the settlement / auto-trader / executor stages go on, and the
+          // cycle waits for it only at the very end. One at a time across
+          // cycles (KV `sweep_lock`), so two cycles never research one question.
+          let sweepLocked = false;
+          try { sweepLocked = !!(await env.SIGNALS_CACHE.get("sweep_lock")); } catch (e) {}
+          if (sweepBudget > 0 && Date.now() <= invDeadline && !sweepLocked) {
+            try { await env.SIGNALS_CACHE.put("sweep_lock", String(Date.now()), { expirationTtl: 600 }); } catch (e) {}
+            cronStatus.sweep = { running: true, spentTodayUsd: spendS.usd, usdCap: usdCapS };
+            sweepPromise = runMispricingSweep(env, sweepBudget, invDeadline)
+              .then((sweep) => { cronStatus.sweep = { ...sweep, spentTodayUsd: spendS.usd, usdCap: usdCapS }; console.log(`Sweep: ${sweep.done} investigated, ${sweep.opportunities} opportunities`); })
+              .catch((e) => { cronStatus.sweep = { error: e.message }; })
+              .then(async () => { try { await env.SIGNALS_CACHE.delete("sweep_lock"); } catch (e) {} });
+            // if a later stage throws, the research still finishes and frees its lock
+            try { if (ctx && ctx.waitUntil) ctx.waitUntil(sweepPromise); } catch (e) {}
           } else {
             cronStatus.sweep = {
-              skipped: sweepBudget > 0 ? "wall budget exhausted"
-                : (spendS.usd >= usdCapS ? "daily $ cap reached" : "daily cap reached")
+              skipped: sweepLocked ? "the previous research is still running" : sweepBudget > 0 ? "wall budget exhausted"
+                : (spendS.usd >= usdCapS ? "daily $ cap reached" : "daily cap reached"),
+              spentTodayUsd: spendS.usd, usdCap: usdCapS
             };
           }
         } catch (e) {
@@ -7687,6 +7773,9 @@ export default {
         cronStatus.forge = { error: e.message };
       }
 
+      // the cycle's own work is done here; the research started above may still be running
+      cronStatus.coreCompletedAt = new Date().toISOString();
+      if (sweepPromise) { try { await sweepPromise; } catch (e) { /* recorded on cronStatus.sweep */ } }
       cronStatus.completedAt = new Date().toISOString();
       
     } catch (error) {

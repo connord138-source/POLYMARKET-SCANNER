@@ -662,6 +662,63 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   agent on open investigations; the route annotates the 60 newest with
   live prices); `pace`. `GET /learning/investigator` (snapshot key
   `investigator`). Tests: test/investigator-report.test.mjs (24).
+  What the breakdown said (Nov 14): the +17% is three bets (Noem divorce,
+  Flávio Bolsonaro, Qualcomm earnings; the other 55 lost 5.6%, 11.5% after
+  2c + fee); +7.7% after costs with tEvents 0.84; on all 170 scored rows the
+  agent is closer than the market 56% of the time but slightly worse on mean
+  Brier (0.144 vs 0.140; the earlier "62% of 99" came from the capped KV
+  index); weather (43% of the research) loses (-17%); the one shape of an
+  edge is the disagreement size (12-20 points -17% after costs, 20+ +28% on
+  32, 30+ +47% on 18) and short horizons (settling within 3 days +24% on 43,
+  a week or more out -67% on 11).
+- `src/investigator-lane.js` — the investigator's TEST LANE (Nov 15 2026,
+  owner's "Can you run it at 10 a day in dry mode simulated real?"). That
+  pattern tested forward with the rule fixed in advance (`LANE`, version 1:
+  $25 a bet, the agent's probability for a side 20+ points above the price
+  PAID, the question settles within 72h, confidence not LOW, not weather;
+  changing the rule means bumping `version`). Budget: wrangler
+  `INVESTIGATION_DAILY_USD` 10 (was 1), `INVESTIGATION_DAILY_CAP` 150,
+  `SWEEP_MAX_DAYS` 3, `SWEEP_EXCLUDE_KINDS` weather, `SWEEP_PER_EVENT` 2;
+  the Anthropic account has to hold the credits (KV `anthropic_billing_down`
+  stops both the investigator and the Agent Crew when it is empty;
+  `budget.creditsOut` in the report). The sweep (`pickSweepCandidates` when
+  SWEEP_MAX_DAYS <= 7) researches only what the rule can bet:
+  `shortDatedSweepPool` reads the busiest markets ending inside the window
+  from Gamma (pages of 100 by `volume24hr`, `end_date_min` / `end_date_max`,
+  `SWEEP_POOL_PAGES` 12, KV `sweep_pool` for 30 min), `sweepPool` keeps
+  Yes/No questions with resolution text at 8-92c, a two-sided book no wider
+  than 8c, not sports / esports / short-term gambling
+  (`isInvestigableSignal`) and not an excluded kind, `interleaveByKind`
+  takes the kinds in turn (crypto price ladders are half the pool), and
+  `pickFresh` skips questions already researched (D1) and allows two
+  questions of one event a day (KV `sweep_events:<day>`, by `clusterKey`).
+  About 100 questions over ~50 events were open on Nov 15. The moment an
+  investigation finishes (`investigateSignal` -> `recordLaneBet`, both
+  sources), the CLOB book of the side the agent backs is read and the bet is
+  the order a live bot would send: `walkAsks` buys up to the stake from the
+  asks, cheapest first, never above agent probability minus 20 points
+  (`limit_px`); what is offered there is the fill (partial on a thin book,
+  under $5 = no bet), so a price that ran while it researched is no bet
+  ('under 20 points at the real offer'). Every finished investigation is
+  stored in D1 `investigator_bets` (migration 0016, `INV_LANE_SCHEMA`) with
+  its book, pass (`rule` 1) or not (`why`), plus `ask_px` (the whole stake
+  at the real offer) so other thresholds can be read later (`atEdge`). The
+  outcome is read off `investigations.y` at report time; fees are charged
+  at Kalshi's 0.07 x p(1-p) (the US venue's cost, the number to read) next
+  to Polymarket's own schedule. `laneReport` rides on
+  `GET /learning/investigator` as `test` (rule, since, researched, bets,
+  open, settled {hitPct vs breakEvenPct, beforeFees / polymarketFees /
+  kalshiFees, events, tEvents}, byKind, whyNot, perDay, fill, atEdge,
+  openBets, recentSettled) with `budget` (usdToday, usdCap, creditsOut).
+  Nothing is sent anywhere: the markets are global Polymarket's, whose
+  public book is only read; a US account would trade the same question on
+  Kalshi where it lists one, and Kalshi's price can differ. The research
+  call no longer holds the 5-min cycle: the sweep starts mid-cycle, the
+  settlement / auto-trader / executor stages go on, and the cycle waits for
+  it at the end (`cronStatus.coreCompletedAt` = the cycle's own work,
+  `completedAt` includes the research; one research at a time across cycles
+  through KV `sweep_lock`). Decide at 60+ settled bets. Tests:
+  test/investigator-lane.test.mjs (30).
 - `src/gamma.js` — Gamma API settlement (`findGammaMarket` handles
   closed markets + multi-market moneyline preference).
 - D1 database `polymarket-scanner` — settled signals (`signals` table);
