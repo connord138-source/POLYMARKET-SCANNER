@@ -49,12 +49,23 @@ STRIPE_PORTAL_CONFIG = "bpc_1UUGhSJlttnL5vK2kx2p4xwx"
 # cheaper model prices markets well enough before any scale-up.
 INVESTIGATION_MODEL = "claude-sonnet-5"
 INVESTIGATION_PER_RUN = "2"
-INVESTIGATION_DAILY_CAP = "20"
+# Nov 15 2026 (owner: "run it at 10 a day in dry mode simulated real"): the
+# count cap is raised so the dollar cap below is the one that binds.
+INVESTIGATION_DAILY_CAP = "150"
 # Hard dollar ceiling per day, enforced from REAL usage tokens (the count cap
 # above is only a secondary bound — call sizes vary 10x with search volume).
 # Oct 2026: $5 -> $1 so the operator's $10 of credits isn't drained in two
 # days; the Agent Crew (claude-haiku-5-5, CREW_LLM_DAILY_USD) shares the account.
-INVESTIGATION_DAILY_USD = "1"
+# Nov 15 2026: $1 -> $10 on the owner's instruction, for the investigator's
+# test lane (src/investigator-lane.js). The Anthropic account needs the
+# credits: when they run out both the investigator and the Agent Crew stop
+# until it is topped up (KV anthropic_billing_down).
+INVESTIGATION_DAILY_USD = "10"
+# The test lane's sweep: only questions that settle within 3 days, weather
+# left out, at most 2 questions of one event a day.
+SWEEP_MAX_DAYS = "3"
+SWEEP_EXCLUDE_KINDS = "weather"
+SWEEP_PER_EVENT = "2"
 # 3 searches covers resolution criteria + key facts; search results are the
 # dominant token cost (5 searches ran ~$1/investigation on Sep 8).
 INVESTIGATION_MAX_SEARCHES = "3"
