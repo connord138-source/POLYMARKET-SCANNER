@@ -1906,8 +1906,14 @@ async function investigateSignal(env, sig, opts) {
   // The test lane (src/investigator-lane.js): read the real order book of the
   // side the agent backs, now that the research is done, and record the bet a
   // live bot would have placed (or why not). Never fatal.
-  try { await ensureSchema(env); await recordLaneBet(env, rec, { market: found.market, baseline: baseline, startedMs: researchStartedMs }); }
-  catch (e) { console.error("investigator lane error:", e.message); }
+  var laneOut = null;
+  try { await ensureSchema(env); laneOut = await recordLaneBet(env, rec, { market: found.market, baseline: baseline, startedMs: researchStartedMs }); }
+  catch (e) { laneOut = { error: String(e.message).slice(0, 160) }; console.error("investigator lane error:", e.message); }
+  // what the lane did with the newest investigation (the report shows it as test.last)
+  try {
+    await env.SIGNALS_CACHE.put("inv_lane_last", JSON.stringify({ at: new Date().toISOString(), invKey: invKey, title: String(rec.marketTitle || "").slice(0, 90),
+      result: !laneOut ? "not recorded" : laneOut.error ? { error: laneOut.error } : { rule: laneOut.rule, why: laneOut.why, side: laneOut.side, fillUsd: laneOut.fillUsd, fillPx: laneOut.fillPx } }), { expirationTtl: 7 * 24 * 60 * 60 });
+  } catch (e) {}
 
   return { ok: true, investigation: rec };
 }
@@ -7182,8 +7188,12 @@ export default {
           const report = buildInvestigatorReport(rows);
           // the test lane: the bets a live bot would have placed, read against the outcomes
           let laneRows = [];
-          try { await ensureSchema(env); laneRows = (await env.DB.prepare("SELECT * FROM investigator_bets ORDER BY ts DESC LIMIT 5000").all()).results || []; } catch (e) { laneRows = []; }
+          let laneReadError = null;
+          try { await ensureSchema(env); laneRows = (await env.DB.prepare("SELECT * FROM investigator_bets ORDER BY ts DESC LIMIT 5000").all()).results || []; } catch (e) { laneRows = []; laneReadError = String(e.message).slice(0, 160); }
           report.test = laneReport(laneRows, new Map(rows.map(r => [r.inv_key, { y: r.y, settledAt: r.settled_at }])));
+          report.test.readError = laneReadError;
+          try { report.test.last = await env.SIGNALS_CACHE.get("inv_lane_last", { type: "json" }); } catch (e) { report.test.last = null; }
+          try { const sp = await env.SIGNALS_CACHE.get("sweep_pool", { type: "json" }); report.test.pool = sp ? { at: new Date(sp.at).toISOString(), scanned: sp.scanned, questions: (sp.pool || []).length, events: new Set((sp.pool || []).map(c => c.cluster)).size } : null; } catch (e) { report.test.pool = null; }
           let billingDown = false;
           try { billingDown = !!(await env.SIGNALS_CACHE.get("anthropic_billing_down")); } catch (e) {}
           const spendNow = await investigationSpendToday(env);
