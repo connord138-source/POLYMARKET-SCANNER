@@ -128,7 +128,7 @@ export function laneDecision(inv, market, book, { cfg = LANE, nowMs = Date.now()
 }
 
 // ---------- record one finished investigation (never throws) ----------
-export async function recordLaneBet(env, rec, { market, baseline, startedMs = null, fetchImpl = fetch, nowMs = Date.now(), cfg = LANE } = {}) {
+export async function recordLaneBet(env, rec, { market, baseline, startedMs = null, fetchImpl = fetch, nowMs = Date.now(), cfg = LANE, retryMs = 800 } = {}) {
   try {
     if (!env.DB || !rec || rec.status !== 'done' || !rec.invKey) return null;
     const m = market || {};
@@ -140,12 +140,17 @@ export async function recordLaneBet(env, rec, { market, baseline, startedMs = nu
       try { const res = await fetchImpl(`${CLOB_API}/book?token_id=${encodeURIComponent(s.tokenId)}`); if (res.ok) book = await res.json(); } catch (e) { book = null; }
     }
     const row = laneDecision(inv, mk, book, { cfg, nowMs, feeSchedule: m.feeSchedule || null, startedMs });
-    await env.DB.prepare(
+    const write = () => env.DB.prepare(
       `INSERT OR REPLACE INTO investigator_bets (inv_key, ts, version, market_slug, title, kind, cluster, side, outcome, token_id, agent_p, shown_p, best_ask, best_bid, ask_px, limit_px, fill_px, fill_usd, shares, fee_poly_usd, fee_k_usd, edge_fill_pts, horizon_h, confidence, source, rule, why, lag_s, event_date)
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).bind(rec.invKey, Math.floor(nowMs / 1000), row.version, rec.marketSlug || null, String(rec.marketTitle || '').slice(0, 200), row.kind, row.cluster, row.side, row.outcome, row.tokenId,
       row.agentP, row.shownP, row.bestAsk, row.bestBid, row.askPx, row.limitPx, row.fillPx, row.fillUsd, row.shares, row.feePolyUsd, row.feeKUsd, row.edgeFillPts, row.horizonH,
       row.confidence, row.source, row.rule, row.why, row.lagS, rec.eventDate || null).run();
+    // D1 can answer "overloaded" mid-cycle: the bet is worth two more tries
+    for (let i = 0; ; i++) {
+      try { await write(); break; }
+      catch (e) { if (i >= 2) throw e; await new Promise(r => setTimeout(r, retryMs * (i + 1))); }
+    }
     return row;
   } catch (e) { return { error: String(e.message).slice(0, 120) }; }
 }

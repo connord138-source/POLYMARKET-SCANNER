@@ -2213,6 +2213,20 @@ async function shortDatedSweepPool(env, maxDays) {
   try { await env.SIGNALS_CACHE.put("sweep_pool", JSON.stringify({ at: now, maxDays: maxDays, excl: excl.join(","), scanned: all.length, pool: pool }), { expirationTtl: 3600 }); } catch (e) {}
   return pool;
 }
+// D1 answers "DB is overloaded. Too many resources consumed within a 10 second
+// window" when a cycle's stages pile onto it (Nov 15 2026: the sweep's pick and
+// the report's read both hit it). A read worth having waits and tries again.
+async function d1AllRetry(env, sql, binds, tries) {
+  var last = null;
+  for (var i = 0; i < (tries || 3); i++) {
+    try {
+      var st = env.DB.prepare(sql);
+      if (binds && binds.length) st = st.bind.apply(st, binds);
+      return (await st.all()).results || [];
+    } catch (e) { last = e; await new Promise(function (r) { setTimeout(r, 700 * (i + 1)); }); }
+  }
+  throw last || new Error("D1 read failed");
+}
 var sweepEventsKey = function () { return "sweep_events:" + new Date().toISOString().slice(0, 10); };
 var sweepPickDiag = null;   // what the last short-dated pick saw (shown on cronStatus.sweep.pick)
 
@@ -2228,9 +2242,13 @@ async function pickSweepCandidates(env, limit) {
     if (env.DB) {
       try {
         var since = new Date(Date.now() - 46 * 24 * 60 * 60 * 1000).toISOString();
-        var q = await env.DB.prepare("SELECT inv_key FROM investigations WHERE status IN ('done','error_permanent') AND updated_at >= ?1").bind(since).all();
-        (q.results || []).forEach(function (r) { doneKeys.add(r.inv_key); });
+        var known = await d1AllRetry(env, "SELECT inv_key FROM investigations WHERE status IN ('done','error_permanent') AND updated_at >= ?1", [since], 2);
+        known.forEach(function (r) { doneKeys.add(r.inv_key); });
       } catch (e) { doneErr = String(e.message).slice(0, 120); }
+    }
+    // D1 busy: the KV index of investigated questions (the last 1000, any status) stands in
+    if (doneErr || !env.DB) {
+      try { ((await env.SIGNALS_CACHE.get("investigation_index", { type: "json" })) || []).forEach(function (k) { doneKeys.add(k); }); } catch (e) {}
     }
     var eventCounts = {};
     try { eventCounts = (await env.SIGNALS_CACHE.get(sweepEventsKey(), { type: "json" })) || {}; } catch (e) {}
@@ -7200,11 +7218,9 @@ export default {
           });
         }
         try {
-          const q = await env.DB.prepare(
+          const rows = await d1AllRetry(env,
             "SELECT inv_key, market_slug, direction_raw, market_title, source, status, agent_prob, confidence, model, " +
-            "market_prob, edge_pts, event_date, investigated_at, y, agent_brier, market_brier, settled_at FROM investigations"
-          ).all();
-          const rows = q.results || [];
+            "market_prob, edge_pts, event_date, investigated_at, y, agent_brier, market_brier, settled_at FROM investigations", null, 3);
           // live prices for the newest open investigations only (bounded Gamma reads)
           const open = rows.filter(r => r.status === "done" && r.y !== 0 && r.y !== 1 && r.market_slug)
             .sort((a, b) => String(b.investigated_at || "").localeCompare(String(a.investigated_at || ""))).slice(0, 60);
@@ -7213,7 +7229,7 @@ export default {
           // the test lane: the bets a live bot would have placed, read against the outcomes
           let laneRows = [];
           let laneReadError = null;
-          try { await ensureSchema(env); laneRows = (await env.DB.prepare("SELECT * FROM investigator_bets ORDER BY ts DESC LIMIT 5000").all()).results || []; } catch (e) { laneRows = []; laneReadError = String(e.message).slice(0, 160); }
+          try { await ensureSchema(env); laneRows = await d1AllRetry(env, "SELECT * FROM investigator_bets ORDER BY ts DESC LIMIT 5000", null, 3); } catch (e) { laneRows = []; laneReadError = String(e.message).slice(0, 160); }
           report.test = laneReport(laneRows, new Map(rows.map(r => [r.inv_key, { y: r.y, settledAt: r.settled_at }])));
           report.test.readError = laneReadError;
           try { report.test.last = await env.SIGNALS_CACHE.get("inv_lane_last", { type: "json" }); } catch (e) { report.test.last = null; }

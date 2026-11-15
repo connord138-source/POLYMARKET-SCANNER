@@ -717,8 +717,20 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   settlement / auto-trader / executor stages go on, and the cycle waits for
   it at the end (`cronStatus.coreCompletedAt` = the cycle's own work,
   `completedAt` includes the research; one research at a time across cycles
-  through KV `sweep_lock`). Decide at 60+ settled bets. Tests:
-  test/investigator-lane.test.mjs (30).
+  through KV `sweep_lock`). Decide at 60+ settled bets. First hours (Nov
+  15): the sweep stalled after three questions because D1 answered "DB is
+  overloaded. Too many resources consumed within a 10 second window" to the
+  pick's read of known questions (a cycle's stages pile onto D1), so the
+  same three candidates were offered every run. Since then the pick offers
+  a dozen per wanted question, reads D1 through `d1AllRetry` (waits and
+  retries) with the KV `investigation_index` standing in when D1 stays
+  busy, the sweep allows one PAID call per wanted question a cycle (free
+  skips move on) under the investigator's own retry limit, the lane's
+  insert and the report's reads retry too, and visibility is on the record:
+  `cronStatus.sweep.pick` (pool, known, knownError, eventsToday, offered) /
+  `passedOver`, `test.last` (the lane's answer for the newest
+  investigation, KV `inv_lane_last`), `test.readError`, `test.pool`. Tests:
+  test/investigator-lane.test.mjs (31).
 - `src/gamma.js` — Gamma API settlement (`findGammaMarket` handles
   closed markets + multi-market moneyline preference).
 - D1 database `polymarket-scanner` — settled signals (`signals` table);
