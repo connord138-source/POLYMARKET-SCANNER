@@ -1841,9 +1841,16 @@ async function investigateSignal(env, sig, opts) {
     eventDate: sig.eventDate || found.market.endDate || null
   });
 
-  await bumpDailyInvestigationCost(env, result.webSearches || 0,
-    investigationUsd(result.model || env.INVESTIGATION_MODEL || DEFAULT_INVESTIGATION_MODEL,
-      result.usage, result.webSearches));
+  // A call refused for lack of credits was never billed and researched
+  // nothing, so it does not count as one of the day's questions: on Nov 15
+  // 2026 the 10-minute re-probe of an empty account added six "researched"
+  // an hour to the day's count (91 shown, 29 real) and ate the question cap.
+  var billingDown = !result.ok && /credit balance is too low/i.test(result.error || "");
+  if (!billingDown) {
+    await bumpDailyInvestigationCost(env, result.webSearches || 0,
+      investigationUsd(result.model || env.INVESTIGATION_MODEL || DEFAULT_INVESTIGATION_MODEL,
+        result.usage, result.webSearches));
+  }
 
   if (!result.ok) {
     // An out-of-credits API account is a GLOBAL outage, not this market's
@@ -1851,7 +1858,6 @@ async function investigateSignal(env, sig, opts) {
     // (the Sep 5 credit outage permanently marked dozens of markets that
     // were never investigated). Flag the outage so the cron stops paying
     // the phase cost; the flag expires hourly to re-probe.
-    var billingDown = /credit balance is too low/i.test(result.error || "");
     if (billingDown) {
       try {
         await env.SIGNALS_CACHE.put("anthropic_billing_down", JSON.stringify({ at: Date.now() }),

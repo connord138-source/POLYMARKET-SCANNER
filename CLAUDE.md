@@ -729,7 +729,12 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   insert and the report's reads retry too, and visibility is on the record:
   `cronStatus.sweep.pick` (pool, known, knownError, eventsToday, offered) /
   `passedOver`, `test.last` (the lane's answer for the newest
-  investigation, KV `inv_lane_last`), `test.readError`, `test.pool`. Tests:
+  investigation, KV `inv_lane_last`), `test.readError`, `test.pool`. First
+  day (Nov 15): the Anthropic account ran dry at 05:06 UTC after $9.18 (29
+  questions, 6 bets), and the 10-minute re-probe of the empty account was
+  counted as a researched question each time (`researchedToday` 91 for 29
+  real); a call refused for lack of credits no longer touches the day's
+  count. Research resumes by itself within ten minutes of a top-up. Tests:
   test/investigator-lane.test.mjs (31).
 - `src/gamma.js` — Gamma API settlement (`findGammaMarket` handles
   closed markets + multi-market moneyline preference).
