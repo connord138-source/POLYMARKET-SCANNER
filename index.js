@@ -2214,6 +2214,7 @@ async function shortDatedSweepPool(env, maxDays) {
   return pool;
 }
 var sweepEventsKey = function () { return "sweep_events:" + new Date().toISOString().slice(0, 10); };
+var sweepPickDiag = null;   // what the last short-dated pick saw (shown on cronStatus.sweep.pick)
 
 async function pickSweepCandidates(env, limit) {
   var maxDaysCfg = parseFloat(env.SWEEP_MAX_DAYS || "45");
@@ -2223,18 +2224,23 @@ async function pickSweepCandidates(env, limit) {
     var pool = await shortDatedSweepPool(env, maxDaysCfg);
     if (!pool.length) return [];
     var doneKeys = new Set();
+    var doneErr = null;
     if (env.DB) {
       try {
         var since = new Date(Date.now() - 46 * 24 * 60 * 60 * 1000).toISOString();
         var q = await env.DB.prepare("SELECT inv_key FROM investigations WHERE status IN ('done','error_permanent') AND updated_at >= ?1").bind(since).all();
         (q.results || []).forEach(function (r) { doneKeys.add(r.inv_key); });
-      } catch (e) {}
+      } catch (e) { doneErr = String(e.message).slice(0, 120); }
     }
     var eventCounts = {};
     try { eventCounts = (await env.SIGNALS_CACHE.get(sweepEventsKey(), { type: "json" })) || {}; } catch (e) {}
     var nowIso = new Date().toISOString();
-    return pickFresh(pool, { doneKeys: doneKeys, eventCounts: eventCounts, limit: Math.max(1, limit) * 3, perEvent: parseInt(env.SWEEP_PER_EVENT || "2", 10), keyOf: function (c) { return investigationKeyFor(c.marketSlug, c.directionRaw); } })
+    // a dozen per wanted question: some will turn out to have a record already
+    // (a whale-path attempt, an error) and the run must still find a fresh one
+    var picked = pickFresh(pool, { doneKeys: doneKeys, eventCounts: eventCounts, limit: Math.max(1, limit) * 12, perEvent: parseInt(env.SWEEP_PER_EVENT || "2", 10), keyOf: function (c) { return investigationKeyFor(c.marketSlug, c.directionRaw); } })
       .map(function (c) { return { marketSlug: c.marketSlug, directionRaw: c.directionRaw, marketTitle: c.marketTitle, avgEntryPrice: c.avgEntryPrice, eventDate: c.eventDate, detectedAt: nowIso, cluster: c.cluster }; });
+    sweepPickDiag = { pool: pool.length, known: doneKeys.size, knownError: doneErr, eventsToday: Object.keys(eventCounts).length, offered: picked.length };
+    return picked;
   }
   var markets = await fetchGammaJson("/markets?closed=false&limit=200&order=volume&ascending=false");
   if (!Array.isArray(markets)) return [];
@@ -2286,19 +2292,36 @@ async function pickSweepCandidates(env, limit) {
 async function runMispricingSweep(env, budget, deadlineMs) {
   if (!env.ANTHROPIC_API_KEY || !env.SIGNALS_CACHE) return { attempted: 0, done: 0, opportunities: 0 };
   var edgeThreshold = parseFloat(env.SWEEP_EDGE_PTS || "12");
+  sweepPickDiag = null;
   var pool = await pickSweepCandidates(env, budget);
   var res = { attempted: 0, done: 0, opportunities: 0 };
+  if (sweepPickDiag) res.pick = sweepPickDiag;
   var opps = [];
+  var maxTries = parseInt(env.INVESTIGATION_MAX_ATTEMPTS || "3", 10);
+  var passed = [];
+  var paidCalls = 0;
   for (var i = 0; i < pool.length && res.done < budget; i++) {
     if (deadlineMs && Date.now() > deadlineMs) break;
+    // one PAID research call per wanted question: a failed call (a timeout costs
+    // five minutes) is not chased with another this cycle; free skips move on
+    if (paidCalls >= budget) break;
     var sig = pool[i];
     var invKey = investigationKeyFor(sig.marketSlug, sig.directionRaw);
     var existing = await env.SIGNALS_CACHE.get(invKey, { type: "json" });
     // Never re-investigate a completed market, but transient failures with
-    // retry budget left (e.g. healed billing casualties) may try again.
-    if (existing && !(existing.status === "error_transient" && (existing.attempts || 0) < 3)) continue;
+    // retry budget left (e.g. healed billing casualties) may try again. The
+    // limit is the investigator's own (INVESTIGATION_MAX_ATTEMPTS): a looser
+    // one here sent it questions it then refused.
+    if (existing && !(existing.status === "error_transient" && (existing.attempts || 0) < maxTries)) {
+      if (passed.length < 6) passed.push({ slug: String(sig.marketSlug).slice(0, 60), status: existing.status, attempts: existing.attempts || 0 });
+      continue;
+    }
     res.attempted++;
     var r = await investigateSignal(env, sig, { source: "sweep" });
+    // no model call was made for these: already settled, no market, no criteria, a decided price
+    var freeSkip = !!r.skipped || /Gamma market not found|No resolution description/i.test(r.error || "");
+    if (!freeSkip) paidCalls++;
+    else if (passed.length < 6) passed.push({ slug: String(sig.marketSlug).slice(0, 60), status: r.skipped || r.error, attempts: 0 });
     if (r.ok && r.investigation && r.investigation.status === "done") {
       res.done++;
       if (sig.cluster) {
@@ -2326,6 +2349,7 @@ async function runMispricingSweep(env, budget, deadlineMs) {
       }
     }
   }
+  if (passed.length) res.passedOver = passed;
   if (opps.length > 0) {
     try {
       var prev = await env.SIGNALS_CACHE.get("sweep_opportunities", { type: "json" }) || [];
