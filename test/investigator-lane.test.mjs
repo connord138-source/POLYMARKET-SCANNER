@@ -56,8 +56,13 @@ const mk = (o = {}) => ({ outcomes: ["Yes", "No"], tokens: ["tok-yes", "tok-no"]
   const row = await recordLaneBet(env, rec, { market: { outcomes: "[\"Yes\", \"No\"]", clobTokenIds: "[\"tok-yes\", \"tok-no\"]", feeSchedule: { rate: 0.07, exponent: 1 } }, baseline: { winIndex: 0 }, startedMs: NOW - 60e3, fetchImpl, nowMs: NOW });
   check("record: reads the backed side's book and stores the bet", row.rule === 1 && urls.length === 1 && /book\?token_id=tok-yes$/.test(urls[0]) && writes.length === 1 && writes[0].a[0] === rec.invKey && writes[0].a[25] === 1 && writes[0].a[16] === 0.41 && writes[0].a.length === 29, { row, n: writes[0] && writes[0].a.length });
   check("record: an unfinished investigation, or no database, records nothing", (await recordLaneBet(env, { ...rec, status: "error_transient" }, {})) === null && (await recordLaneBet({}, rec, {})) === null);
-  const boom = await recordLaneBet({ DB: { prepare: () => { throw new Error("d1 down"); } } }, rec, { market: {}, baseline: { winIndex: 0 }, fetchImpl, nowMs: NOW });
+  const boom = await recordLaneBet({ DB: { prepare: () => { throw new Error("d1 down"); } } }, rec, { market: {}, baseline: { winIndex: 0 }, fetchImpl, nowMs: NOW, retryMs: 0 });
   check("record: a database failure never throws", boom && /d1 down/.test(boom.error));
+  // D1 answers "overloaded" once, then takes the write
+  let calls = 0; const w2 = [];
+  const busy = { DB: { prepare: () => ({ bind: (...a) => ({ run: async () => { calls++; if (calls === 1) throw new Error("D1_ERROR: D1 DB is overloaded."); w2.push(a); return { success: true }; } }) }) } };
+  const again = await recordLaneBet(busy, rec, { market: { outcomes: ["Yes", "No"], clobTokenIds: ["tok-yes", "tok-no"] }, baseline: { winIndex: 0 }, fetchImpl, nowMs: NOW, retryMs: 0 });
+  check("record: a busy database gets another try and the bet is stored", again.rule === 1 && calls === 2 && w2.length === 1, { calls, again });
 }
 
 // ---------- what the sweep researches ----------
