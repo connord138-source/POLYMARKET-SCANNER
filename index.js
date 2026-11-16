@@ -35,6 +35,7 @@ import { collectBooks, MM_SCHEMA } from "./src/mm-collector.js";
 import { sampleXvenue, xvenueReport, XV_SCHEMA, usTopOfBook } from "./src/xvenue.js";
 import { US_LANE_SCHEMA, recordUsLaneEvents, markUsLaneEvents, settleUsLaneEvents, usLaneReport } from "./src/us-lane.js";
 import { SCALP_SCHEMA, runScalpLane, scalpReport, setScalpHalt } from "./src/scalp.js";
+import { CROSS_SCHEMA, runCrossLane, checkCrossHedges, crossReport } from "./src/cross-lane.js";
 import { runMemberScalpers, memberState, connectAccount, updateAccountSettings, disconnectAccount, resumeAccount, setLiveAllowed, listAccounts } from "./src/scalp-accounts.js";
 import { dataApi, dataApiStats, describeFailure, pushScanHistory, scanHistorySummary } from "./src/data-api.js";
 import { scanWindow, scanResultShape, scanParams } from "./src/scan-window.js";
@@ -1098,6 +1099,7 @@ var SCHEMA_MIGRATIONS = [
   ...US_LANE_SCHEMA,                                          // migrations/0009_us_lane_events.sql (Polymarket US stale-quote paper lane)
   ...SCALP_SCHEMA,                                            // migrations/0012_scalp_trades.sql (Polymarket US stale-quote scalp lane)
   ...INV_LANE_SCHEMA,                                         // migrations/0016_investigator_bets.sql (the investigator's test lane)
+  ...CROSS_SCHEMA,                                            // migrations/0017_cross_events.sql (Kalshi against Polymarket US, tested as live)
 ];
 var schemaEnsured = false;
 async function ensureSchema(env) {
@@ -5487,6 +5489,12 @@ export default {
         const hours = Math.min(30 * 24, Math.max(1, parseInt(url.searchParams.get("hours") || "168", 10) || 168));
         return atJson(await scalpReport(env, await getAutotraderConfig(env), { hours }));
       }
+      // Kalshi against Polymarket US, tested as live (src/cross-lane.js): the record. Dry only, nothing is sent.
+      if (path === "/xvenue/cross" && request.method === "GET") {
+        const hours = Math.min(30 * 24, Math.max(1, parseInt(url.searchParams.get("hours") || "168", 10) || 168));
+        await ensureSchema(env);
+        return atJson(await crossReport(env, { hours }));
+      }
       if (path === "/xvenue/scalp/halt" && request.method === "POST") {
         const body = await request.json().catch(() => ({}));
         return atJson({ success: true, halt: await setScalpHalt(env, body.on !== false, body.why || 'operator') });
@@ -7456,6 +7464,9 @@ export default {
         // quotes, `kalshi`), the marker fills older events' marks, and the scalp
         // lane (src/scalp.js) acts on both sets, one venue each.
         const usLane = async (legs, now) => {
+          // The two-venue cross test (src/cross-lane.js) starts first and runs beside the rest:
+          // its reads of both real books must come as soon after the sample as they can.
+          const crossP = runCrossLane(env, { legs, nowMs: now }).catch(e => ({ error: String(e && e.message).slice(0, 80) }));
           const rec = await recordUsLaneEvents(env, legs, now);
           const marks = await markUsLaneEvents(env, now);
           let scalp = null;
@@ -7466,7 +7477,9 @@ export default {
           let members = null;
           try { const m = await runMemberScalpers(env, { events: rec.list || [], legs, nowMs: now, ownerConfig: cfg }); members = m.accounts ? { accounts: m.accounts, ran: m.ran, live: m.live, entries: m.entries, exits: m.exits, errors: m.errors.length } : null; }
           catch (e) { members = { error: String(e.message).slice(0, 80) }; }
-          return { events: rec.events, compared: rec.compared, kalshiEvents: (rec.kalshi || []).length, ...marks, scalp, members };
+          const cross = await crossP;
+          if (new Date(now).getUTCMinutes() % 5 === 2) { try { cross.hedges = await checkCrossHedges(env, now); } catch (e) {} }
+          return { events: rec.events, compared: rec.compared, kalshiEvents: (rec.kalshi || []).length, ...marks, scalp, members, cross };
         };
         const r = await sampleXvenue(env, Date.now(), { afterSample: usLane });
         console.log("xvenue:", JSON.stringify(r).slice(0, 300));

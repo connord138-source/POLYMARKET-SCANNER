@@ -5,15 +5,17 @@
 // X-PM-Access-Key carries the key id, X-PM-Timestamp the ms timestamp (±30s).
 // Only the long (YES) side of a market is tradable; the short side is
 // synthetic exposure and order prices are always the YES price. Fees: taker
-// 0.0695 x p x (1-p) per contract (Table Tennis 0.10), same on buys and
-// sells, makers below $10M/month earn nothing. Retail limit 25 req/s per IP.
+// feeCoefficient x p x (1-p) per contract, same on buys and sells; every
+// market states its own coefficient (0.0695 through Oct 2026, 0.095 on every
+// NFL / NBA / NHL / CFB market read on Nov 16 2026), makers below $10M/month
+// earn nothing. Retail limit 25 req/s per IP.
 // Secrets PMUS_KEY_ID / PMUS_SECRET_KEY are pushed by
 // .github/workflows/push-polymarket-us-key.yml (keys at polymarket.us/developer).
 import { teamMatchScore, freshUrl } from './xvenue.js';
 
 export const PMUS_API = 'https://api.polymarket.us';
 export const PMUS_GATEWAY = 'https://gateway.polymarket.us';
-export const PMUS_FEE = 0.0695;
+export const PMUS_FEE = 0.095;     // the fallback when a market does not state its own feeCoefficient (0.0695 through Oct 2026)
 export const PMUS_KEYS = { EVENTS: 'pmus_events', MARKET: 'pmus_market' };
 export const EVENTS_TTL_S = 600, MARKET_TTL_S = 1800;
 // global Polymarket slug prefix -> Polymarket US league slug(s), tried in order (Oct 25 2026: tennis,

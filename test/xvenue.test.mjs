@@ -55,14 +55,14 @@ const P = (q, outs, start, toks = ["t0", "t1"], extra = {}) => ({ question: q, o
   const gap = analyzeSeries([{ ts: 0, k_bid: 0.40, k_ask: 0.42, p_bid: 0.40, p_ask: 0.41 }, { ts: 900, k_bid: 0.40, k_ask: 0.42, p_bid: 0.50, p_ask: 0.51 }]);
   check("analyze: a 15-minute gap between samples is not a 'move'", gap.polyMoves === 0);
   check("analyze: missing quotes are skipped", analyzeSeries([{ ts: 0, k_bid: null, k_ask: null, p_bid: 0.4, p_ask: 0.41 }]).bothQuoted === 0);
-  check("us fee", Math.abs(usFee(0.5) - 0.017375) < 1e-9);
+  check("us fee", Math.abs(usFee(0.5) - 0.02375) < 1e-9);
   // Polymarket US sits still through the same +5c move; and at t=0 Kalshi bid 0.48 vs US ask 0.40 clears both fees
   const us = analyzeSeries([
     { ts: 0, k_bid: 0.48, k_ask: 0.50, p_bid: 0.40, p_ask: 0.41, us_bid: 0.39, us_ask: 0.40 },
     { ts: 60, k_bid: 0.40, k_ask: 0.42, p_bid: 0.45, p_ask: 0.46, us_bid: 0.39, us_ask: 0.40 },
   ], { moveC: 3 });
-  // t=60: p_bid 0.45 - us_ask 0.40 - usFee(0.40)=0.01668 -> 0.03332 ; t=0: k_bid 0.48 - us_ask 0.40 - kFee(0.48)=0.017472 - usFee(0.40)=0.01668 -> 0.045848
-  check("analyze: US stale edge and a Kalshi<->US crossing counted", us.usQuoted === 2 && us.staleUs === 1 && Math.abs(us.staleUsEdgeC - 3.332) < 0.01 && us.kUsCross === 1 && Math.abs(us.kUsCrossEdgeC - 4.5848) < 0.01 && Math.abs(us.usSpreadSumC - 2) < 1e-9, JSON.stringify(us));
+  // t=60: p_bid 0.45 - us_ask 0.40 - usFee(0.40)=0.0228 -> 0.0272 ; t=0: k_bid 0.48 - us_ask 0.40 - kFee(0.48)=0.017472 - usFee(0.40)=0.0228 -> 0.039728
+  check("analyze: US stale edge and a Kalshi<->US crossing counted", us.usQuoted === 2 && us.staleUs === 1 && Math.abs(us.staleUsEdgeC - 2.72) < 0.01 && us.kUsCross === 1 && Math.abs(us.kUsCrossEdgeC - 3.9728) < 0.01 && Math.abs(us.usSpreadSumC - 2) < 1e-9, JSON.stringify(us));
 }
 {
   // end-to-end sample with mocked Kalshi, Gamma, CLOB, KV and D1
@@ -108,11 +108,11 @@ const P = (q, outs, start, toks = ["t0", "t1"], extra = {}) => ({ question: q, o
   const rep = await xvenueReport(env, { hours: 1 });
   check("report: crosses block present and empty when the venues never cross", rep.crosses && rep.crosses.n === 0 && rep.crosses.persisted === 0 && rep.crosses.persistRate === null && rep.crosses.games.length === 0 && Array.isArray(rep.crosses.recent), JSON.stringify(rep.crosses));
   {
-    // Kalshi's bid sits 6c above the US ask on two consecutive minutes of one game (persists), 4c for a single minute of another (gone next row), and never on a third.
+    // Kalshi's bid sits 6c above the US ask on two consecutive minutes of one game (persists), 5c for a single minute of another (gone next row), and never on a third.
     const g = new Map();
     const row = (ts, game, team, kb, ka, ub, ua, extra = {}) => ({ ts, sport: "nhl", game, team, k_bid: kb, k_ask: ka, p_bid: 0.5, p_ask: 0.51, us_bid: ub, us_ask: ua, ...extra });
     g.set("nhl|A|Bruins", [row(0, "A", "Bruins", 0.56, 0.58, 0.49, 0.50, { us_ask_qty: 320 }), row(60, "A", "Bruins", 0.56, 0.58, 0.49, 0.50, { us_ask_qty: 300 }), row(120, "A", "Bruins", 0.50, 0.52, 0.49, 0.50)]);
-    g.set("nhl|B|Kings", [row(0, "B", "Kings", 0.45, 0.47, 0.49, 0.50), row(60, "B", "Kings", 0.54, 0.56, 0.49, 0.50, { us_ask_qty: 80 }), row(400, "B", "Kings", 0.54, 0.56, 0.49, 0.50)]);
+    g.set("nhl|B|Kings", [row(0, "B", "Kings", 0.45, 0.47, 0.49, 0.50), row(60, "B", "Kings", 0.55, 0.57, 0.49, 0.50, { us_ask_qty: 80 }), row(400, "B", "Kings", 0.55, 0.57, 0.49, 0.50)]);
     g.set("nhl|C|Jets", [row(0, "C", "Jets", 0.49, 0.51, 0.49, 0.50), row(60, "C", "Jets", null, null, 0.49, 0.50)]);
     const x = collectCrosses(g);
     check("crosses: counted after both fees, newest first, persistence judged on the next row within 3 min, US size on the side taken, games ranked",
@@ -120,8 +120,8 @@ const P = (q, outs, start, toks = ["t0", "t1"], extra = {}) => ({ question: q, o
       && x.recent.find(r => r.ts === 0 && r.game === "A").persisted === true && x.recent.find(r => r.ts === 0 && r.game === "A").dir === "buy US, sell Kalshi" && x.recent.find(r => r.ts === 0 && r.game === "A").usQty === 320
       && x.recent.find(r => r.ts === 60 && r.game === "A").persisted === false && x.recent.find(r => r.ts === 60 && r.game === "A").nextC < 0
       && x.games[0].game === "nhl|A" && x.games[0].n === 2 && x.games[0].persisted === 1 && x.games[1].game === "nhl|B" && x.games[1].n === 2 && x.medUsQty === 300 && x.withUsQty === 3
-      && x.avgC > 1 && x.avgC < 3 && x.avgPersistedC > 2, JSON.stringify(x));
-    check("crosses: a 4c raw gap near 50c is only a ~0.5c cross after both taker fees", Math.abs(x.recent.find(r => r.ts === 60 && r.game === "B").c - (0.54 - 0.50 - 0.07 * 0.54 * 0.46 - 0.0695 * 0.5 * 0.5) * 100) < 0.02, JSON.stringify(x.recent));
+      && x.avgC > 1 && x.avgC < 3 && x.avgPersistedC > 1.5, JSON.stringify(x));
+    check("crosses: a 5c raw gap near 50c is only a ~0.9c cross after both taker fees, and a 4c gap is none", Math.abs(x.recent.find(r => r.ts === 60 && r.game === "B").c - (0.55 - 0.50 - 0.07 * 0.55 * 0.45 - 0.095 * 0.5 * 0.5) * 100) < 0.02 && collectCrosses(new Map([["k", [row(0, "D", "Stars", 0.54, 0.56, 0.49, 0.50)]]])).n === 0, JSON.stringify(x.recent));
   }
   check("report: per-sport aggregates incl. US and quoted counts", rep.rows === 2 && rep.legs === 1 && rep.bySport.nfl.polyMoves === 1 && rep.bySport.nfl.staleKalshi === 1 && rep.bySport.nfl.staleRate === 1 && rep.bySport.nfl.avgKalshiSpreadC === 2 && rep.bySport.nfl.staleUs === 1 && rep.bySport.nfl.avgUsSpreadC === 1 && rep.bySport.nfl.kUsCross === 0 && rep.quoted.nfl.kalshi === 2 && rep.quoted.nfl.polymarketUs === 2 && rep.last && rep.last.live === 0 && rep.boot && rep.boot.stage === "done", JSON.stringify({ bySport: rep.bySport, quoted: rep.quoted }));
   // Kalshi missing entirely (the throttled nights): Polymarket US metrics must still compute

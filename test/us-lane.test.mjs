@@ -15,7 +15,7 @@ const leg = (ts, p_bid, p_ask, us_bid, us_ask, extra = {}) => ({ ts, sport: "nhl
   check("detect: a move the US book followed is not an event", detectUsLaneEvent(leg(0, 0.40, 0.41, 0.39, 0.40), leg(60, 0.45, 0.46, 0.44, 0.45)) === null);
   check("detect: a 1c edge below the fee is not an event", detectUsLaneEvent(leg(0, 0.40, 0.41, 0.39, 0.40), leg(60, 0.405, 0.415, 0.39, 0.40)) === null);
   check("detect: below moveC, a sample gap, or missing quotes -> null", detectUsLaneEvent(leg(0, 0.40, 0.41, 0.39, 0.40), leg(60, 0.42, 0.43, 0.39, 0.40)) === null && detectUsLaneEvent(leg(0, 0.40, 0.41, 0.39, 0.40), leg(600, 0.45, 0.46, 0.39, 0.40)) === null && detectUsLaneEvent(leg(0, 0.40, 0.41, null, null), leg(60, 0.45, 0.46, null, null)) === null && detectUsLaneEvent(null, leg(60, 0.45, 0.46, 0.39, 0.40)) === null);
-  check("detect: moveC is configurable", detectUsLaneEvent(leg(0, 0.40, 0.41, 0.39, 0.40), leg(60, 0.42, 0.43, 0.39, 0.40), { moveC: 1.5 }) !== null);
+  check("detect: moveC is configurable", detectUsLaneEvent(leg(0, 0.40, 0.41, 0.38, 0.39), leg(60, 0.42, 0.43, 0.38, 0.39), { moveC: 1.5 }) !== null && detectUsLaneEvent(leg(0, 0.40, 0.41, 0.38, 0.39), leg(60, 0.42, 0.43, 0.38, 0.39)) === null);
   // Kalshi (the Kalshi NHL scalp lane): the same rule on Kalshi's own quote for the leg, no size
   const kl = (ts, pb, pa, kb, ka, extra = {}) => leg(ts, pb, pa, null, null, { k_ticker: "KXNHLGAME-26NOV01NJWAS-NJ", k_bid: kb, k_ask: ka, ...extra });
   const kup = detectKalshiLaneEvent(kl(0, 0.40, 0.41, 0.39, 0.40), kl(60, 0.45, 0.46, 0.39, 0.40));

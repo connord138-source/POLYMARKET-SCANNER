@@ -162,6 +162,20 @@ export async function kalshiOrderbook(env, ticker, { fetchImpl, depth = 5 } = {}
   if (!yb && !nb) return null;
   return { bid: yb ? yb.px : null, bidQty: yb ? yb.qty : null, ask: nb ? Math.round((1 - nb.px) * 10000) / 10000 : null, askQty: nb ? nb.qty : null };
 }
+// The whole book, for matching an order against it (the two-venue cross lane,
+// src/cross-lane.js): YES bids and NO bids as { px, qty } levels, highest
+// price first. Pure half first, so a test can feed it a response.
+export function kalshiLevelsOf(r) {
+  const ob = (r && (r.orderbook_fp || r.orderbook)) || {};
+  const levels = (fpLevels, centLevels) => {
+    const xs = Array.isArray(fpLevels) ? fpLevels.map(l => ({ px: fp(l[0]), qty: fp(l[1]) })) : Array.isArray(centLevels) ? centLevels.map(l => ({ px: fp(l[0]) != null ? fp(l[0]) / 100 : null, qty: fp(l[1]) })) : [];
+    return xs.filter(l => l.px != null && l.px > 0 && l.px < 1 && l.qty > 0).sort((a, b) => b.px - a.px);
+  };
+  return { yes: levels(ob.yes_dollars, ob.yes), no: levels(ob.no_dollars, ob.no) };
+}
+export async function kalshiBookLevels(env, ticker, { fetchImpl, depth = 10 } = {}) {
+  return kalshiLevelsOf(await kalshiJsonCall(env, `/markets/${encodeURIComponent(ticker)}/orderbook?depth=${depth}`, { fetchImpl }));
+}
 export async function getKalshiOrder(env, orderId, { fetchImpl } = {}) {
   const r = await kalshiJsonCall(env, `/portfolio/orders/${encodeURIComponent(orderId)}`, { fetchImpl });
   return r.order || r;

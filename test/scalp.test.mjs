@@ -67,13 +67,13 @@ const ev = (extra = {}) => ({ ts: Math.floor(T0 / 1000), sport: "nba", game: "La
   const r2 = await run(env, { events: [ev({ edgeC: 3 })], legs: [leg(0.43, 0.45)], nowMs: m(2), config: cfg });
   const open2 = JSON.parse(env.SIGNALS_CACHE.m.get(SCALP_KEYS.OPEN));
   check("dry minute 2: still holding, marked at the bid, the same game not entered twice", r2.entries === 0 && r2.skipped["already in this game"] === 1 && open2.length === 1 && open2[0].lastBid === 0.43 && open2[0].markC === rtPnlC({ side: "buy", px: 0.40, fee: usFee(0.40) }, 0.43), { r2, open2 });
-  const r5 = await run(env, { events: [], legs: [leg(0.44, 0.46)], nowMs: m(5), config: cfg });
+  const r5 = await run(env, { events: [], legs: [leg(0.46, 0.48)], nowMs: m(5), config: cfg });
   const open5 = JSON.parse(env.SIGNALS_CACHE.m.get(SCALP_KEYS.OPEN));
-  const want = scalpPnl({ side: "buy", px: 0.40, shares: 25 }, 0.44);
+  const want = scalpPnl({ side: "buy", px: 0.40, shares: 25 }, 0.46);   // a 6c move: a 4c one no longer covers two 0.095 x p(1-p) fees
   const row = env.DB.rows[0];
   const day = JSON.parse(env.SIGNALS_CACHE.m.get(SCALP_KEYS.DAY + "2026-11-01"));
   check("day: counts the stale quotes seen and the skip reasons, not only the entries", day.events === 2 && day.kalshiEvents === 0 && day.skipped["already in this game"] === 1, day);
-  check("dry minute 5: closed at the bid, both fees, recorded in D1 and the day", r5.exits === 1 && open5.length === 0 && row && row.exit_kind === "x5" && row.exit_px === 0.44 && Math.abs(row.pnl_usd - want.pnlUsd) < 0.011 && row.pnl_c === want.pnlC && row.live === 0 && row.hold_s === 300 && day.exits === 1 && day.wins === 1 && Math.abs(day.pnlUsd - want.pnlUsd) < 0.011, { r5, row, day });
+  check("dry minute 5: closed at the bid, both fees, recorded in D1 and the day", r5.exits === 1 && open5.length === 0 && row && row.exit_kind === "x5" && row.exit_px === 0.46 && Math.abs(row.pnl_usd - want.pnlUsd) < 0.011 && row.pnl_c === want.pnlC && row.live === 0 && row.hold_s === 300 && day.exits === 1 && day.wins === 1 && Math.abs(day.pnlUsd - want.pnlUsd) < 0.011, { r5, row, day });
   const rep = await scalpReport(env, cfg, { nowMs: m(6) });
   check("fill probe: travels onto the D1 row and into the report's per-venue summary", rep.recent[0].probe && rep.recent[0].probe.t0.there === true && rep.probe.us && rep.probe.us.n === 1 && rep.probe.us.t0.thereRate === 1 && rep.probe.us.t0.enoughRate === 1 && rep.probe.us.t0.qtyMed === 80 && rep.probe.us.t1.thereRate === 0 && rep.probe.us.t1.goneAvgMoveC === 2 && /probe/.test(rep.read), { probe: rep.probe, row: rep.recent[0].probe });
   check("report: mode, record from D1, today, nothing open, read text", rep.mode === "dry" && rep.all.n === 1 && rep.all.wins === 1 && rep.all.hitRate === 1 && rep.recent.length === 1 && rep.recent[0].exitKind === "x5" && rep.open.length === 0 && rep.today.entries === 1 && /kill switch/.test(rep.read), { all: rep.all, today: rep.today });

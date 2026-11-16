@@ -28,7 +28,7 @@ export const XV_LIVE_BEFORE_MS = 30 * 60e3;        // start sampling 30 min befo
 export const XV_LIVE_AFTER_MS = 4.5 * 3600e3;      // ... and stop 4.5h after it
 export const XV_PRUNE_DAYS = 14;
 export const KALSHI_TAKER_RATE = 0.07;             // per-contract taker fee = rate x p(1-p) (Kalshi fee schedule)
-export const US_TAKER_RATE = 0.0695;               // Polymarket US taker fee = 0.0695 x p(1-p); makers get a 0.0125 x p(1-p) rebate
+export const US_TAKER_RATE = 0.095;                // Polymarket US taker fee = 0.095 x p(1-p) (the markets' own feeCoefficient since Nov 2026; it was 0.0695 through October)
 export const US_MAX_BBO_CALLS = 40;                // per minute, one per live game
 
 export const XV_SCHEMA = [
