@@ -66,6 +66,11 @@ INVESTIGATION_DAILY_USD = "10"
 SWEEP_MAX_DAYS = "3"
 SWEEP_EXCLUDE_KINDS = "weather"
 SWEEP_PER_EVENT = "2"
+# Kalshi against Polymarket US, tested as live (src/cross-lane.js, Nov 16
+# 2026): "dry" reads both real order books when the sampler sees a cross and
+# records what a two-leg bot would have got; "off" stops the reads. There is
+# no live mode.
+CROSS_LANE = "dry"
 # 3 searches covers resolution criteria + key facts; search results are the
 # dominant token cost (5 searches ran ~$1/investigation on Sep 8).
 INVESTIGATION_MAX_SEARCHES = "3"

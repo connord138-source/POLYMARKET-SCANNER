@@ -12,7 +12,7 @@
 // diffs those dry fills against the paper ledger, round trip by round trip.
 // Venue: the owner routed real orders to Polymarket US (Oct 24 2026), so the
 // dry run prices every intent on the Polymarket US book (src/polymarket-us.js:
-// league -> moneyline -> long/short side, YES-price orders, 0.0695 x p(1-p)
+// league -> moneyline -> long/short side, YES-price orders, the market's feeCoefficient x p(1-p) (0.095 in Nov 2026)
 // fee) and keeps the global CLOB fill alongside as a reference. The live
 // path exists but is inert: it runs only when paperTradeMode is off AND the
 // Polymarket US key is configured; it consumes the live exec queue, places a

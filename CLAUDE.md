@@ -425,6 +425,58 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   high (say 70%+) with the size there; a low t1 rate says the edge is
   short-lived and a faster sampler would be needed first. Live entries are
   not probed (their fill is the evidence).
+- `src/cross-lane.js` — Kalshi against Polymarket US, tested AS LIVE, dry
+  only (Nov 16 2026, owner's "go, build the two-venue dry test", after the
+  sampler's clean 48h read 34 of 508 crossing minutes still there a minute
+  later). The minute cron's `afterSample` hook starts `runCrossLane` first,
+  beside the scalp lane. A sampled cross of `CROSS.minEdgeC` (1c a share
+  after both taker fees; `crossCandidates`: `us_k` = the team on Polymarket
+  US at its ask + Kalshi NO at 1 - bid, `k_us` = Kalshi YES at its ask + the
+  other US side at 1 - bid; either pair pays $1 a share whoever wins) is a
+  candidate; `pickCandidates` takes three a minute, one per game, a leg and
+  direction once per 5 minutes, 12 looks a game a day (KV `cross_state`).
+  t0: both real books read at the same moment (`fetchUsBook` past the edge
+  cache, `kalshiBookLevels` = Kalshi's whole book, bids only, a NO bid at p
+  is a YES offer at 1 - p) and `planCross` walks both ask sides together,
+  taking every share that still locks `minLockC` (1c) after the market's own
+  US fee and Kalshi's, up to `stakeUsd` ($25 a pair), whole contracts, at
+  least `minShares` (5); none = `gone_t0` / `thin_t0`, no trade. t1: both
+  read again right away, standing in for the two fill-or-kill orders
+  arriving (`matchPair`: the US leg is the order `buildUsOrder` would send,
+  matched by `matchFok`; the Kalshi leg walks its levels, the fee rounded up
+  to the cent per level): both fill = `filled` (locked, pnl = shares less
+  both costs and both fees, held to the end of the game), one = `legged_us`
+  / `legged_kalshi` (sold straight back into that book read, the exit fee
+  paid: `unwindLeg`), neither = `killed`. t2 (`delayMs` 5s later, one shared
+  wait): still there or not (`t2_both`). `checkCrossHedges` (minute % 5 == 2)
+  compares the two venues' mids over the game's `xvenue_quotes` rows:
+  `hedge_ok` 1 = the same proposition, 0 = a mis-mapped leg (far apart or
+  moving opposite ways; left out of the money as `mismatched`), -1 = too few
+  rows. D1 `cross_events` (migration 0017, `CROSS_SCHEMA`); `GET
+  /xvenue/cross?hours=168` (snapshot key `cross`): looked, byVerdict, sent,
+  filled {n, games, pnlUsd, stakedUsd, avgLockC, hedge}, legged, killed, net
+  {pnlUsd, roiPct, perSentUsd, fillPct, leggedPct, tGames (each game counted
+  once)}, edge {sampledC, realTopC, plannedC, bookedC}, timing {avgLagS,
+  avgGapMs, stillThereAfterDelayPct}, bySport / byDir / byDay / games /
+  recent, `last` (KV `cross_last`). The rule is fixed in `CROSS` (version 1);
+  changing it bumps the version. wrangler `CROSS_LANE` "dry" | "off". There
+  is NO live path in the file; a real two-venue lane is the owner's call
+  after the record (and needs Kalshi order keys plus money on both venues).
+  Not modelled: the read-to-order latency below the t0-t1 gap, and a game
+  the two venues settle differently (a tie, a postponement). Tests:
+  test/cross-lane.test.mjs (53).
+  THE US FEE (found building this, Nov 16 2026): every Polymarket US market
+  now states `feeCoefficient` 0.095 (NFL, NBA, NHL, CFB all read that day);
+  it was 0.0695 through October. The executor and the scalp lane's
+  dry-as-live fills already charged the market's own coefficient, but the
+  sampler's constants did not: `US_TAKER_RATE` (xvenue.js) and `PMUS_FEE`
+  (polymarket-us.js) are 0.095 since that day. So the sampler's stale-US and
+  Kalshi-vs-US cross numbers before it were about 0.6c a share too kind at
+  mid prices (the "34 persisted at 2.2c" read included), `us_lane_events`
+  rows marked before it carry the old fee in their marks (the 168h window is
+  clean of them from Nov 23 2026), and a taker round trip on Polymarket US
+  costs about 5.7c a share at mid prices, not 4.5c. `xvenueReport` computes
+  at read time, so its numbers are right from the deploy on.
 - `src/crypto-fv.js` — crypto fair value: every Polymarket BTC/ETH/SOL price
   contract ("above $X on <date>" = European digital; "dip to"/"reach" =
   one-touch via reflection) priced from Coinbase realized vol (7d/30d/90d,
