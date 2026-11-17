@@ -464,7 +464,20 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   after the record (and needs Kalshi order keys plus money on both venues).
   Not modelled: the read-to-order latency below the t0-t1 gap, and a game
   the two venues settle differently (a tie, a postponement). Tests:
-  test/cross-lane.test.mjs (53).
+  test/cross-lane.test.mjs (54).
+  First night (Nov 17 2026, five NBA games): 9 sampled crosses of 1c+
+  (average 2.5c) looked at about 3 seconds after the sample, all 9
+  `gone_t0`: read at the same moment the two real books were on average
+  3.5c short of crossing, including the one the sampler called persisted
+  (Magic vs. Celtics, 5.5c then 4.3c on consecutive minutes: -5.2c and
+  -4.9c on the real books). So the sampler's crosses are, so far, the
+  seconds between its Kalshi read and its US read, not prices two orders
+  could take. Since that day each row also keeps the cheapest real offer on
+  each venue at t0 (`real_us_px` / `real_k_px`, migration 0018; report
+  `drift.usC` / `drift.kalshiC` = cents above the sampled price), to say
+  which venue's sampled quote had already gone; if it is Kalshi's, the
+  sampler's Kalshi quote source (`/markets?tickers=`) is the thing to
+  look at, as the US gateway's cache was on Nov 12.
   THE US FEE (found building this, Nov 16 2026): every Polymarket US market
   now states `feeCoefficient` 0.095 (NFL, NBA, NHL, CFB all read that day);
   it was 0.0695 through October. The executor and the scalp lane's

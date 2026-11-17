@@ -143,7 +143,7 @@ const noSleep = async () => {};
   const out = await runCrossLane(env, { legs: [leg({ k_bid: 0.58, k_ask: 0.60 })], nowMs: NOW, fetchImpl: mkFetch([{ us: US_B, k: K_B }], calls), sleep: noSleep, clock: () => NOW + 4000 });
   check("run: a cross that is still on both books at both reads is a filled pair", out.mode === "dry" && out.seen === 1 && out.looked === 1 && out.planned === 1 && out.filled === 1 && out.pnlUsd > 0 && writes.length === 1, out);
   const a = writes[0].a;
-  check("run: the row carries the pair, the fills and the timing (34 values)", a.length === 34 && (writes[0].sql.match(/\?/g) || []).length === 34 && a[6] === "us_k" && a[8] === "long" && a[10] === "no" && a[17] === "filled" && a[19] === 26 && a[20] === 0.51 && a[21] === 0.42 && a[24] === 0.51 && a[25] === 0.42 && a[29] > 0 && a[16] === 4 && a[32] === 1, a);
+  check("run: the row carries the pair, the fills and the timing (36 values)", a.length === 36 && (writes[0].sql.match(/\?/g) || []).length === 36 && a[34] === 0.51 && a[35] === 0.42 && a[6] === "us_k" && a[8] === "long" && a[10] === "no" && a[17] === "filled" && a[19] === 26 && a[20] === 0.51 && a[21] === 0.42 && a[24] === 0.51 && a[25] === 0.42 && a[29] > 0 && a[16] === 4 && a[32] === 1, a);
   check("run: both books are read three times (plan, fill, the later look) past the US edge cache, and nothing is posted", calls.filter(u => /\/book\?_=/.test(u)).length === 3 && calls.filter(u => /orderbook/.test(u)).length === 3 && calls.every(u => !/\/v1\/orders|portfolio/.test(u)), calls);
   const st = JSON.parse(kv.get("cross_state"));
   check("run: the leg is cooling off and the game counted", Object.keys(st.last).length === 1 && Object.values(st.games)[0] === 1 && JSON.parse(kv.get("cross_last")).rows[0].verdict === "filled");
@@ -155,7 +155,7 @@ const noSleep = async () => {};
   const { env, writes } = mkEnv();
   const calls = [];
   const out = await runCrossLane(env, { legs: [leg({ k_bid: 0.58, k_ask: 0.60 })], nowMs: NOW, fetchImpl: mkFetch([{ us: US_B, k: kBody([[0.52, 300]], [[0.46, 300]]) }], calls), sleep: noSleep });
-  check("run: no cross on the real books = no trade, one read of each book, the real edge recorded", out.gone === 1 && out.planned === 0 && writes[0].a[17] === "gone_t0" && writes[0].a[22] < 0 && writes[0].a[29] === null && calls.filter(u => /orderbook/.test(u)).length === 1, [out, writes[0] && writes[0].a]);
+  check("run: no cross on the real books = no trade, one read of each book, the real edge and each venue's real offer recorded", out.gone === 1 && out.planned === 0 && writes[0].a[17] === "gone_t0" && writes[0].a[22] < 0 && writes[0].a[29] === null && writes[0].a[34] === 0.51 && writes[0].a[35] === 0.48 && calls.filter(u => /orderbook/.test(u)).length === 1, [out, writes[0] && writes[0].a]);
 }
 {
   // there at the first read, Kalshi pulled by the second
@@ -191,14 +191,14 @@ const noSleep = async () => {};
 
 // ---------- the record ----------
 {
-  const row = (o = {}) => ({ ts: TS, sport: "nba", game: "A", team: "a1", dir: "us_k", verdict: "filled", s_edge_c: 3, real_edge_c: 2.5, lock0_c: 2.4, shares: 25, staked_usd: 24, pnl_usd: 0.6, pnl_c: 2.4, lag_s: 4, gap_ms: 300, t2_both: 1, hedge_ok: 1, suspect: 0, ...o });
+  const row = (o = {}) => ({ ts: TS, sport: "nba", game: "A", team: "a1", dir: "us_k", verdict: "filled", s_us_px: 0.51, s_k_px: 0.42, real_us_px: 0.51, real_k_px: 0.42, s_edge_c: 3, real_edge_c: 2.5, lock0_c: 2.4, shares: 25, staked_usd: 24, pnl_usd: 0.6, pnl_c: 2.4, lag_s: 4, gap_ms: 300, t2_both: 1, hedge_ok: 1, suspect: 0, ...o });
   const rows = [
     row(), row({ game: "B", pnl_usd: 0.5, pnl_c: 2, t2_both: 0 }), row({ game: "C", sport: "nhl", pnl_usd: 0.7, pnl_c: 2.8, hedge_ok: null }),
     row({ game: "Tulsa vs. Tulane", sport: "cfb", pnl_usd: 9, pnl_c: 36, staked_usd: 16, hedge_ok: 0, suspect: 1 }),
     row({ game: "D", verdict: "legged_us", pnl_usd: -1.1, pnl_c: -4.4, staked_usd: 13, t2_both: 0 }), row({ game: "E", verdict: "legged_kalshi", pnl_usd: null, pnl_c: null }),
     row({ game: "F", verdict: "killed", pnl_usd: 0, pnl_c: 0, staked_usd: 0, t2_both: 0 }),
-    row({ game: "G", verdict: "gone_t0", pnl_usd: null, pnl_c: null, shares: null, staked_usd: null, lock0_c: null, real_edge_c: -1.5, gap_ms: null, t2_both: null, hedge_ok: null }),
-    row({ game: "H", verdict: "read_failed", pnl_usd: null, shares: null, staked_usd: null, lock0_c: null, real_edge_c: null, gap_ms: null, t2_both: null }),
+    row({ game: "G", verdict: "gone_t0", real_k_px: 0.51, pnl_usd: null, pnl_c: null, shares: null, staked_usd: null, lock0_c: null, real_edge_c: -1.5, gap_ms: null, t2_both: null, hedge_ok: null }),
+    row({ game: "H", verdict: "read_failed", real_us_px: null, real_k_px: null, pnl_usd: null, shares: null, staked_usd: null, lock0_c: null, real_edge_c: null, gap_ms: null, t2_both: null }),
   ];
   const s = summarizeCrosses(rows);
   check("record: looked, sent and the verdicts", s.looked === 9 && s.sent === 7 && near(s.sentPct, 77.78, 0.02) && s.byVerdict.filled === 4 && s.byVerdict.gone_t0 === 1 && s.killed === 1 && s.suspect === 1, s);
@@ -207,6 +207,7 @@ const noSleep = async () => {};
   check("record: net = filled + legged, per pair sent, each game counted once", near(s.net.pnlUsd, 0.7) && near(s.net.perSentUsd, 0.1) && near(s.net.fillPct, 42.86, 0.02) && near(s.net.leggedPct, 28.57, 0.02) && s.net.games === 7 && typeof s.net.tGames === "number", s.net);
   check("record: sampled edge against the real books; timing; how long a cross lasts", near(s.edge.sampledC, 3) && s.edge.realTopC < 3 && near(s.edge.bookedC, 2.4) && s.timing.avgLagS === 4 && s.timing.avgGapMs === 300 && near(s.timing.stillThereAfterDelayPct, 100 * 4 / 7, 0.02) && s.timing.delayS === 5, [s.edge, s.timing]);
   check("record: by sport, direction, day, game and the recent list", s.bySport.nba.sent === 5 && s.bySport.cfb.filled === 0 && s.byDir.us_k.looked === 9 && Object.keys(s.byDay).length === 1 && s.games.length === 9 && s.games.find(g => g.game === "cfb|Tulsa vs. Tulane").hedgeBad === 1 && s.recent.length === 9 && s.recent[0].verdict && /Nothing is ever sent/.test(s.read) && s.version === 1 && s.since === new Date(TS * 1000).toISOString());
+  check("record: which venue's sampled price was off (only rows with both real offers count)", s.drift.n === 8 && s.drift.usC === 0 && near(s.drift.kalshiC, 9 / 8, 0.02) && s.recent.find(r => r.game === "G").realK === 0.51 && /drift/.test(s.read), s.drift);
   const empty = summarizeCrosses([]);
   check("record: empty is empty", empty.looked === 0 && empty.sent === 0 && empty.since === null && empty.filled.n === 0 && empty.net.pnlUsd === 0 && empty.net.tGames === null && empty.edge.sampledC === null);
   const kv = new Map([["cross_last", JSON.stringify({ at: "x" })], ["cross_state", JSON.stringify({ day: "2026-11-16", games: { a: 2, b: 1 }, last: {} })]]);
