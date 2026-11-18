@@ -30,6 +30,7 @@ export const XV_PRUNE_DAYS = 14;
 export const KALSHI_TAKER_RATE = 0.07;             // per-contract taker fee = rate x p(1-p) (Kalshi fee schedule)
 export const US_TAKER_RATE = 0.095;                // Polymarket US taker fee = 0.095 x p(1-p) (the markets' own feeCoefficient since Nov 2026; it was 0.0695 through October)
 export const US_MAX_BBO_CALLS = 40;                // per minute, one per live game
+export const US_PARALLEL = 10;                     // of those, read at once (the gateway allows 25 requests a second per address)
 
 export const XV_SCHEMA = [
   `CREATE TABLE IF NOT EXISTS xvenue_quotes (
@@ -326,35 +327,53 @@ export async function sampleXvenue(env, nowMs = Date.now(), hooks = {}) {
     await mark('done', { rows: 0, live: 0 }); return status;
   }
   const legs = live.flatMap(p => p.legs.map((l, i) => ({ ...l, sport: p.sport, game: p.game, startMs: p.startMs, feeRate: p.feeRate, usSlug: p.usSlug || null, usLong: p.usLongIdx === i })));
-  const kq = new Map();
-  let kalshiCooldown = null; try { kalshiCooldown = await env.SIGNALS_CACHE.get(XV_KEYS.KALSHI_COOLDOWN); } catch (e) {}
-  if (kalshiCooldown) status.kalshiSkipped = 'cooldown after 429';
-  else for (let i = 0; i < legs.length; i += 40) {
-    try { const r = await kalshiJson(env, `/markets?tickers=${legs.slice(i, i + 40).map(l => l.kTicker).join(',')}&limit=100`); for (const m of r.markets || []) kq.set(m.ticker, m); }
-    catch (e) {
-      status.kalshiError = e.message.slice(0, 80);
-      if (/429/.test(e.message)) { try { await env.SIGNALS_CACHE.put(XV_KEYS.KALSHI_COOLDOWN, '1', { expirationTtl: XV_KALSHI_COOLDOWN_S }); } catch (e2) {} }
-      break;
-    }
-  }
-  status.kQuoted = kq.size;
-  const pq = new Map();
-  for (let i = 0; i < legs.length; i += 40) {
-    try {
-      const res = await fetch(`${CLOB_API}/books`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(legs.slice(i, i + 40).map(l => ({ token_id: l.pToken }))) });
-      if (res.ok) for (const b of await res.json()) pq.set(b.asset_id, b);
-    } catch (e) { status.polyError = e.message.slice(0, 80); }
-  }
-  // Polymarket US: one call per live game (the instrument quotes the long side).
+  // The three venues are read at the same moment (Nov 18 2026). They used to be read one after
+  // another (Kalshi, then Polymarket, then Polymarket US one game at a time), so Kalshi's quote was
+  // seconds older than the US one: a score landing in between read as a cross between the two
+  // US-legal venues and as a stale Kalshi quote against Polymarket (the cross test's first two
+  // nights: 34 of 34 sampled crosses gone on the real books, the US price exactly where the sample
+  // had it and Kalshi's 8.6c away). status.readMs = when each venue's read finished, counted from
+  // the start of the reads; skewMs = the spread between the first and the last.
+  const kq = new Map(), pq = new Map(), uq = new Map();
+  const readStart = Date.now(); const readMs = {};
+  const chunks = (n) => Array.from({ length: Math.ceil(legs.length / n) }, (_, i) => legs.slice(i * n, i * n + n));
+  const readKalshi = async () => {
+    let kalshiCooldown = null; try { kalshiCooldown = await env.SIGNALS_CACHE.get(XV_KEYS.KALSHI_COOLDOWN); } catch (e) {}
+    if (kalshiCooldown) { status.kalshiSkipped = 'cooldown after 429'; return; }
+    await Promise.all(chunks(40).map(async (ch) => {
+      try { const r = await kalshiJson(env, `/markets?tickers=${ch.map(l => l.kTicker).join(',')}&limit=100`); for (const m of r.markets || []) kq.set(m.ticker, m); }
+      catch (e) {
+        status.kalshiError = e.message.slice(0, 80);
+        if (/429/.test(e.message)) { try { await env.SIGNALS_CACHE.put(XV_KEYS.KALSHI_COOLDOWN, '1', { expirationTtl: XV_KALSHI_COOLDOWN_S }); } catch (e2) {} }
+      }
+    }));
+    readMs.kalshi = Date.now() - readStart;
+  };
+  const readPoly = async () => {
+    await Promise.all(chunks(40).map(async (ch) => {
+      try {
+        const res = await fetch(`${CLOB_API}/books`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(ch.map(l => ({ token_id: l.pToken }))) });
+        if (res.ok) for (const b of await res.json()) pq.set(b.asset_id, b);
+      } catch (e) { status.polyError = e.message.slice(0, 80); }
+    }));
+    readMs.poly = Date.now() - readStart;
+  };
+  // Polymarket US: one call per live game (the instrument quotes the long side), US_PARALLEL at a time.
   // /book gives the top of book with the shares shown there; /bbo (no sizes) is the fallback.
-  const uq = new Map();
-  const usSlugs = [...new Set(live.map(p => p.usSlug).filter(Boolean))].slice(0, US_MAX_BBO_CALLS);
-  for (const slug of usSlugs) {
-    try {
-      const q = await usTopOfBook(slug);
-      if (q) uq.set(slug, q);
-    } catch (e) { status.usError = e.message.slice(0, 80); }
-  }
+  const readUs = async () => {
+    const usSlugs = [...new Set(live.map(p => p.usSlug).filter(Boolean))].slice(0, US_MAX_BBO_CALLS);
+    for (let i = 0; i < usSlugs.length; i += US_PARALLEL) {
+      await Promise.all(usSlugs.slice(i, i + US_PARALLEL).map(async (slug) => {
+        try { const q = await usTopOfBook(slug); if (q) uq.set(slug, q); }
+        catch (e) { status.usError = e.message.slice(0, 80); }
+      }));
+    }
+    if (usSlugs.length) readMs.us = Date.now() - readStart;
+  };
+  await Promise.all([readKalshi(), readPoly(), readUs()]);
+  status.kQuoted = kq.size;
+  status.readMs = readMs;
+  { const done = Object.values(readMs); status.skewMs = done.length > 1 ? Math.max(...done) - Math.min(...done) : null; }
   const ts = Math.floor(nowMs / 1000);
   const stmts = []; const sampled = [];
   for (const l of legs) {

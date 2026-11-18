@@ -167,6 +167,20 @@ const P = (q, outs, start, toks = ["t0", "t1"], extra = {}) => ({ question: q, o
   const q = kalshiReqs.find(r => r.u.includes("tickers="));
   const signedOk = q && verify(null, Buffer.from(q.h["KALSHI-ACCESS-TIMESTAMP"] + "GET/trade-api/v2/markets"), ed.publicKey, Buffer.from(q.h["KALSHI-ACCESS-SIGNATURE"], "base64"));
   check("signed: series and quote calls carry a valid Kalshi signature; status reports kalshiAuth; Kalshi quotes land", st.kalshiAuth === true && st.kQuoted === 2 && kalshiReqs.length >= 7 && kalshiReqs.every(r => r.h["KALSHI-ACCESS-KEY"] === "kid-1") && signedOk === true && rows[0].a[6] === 0.37, JSON.stringify({ st, nReq: kalshiReqs.length, row: rows[0] && rows[0].a.slice(0, 8) }));
+  {
+    // the same game a minute later (pairs cached): only the two quote reads go out, each held 25 ms
+    const base = globalThis.fetch; const log = [];
+    globalThis.fetch = async (url, opts) => {
+      const u = String(url); const venue = u.endsWith("/books") ? "poly" : (u.includes("kalshi") && u.includes("tickers=")) ? "kalshi" : null;
+      if (venue) { log.push(["start", venue]); await new Promise(r => setTimeout(r, 25)); }
+      const res = await base(url, opts);
+      if (venue) log.push(["end", venue]);
+      return res;
+    };
+    const st2 = await sampleXvenue(env, now + 60e3);
+    globalThis.fetch = base;
+    check("sample: the venues are read at the same moment, not one after another (both reads start before either ends), and the status says when each finished", log.length === 4 && log[0][0] === "start" && log[1][0] === "start" && st2.readMs && typeof st2.readMs.kalshi === "number" && typeof st2.readMs.poly === "number" && st2.readMs.us === undefined && st2.skewMs != null && st2.skewMs < 20, JSON.stringify({ log, readMs: st2.readMs, skewMs: st2.skewMs }));
+  }
 }
 // ---------- the US gateway's edge cache (Nov 12 2026): every price read carries a unique query string ----------
 {
