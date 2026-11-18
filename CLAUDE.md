@@ -811,7 +811,11 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   questions, 6 bets), and the 10-minute re-probe of the empty account was
   counted as a researched question each time (`researchedToday` 91 for 29
   real); a call refused for lack of credits no longer touches the day's
-  count. Research resumes by itself within ten minutes of a top-up. Tests:
+  count. Research resumes by itself within ten minutes of a top-up. The
+  owner's top-up of Nov 16-17 lasted until 01:16 UTC Nov 18 (about $12);
+  on Nov 18 the owner cut the budget to $5 a day (`INVESTIGATION_DAILY_USD`
+  5, owner's "cut budget to 5"): the rule is unchanged, the pace halves
+  (about 25 questions and 3-4 bets a day at ~19c a question). Tests:
   test/investigator-lane.test.mjs (31).
 - `src/gamma.js` — Gamma API settlement (`findGammaMarket` handles
   closed markets + multi-market moneyline preference).
