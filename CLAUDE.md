@@ -475,9 +475,21 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   could take. Since that day each row also keeps the cheapest real offer on
   each venue at t0 (`real_us_px` / `real_k_px`, migration 0018; report
   `drift.usC` / `drift.kalshiC` = cents above the sampled price), to say
-  which venue's sampled quote had already gone; if it is Kalshi's, the
-  sampler's Kalshi quote source (`/markets?tickers=`) is the thing to
-  look at, as the US gateway's cache was on Nov 12.
+  which venue's sampled quote had already gone.
+  Second night and the cause (Nov 18 2026): 34 looks over NBA, NHL and
+  college football, 34 `gone_t0`. On the 25 with the readout the US offer
+  was where the sample had it (drift 0.02c) and Kalshi's was 8.6c away
+  (5-9c on most, 13-26c on hockey goals). The sampler read its venues one
+  after another: Kalshi first, then Polymarket, then Polymarket US one
+  game at a time, so the Kalshi quote was seconds older than the US one,
+  and a score landing in between read as a cross. The sampler now reads
+  the three at the same moment (xvenue.js `readKalshi` / `readPoly` /
+  `readUs` under one Promise.all, US games `US_PARALLEL` 10 at a time;
+  `status.readMs` and `skewMs` in `xvenue.last`). The same ordering made
+  Kalshi look stale against Polymarket (`staleKalshi` ran 11-13% of moves
+  in every sport), so every sampler number that compares Kalshi with
+  another venue before Nov 18 2026 is that artifact, the NHL "Kalshi lags"
+  read of Nov 1 included; read them only on windows that start after it.
   THE US FEE (found building this, Nov 16 2026): every Polymarket US market
   now states `feeCoefficient` 0.095 (NFL, NBA, NHL, CFB all read that day);
   it was 0.0695 through October. The executor and the scalp lane's
