@@ -36,6 +36,7 @@ import { sampleXvenue, xvenueReport, XV_SCHEMA, usTopOfBook } from "./src/xvenue
 import { US_LANE_SCHEMA, recordUsLaneEvents, markUsLaneEvents, settleUsLaneEvents, usLaneReport } from "./src/us-lane.js";
 import { SCALP_SCHEMA, runScalpLane, scalpReport, setScalpHalt } from "./src/scalp.js";
 import { CROSS_SCHEMA, runCrossLane, checkCrossHedges, crossReport } from "./src/cross-lane.js";
+import { OUTAGE_KEYS, OUTAGE_TTL_S, outageKind, outageLabel, outageActive, priorAttempt, countedToday, KNOWN_SQL } from "./src/investigator-outage.js";
 import { runMemberScalpers, memberState, connectAccount, updateAccountSettings, disconnectAccount, resumeAccount, setLiveAllowed, listAccounts } from "./src/scalp-accounts.js";
 import { dataApi, dataApiStats, describeFailure, pushScanHistory, scanHistorySummary } from "./src/data-api.js";
 import { scanWindow, scanResultShape, scanParams } from "./src/scan-window.js";
@@ -1758,15 +1759,15 @@ async function investigateSignal(env, sig, opts) {
   var maxAttempts = parseInt(env.INVESTIGATION_MAX_ATTEMPTS || "3", 10);
 
   var existing = await env.SIGNALS_CACHE.get(invKey, { type: "json" });
-  if (existing && !opts.force) {
-    if (existing.status === "done") return { ok: true, skipped: "already_done", investigation: existing };
-    if (existing.status === "error_permanent") return { ok: false, skipped: "permanent_error", investigation: existing };
-    if (existing.status === "error_transient" && (existing.attempts || 0) >= maxAttempts) {
-      return { ok: false, skipped: "attempts_exhausted", investigation: existing };
-    }
+  // A record left by an account outage (no credits, a rejected key) was never
+  // really tried: it does not block the question and its attempts start again
+  // (src/investigator-outage.js).
+  var prior = priorAttempt(existing, maxAttempts);
+  if (existing && !opts.force && prior.skip) {
+    return { ok: prior.skip === "already_done", skipped: prior.skip, investigation: existing };
   }
 
-  var attempts = (existing && existing.attempts) || 0;
+  var attempts = prior.attempts;
 
   var writeInv = async function (rec) {
     rec.invKey = invKey;
@@ -1778,7 +1779,7 @@ async function investigateSignal(env, sig, opts) {
     // Maintain a lightweight index for the /learning/brier aggregation.
     try {
       var idx = await env.SIGNALS_CACHE.get("investigation_index", { type: "json" }) || [];
-      if (idx.indexOf(invKey) === -1) {
+      if (idx.indexOf(invKey) === -1 && !outageKind(rec.lastError)) {   // an outage's record is not a researched question
         idx.push(invKey);
         if (idx.length > 1000) idx = idx.slice(-1000);
         await env.SIGNALS_CACHE.put("investigation_index", JSON.stringify(idx));
@@ -1847,28 +1848,31 @@ async function investigateSignal(env, sig, opts) {
   // nothing, so it does not count as one of the day's questions: on Nov 15
   // 2026 the 10-minute re-probe of an empty account added six "researched"
   // an hour to the day's count (91 shown, 29 real) and ate the question cap.
-  var billingDown = !result.ok && /credit balance is too low/i.test(result.error || "");
-  if (!billingDown) {
+  // The same holds for a key the API rejects (Nov 19 2026: every call
+  // answered 401 invalid x-api-key, 150 refused calls were counted as
+  // researched questions for $0 and the questions were marked failed for good).
+  var outage = !result.ok ? outageKind(result.error) : null;
+  if (!outage) {
     await bumpDailyInvestigationCost(env, result.webSearches || 0,
       investigationUsd(result.model || env.INVESTIGATION_MODEL || DEFAULT_INVESTIGATION_MODEL,
         result.usage, result.webSearches));
   }
 
   if (!result.ok) {
-    // An out-of-credits API account is a GLOBAL outage, not this market's
-    // fault: don't burn its retry attempts or blacklist it as permanent
-    // (the Sep 5 credit outage permanently marked dozens of markets that
-    // were never investigated). Flag the outage so the cron stops paying
-    // the phase cost; the flag expires hourly to re-probe.
-    if (billingDown) {
+    // An account outage (no credits, a rejected key) is GLOBAL, not this
+    // market's fault: don't burn its retry attempts or blacklist it as
+    // permanent (the Sep 5 credit outage permanently marked dozens of markets
+    // that were never investigated). Flag the outage so the cron stops paying
+    // the phase cost; the flag expires hourly and is re-probed after 10 min.
+    if (outage) {
       try {
-        await env.SIGNALS_CACHE.put("anthropic_billing_down", JSON.stringify({ at: Date.now() }),
-          { expirationTtl: 3600 });
+        await env.SIGNALS_CACHE.put(OUTAGE_KEYS[outage], JSON.stringify({ at: Date.now(), error: String(result.error || "").slice(0, 200) }),
+          { expirationTtl: OUTAGE_TTL_S });
       } catch (e) {}
     } else {
       attempts += 1;
     }
-    var permanent = !billingDown && (result.error === "refusal" || attempts >= maxAttempts);
+    var permanent = !outage && (result.error === "refusal" || attempts >= maxAttempts);
     var recErr = await writeInv({
       status: permanent ? "error_permanent" : "error_transient",
       attempts: attempts,
@@ -2250,7 +2254,7 @@ async function pickSweepCandidates(env, limit) {
     if (env.DB) {
       try {
         var since = new Date(Date.now() - 46 * 24 * 60 * 60 * 1000).toISOString();
-        var known = await d1AllRetry(env, "SELECT inv_key FROM investigations WHERE status IN ('done','error_permanent') AND updated_at >= ?1", [since], 2);
+        var known = await d1AllRetry(env, KNOWN_SQL, [since], 2);   // an outage's failures are not "researched"
         known.forEach(function (r) { doneKeys.add(r.inv_key); });
       } catch (e) { doneErr = String(e.message).slice(0, 120); }
     }
@@ -7248,10 +7252,11 @@ export default {
           report.test.readError = laneReadError;
           try { report.test.last = await env.SIGNALS_CACHE.get("inv_lane_last", { type: "json" }); } catch (e) { report.test.last = null; }
           try { const sp = await env.SIGNALS_CACHE.get("sweep_pool", { type: "json" }); report.test.pool = sp ? { at: new Date(sp.at).toISOString(), scanned: sp.scanned, questions: (sp.pool || []).length, events: new Set((sp.pool || []).map(c => c.cluster)).size } : null; } catch (e) { report.test.pool = null; }
-          let billingDown = false;
-          try { billingDown = !!(await env.SIGNALS_CACHE.get("anthropic_billing_down")); } catch (e) {}
+          let billingDown = false, keyDown = null;
+          try { billingDown = !!(await env.SIGNALS_CACHE.get(OUTAGE_KEYS.credits)); } catch (e) {}
+          try { keyDown = await env.SIGNALS_CACHE.get(OUTAGE_KEYS.key, { type: "json" }); } catch (e) {}
           const spendNow = await investigationSpendToday(env);
-          report.budget = { usdToday: Math.round((spendNow.usd || 0) * 100) / 100, usdCap: parseFloat(env.INVESTIGATION_DAILY_USD || "5"), researchedToday: spendNow.count, dailyCap: parseInt(env.INVESTIGATION_DAILY_CAP || "50", 10), maxDays: parseFloat(env.SWEEP_MAX_DAYS || "45"), creditsOut: billingDown };
+          report.budget = { usdToday: Math.round((spendNow.usd || 0) * 100) / 100, usdCap: parseFloat(env.INVESTIGATION_DAILY_USD || "5"), researchedToday: countedToday(spendNow), dailyCap: parseInt(env.INVESTIGATION_DAILY_CAP || "50", 10), maxDays: parseFloat(env.SWEEP_MAX_DAYS || "45"), creditsOut: billingDown, keyRejected: !!keyDown, keyError: keyDown ? String(keyDown.error || "").slice(0, 120) : null };
           return new Response(JSON.stringify(report), {
             headers: { ...corsHeaders, "Content-Type": "application/json" }
           });
@@ -7627,13 +7632,17 @@ export default {
       let anthropicDown = false;
       // Re-probe 10 min after an out-of-credits flag (a failed call is free),
       // so topped-up credits are picked up quickly instead of after an hour.
+      // The same for a key the API rejects (KV anthropic_key_down).
+      let anthropicWhy = null;
       try {
-        const f = await env.SIGNALS_CACHE.get("anthropic_billing_down", { type: "json" });
-        anthropicDown = !!f && !(f.at && Date.now() - f.at > 10 * 60 * 1000);
+        for (const kind of ["key", "credits"]) {
+          const f = await env.SIGNALS_CACHE.get(OUTAGE_KEYS[kind], { type: "json" });
+          if (outageActive(f)) { anthropicDown = true; anthropicWhy = outageLabel(kind); break; }
+        }
       } catch (e) {}
       if (anthropicDown) {
-        cronStatus.investigations = { skipped: "anthropic credits exhausted" };
-        cronStatus.sweep = { skipped: "anthropic credits exhausted" };
+        cronStatus.investigations = { skipped: anthropicWhy };
+        cronStatus.sweep = { skipped: anthropicWhy };
       }
       if (!anthropicDown && env.ANTHROPIC_API_KEY && alertableSignals.length > 0) {
         try {
@@ -7641,7 +7650,7 @@ export default {
           const dailyCap = parseInt(env.INVESTIGATION_DAILY_CAP || "50", 10);
           const usdCap = parseFloat(env.INVESTIGATION_DAILY_USD || "5");
           const spend = await investigationSpendToday(env);
-          const spentToday = spend.count;
+          const spentToday = countedToday(spend);   // a day with nothing billed has researched nothing
           const budget = spend.usd >= usdCap ? 0 : Math.max(0, Math.min(perRun, dailyCap - spentToday));
           const candidates = alertableSignals
             .filter(isInvestigableSignal)   // no Anthropic spend on sports/esports match outcomes
@@ -7685,7 +7694,7 @@ export default {
           const sweepPerRun = parseInt(env.SWEEP_PER_RUN || "1", 10);
           const usdCapS = parseFloat(env.INVESTIGATION_DAILY_USD || "5");
           const spendS = await investigationSpendToday(env);
-          const spent = spendS.count;
+          const spent = countedToday(spendS);
           const sweepBudget = spendS.usd >= usdCapS ? 0 : Math.max(0, Math.min(sweepPerRun, dailyCap - spent));
           // The research call takes a minute or more. At ten dollars a day it
           // runs in most cycles, so it no longer holds the cycle up: it starts

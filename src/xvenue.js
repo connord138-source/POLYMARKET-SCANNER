@@ -8,7 +8,7 @@
 // there is one, lives in-game, at minute resolution. Rows go to D1
 // `xvenue_quotes`; `xvenueReport` reads them back.
 
-import { KALSHI_API, kalshiHeaders, kalshiAuthConfigured } from './kalshi.js';
+import { KALSHI_API, kalshiHeaders, kalshiAuthConfigured, kalshiLevelsOf } from './kalshi.js';
 const GAMMA_API = 'https://gamma-api.polymarket.com';
 const CLOB_API = 'https://clob.polymarket.com';
 const US_API = 'https://gateway.polymarket.us';   // Polymarket US public market data (no key)
@@ -301,6 +301,14 @@ export async function usTopOfBook(slug, { fetchImpl } = {}) {
   return { bid: v(md.bestBid), ask: v(md.bestAsk), last: v(md.lastTradePx), bidQty: null, askQty: null };
 }
 
+// Kalshi's top of book from one order book: the best YES bid, and the best YES offer, which is
+// 1 - the best NO bid (Kalshi lists bids only). Sizes are the contracts at those levels.
+export function kalshiTop(entry) {
+  const lv = kalshiLevelsOf(entry);
+  const yb = lv.yes[0] || null, nb = lv.no[0] || null;
+  return { bid: yb ? yb.px : null, ask: nb ? Math.round((1 - nb.px) * 10000) / 10000 : null, last: null, bidQty: yb ? yb.qty : null, askQty: nb ? nb.qty : null };
+}
+
 const bestOf = (book) => {
   const asks = (book?.asks || []).map(a => Number(a.price)).filter(x => x > 0), bids = (book?.bids || []).map(a => Number(a.price)).filter(x => x > 0);
   return { bid: bids.length ? Math.max(...bids) : null, ask: asks.length ? Math.min(...asks) : null, last: book?.last_trade_price != null ? Number(book.last_trade_price) : null };
@@ -340,11 +348,30 @@ export async function sampleXvenue(env, nowMs = Date.now(), hooks = {}) {
   const readKalshi = async () => {
     let kalshiCooldown = null; try { kalshiCooldown = await env.SIGNALS_CACHE.get(XV_KEYS.KALSHI_COOLDOWN); } catch (e) {}
     if (kalshiCooldown) { status.kalshiSkipped = 'cooldown after 429'; return; }
+    // Kalshi's price comes from its ORDER BOOKS (Nov 19 2026), one call for 40 markets. The market
+    // list (/markets?tickers=) the sampler used is served from a cache (cache-control: public,
+    // max-age=15 at CloudFront, and Kalshi's own layer behind it: x-kalshi-cache-hits), so its
+    // yes_bid / yes_ask could be many seconds old next to live Polymarket and Polymarket US prices:
+    // in every one of 43 "crosses" the cross lane looked at, the US price was where the sample had
+    // it, global Polymarket agreed with it, Kalshi's own order book agreed with both, and the list's
+    // quote was 3-28c away. The list stays as the fallback when the order-book read fails (other
+    // than a 429), flagged in status.kalshiSource.
+    const n4 = (v) => (v == null || v === '' ? null : Number(v));
+    const cooldown = async (e) => { if (/429/.test(e.message)) { try { await env.SIGNALS_CACHE.put(XV_KEYS.KALSHI_COOLDOWN, '1', { expirationTtl: XV_KALSHI_COOLDOWN_S }); } catch (e2) {} } };
     await Promise.all(chunks(40).map(async (ch) => {
-      try { const r = await kalshiJson(env, `/markets?tickers=${ch.map(l => l.kTicker).join(',')}&limit=100`); for (const m of r.markets || []) kq.set(m.ticker, m); }
-      catch (e) {
+      try {
+        const r = await kalshiJson(env, `/markets/orderbooks?${ch.map(l => `tickers=${encodeURIComponent(l.kTicker)}`).join('&')}`);
+        if (!r || !Array.isArray(r.orderbooks)) throw new Error('kalshi order books: unexpected reply');
+        for (const o of r.orderbooks) if (o && o.ticker) kq.set(o.ticker, kalshiTop(o));
+        status.kalshiSource = status.kalshiSource || 'orderbooks';
+      } catch (e) {
         status.kalshiError = e.message.slice(0, 80);
-        if (/429/.test(e.message)) { try { await env.SIGNALS_CACHE.put(XV_KEYS.KALSHI_COOLDOWN, '1', { expirationTtl: XV_KALSHI_COOLDOWN_S }); } catch (e2) {} }
+        if (/429/.test(e.message)) { await cooldown(e); return; }
+        try {
+          const r = await kalshiJson(env, `/markets?tickers=${ch.map(l => l.kTicker).join(',')}&limit=100`);
+          for (const m of r.markets || []) kq.set(m.ticker, { bid: n4(m.yes_bid_dollars), ask: n4(m.yes_ask_dollars), last: n4(m.last_price_dollars), bidQty: null, askQty: null });
+          status.kalshiSource = 'market list (cached, fallback)';
+        } catch (e2) { status.kalshiError = e2.message.slice(0, 80); await cooldown(e2); }
       }
     }));
     readMs.kalshi = Date.now() - readStart;
@@ -386,8 +413,8 @@ export async function sampleXvenue(env, nowMs = Date.now(), hooks = {}) {
     const us = !u ? { bid: null, ask: null, last: null, bidQty: null, askQty: null } : l.usLong ? u : { bid: c(u.ask), ask: c(u.bid), last: c(u.last), bidQty: u.askQty ?? null, askQty: u.bidQty ?? null };
     const phase = l.startMs > nowMs ? 'pre' : 'live';
     stmts.push(env.DB.prepare(`INSERT INTO xvenue_quotes (ts, sport, game, team, phase, k_ticker, k_bid, k_ask, k_last, p_token, p_bid, p_ask, p_last, p_fee_rate, us_bid, us_ask, us_last, us_bid_qty, us_ask_qty) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-      .bind(ts, l.sport, l.game, l.team, phase, l.kTicker, k ? num(k.yes_bid_dollars) : null, k ? num(k.yes_ask_dollars) : null, k ? num(k.last_price_dollars) : null, l.pToken, p.bid, p.ask, p.last, l.feeRate, us.bid, us.ask, us.last, us.bidQty, us.askQty));
-    if (phase === 'live') sampled.push({ ts, sport: l.sport, game: l.game, team: l.team, p_token: l.pToken, us_slug: l.usSlug, us_long: !!l.usLong, p_bid: p.bid, p_ask: p.ask, us_bid: us.bid, us_ask: us.ask, us_bid_qty: us.bidQty, us_ask_qty: us.askQty, k_ticker: l.kTicker || null, k_bid: k ? num(k.yes_bid_dollars) : null, k_ask: k ? num(k.yes_ask_dollars) : null });
+      .bind(ts, l.sport, l.game, l.team, phase, l.kTicker, k ? k.bid : null, k ? k.ask : null, k ? k.last : null, l.pToken, p.bid, p.ask, p.last, l.feeRate, us.bid, us.ask, us.last, us.bidQty, us.askQty));
+    if (phase === 'live') sampled.push({ ts, sport: l.sport, game: l.game, team: l.team, p_token: l.pToken, us_slug: l.usSlug, us_long: !!l.usLong, p_bid: p.bid, p_ask: p.ask, us_bid: us.bid, us_ask: us.ask, us_bid_qty: us.bidQty, us_ask_qty: us.askQty, k_ticker: l.kTicker || null, k_bid: k ? k.bid : null, k_ask: k ? k.ask : null, k_bid_qty: k ? k.bidQty : null, k_ask_qty: k ? k.askQty : null });
   }
   status.usQuoted = uq.size;
   if (stmts.length) {

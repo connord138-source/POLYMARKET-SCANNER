@@ -490,6 +490,26 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   in every sport), so every sampler number that compares Kalshi with
   another venue before Nov 18 2026 is that artifact, the NHL "Kalshi lags"
   read of Nov 1 included; read them only on windows that start after it.
+  Third night and the real cause (Nov 19 2026): the read-order fix worked
+  (looks now land 1-2s after the sample) and the sampled crosses kept
+  coming: 18 more looks, 17 `gone_t0` and one `legged_us` (Wizards, 25
+  shares, -$0.57: the first pair ever sent, Kalshi's side gone 148 ms
+  later). At every crossing minute the US mid equalled global Polymarket's
+  (0-1c apart), Kalshi's own order book agreed with both a second later,
+  and the sampled Kalshi quote sat 2-9c away. That quote came from Kalshi's
+  market list (`/markets?tickers=`), which is served from a cache
+  (`cache-control: public, max-age=15` at CloudFront, `x-cache: Hit` on a
+  repeat, and Kalshi's own layer behind it, `x-kalshi-cache-hits`; a
+  cache-busting query string gets past the first only). The sampler now
+  reads Kalshi's price from its ORDER BOOKS: `GET /markets/orderbooks?
+  tickers=A&tickers=B` (repeated parameter, 40 markets a call, not cached),
+  `kalshiTop` = best YES bid and 1 - best NO bid with the contracts there
+  (`k_bid_qty` / `k_ask_qty` handed to the hook; `k_last` is null now); the
+  list is only the fallback when that read fails other than by a 429
+  (`xvenue.last.kalshiSource` says which). So the Kalshi analogue of the
+  Nov 12 US cache: every sampler number comparing Kalshi with another venue
+  is evidence only from this deploy on (xvenue 48h window clean from Nov 21
+  2026 about 15:45 UTC).
   THE US FEE (found building this, Nov 16 2026): every Polymarket US market
   now states `feeCoefficient` 0.095 (NFL, NBA, NHL, CFB all read that day);
   it was 0.0695 through October. The executor and the scalp lane's
@@ -817,6 +837,25 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   5, owner's "cut budget to 5"): the rule is unchanged, the pace halves
   (about 25 questions and 3-4 bets a day at ~19c a question). Tests:
   test/investigator-lane.test.mjs (31).
+  The rejected key (Nov 19 2026): from about midnight UTC every call
+  answered `Anthropic API 401 ... invalid x-api-key` (the worker's key,
+  pushed Aug 28 by push-anthropic-key.yml from the repo secret
+  `ANTHROPIC_API_KEY`, no longer accepted after the owner's changes on the
+  Anthropic account). Only the credits error was treated as an account
+  outage, so 150 refused calls were counted as researched questions for $0
+  (the day's question cap gone by midday) and each question was marked
+  `error_permanent` after two tries without being researched.
+  `src/investigator-outage.js` (pure; test/investigator-outage.test.mjs,
+  12): `outageKind` = 'credits' | 'key' | null; an outage does not count,
+  burns no attempt, never marks a question permanent, and sets its KV flag
+  (`anthropic_billing_down` / `anthropic_key_down`, re-probed after 10
+  min); `priorAttempt` lets a question an outage marked failed be tried
+  again from zero; `KNOWN_SQL` keeps such rows out of the sweep's "already
+  researched" set; `countedToday` ignores the counter on a day with nothing
+  billed. cronStatus says `anthropic key rejected` / `anthropic credits
+  exhausted`; the report's `budget` carries `keyRejected` and `keyError`.
+  The fix on the owner's side: a valid key in the repo secret, then the
+  Push Anthropic Key workflow.
 - `src/gamma.js` — Gamma API settlement (`findGammaMarket` handles
   closed markets + multi-market moneyline preference).
 - D1 database `polymarket-scanner` — settled signals (`signals` table);
