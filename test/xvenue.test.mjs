@@ -1,5 +1,5 @@
 // Cross-venue sampler. Run with: node test/xvenue.test.mjs
-import { teamMatch, teamMatchScore, orientLegs, matchPairs, attachUs, isLive, analyzeSeries, sampleXvenue, xvenueReport, collectCrosses, kalshiFee, usFee, usTopOfBook, freshUrl, XV_LIVE_BEFORE_MS, XV_LIVE_AFTER_MS } from "../src/xvenue.js";
+import { teamMatch, teamMatchScore, orientLegs, matchPairs, attachUs, isLive, analyzeSeries, sampleXvenue, xvenueReport, collectCrosses, kalshiFee, usFee, usTopOfBook, freshUrl, kalshiTop, XV_LIVE_BEFORE_MS, XV_LIVE_AFTER_MS } from "../src/xvenue.js";
 let pass = 0, fail = 0;
 const check = (n, c, x) => { if (c) pass++; else { fail++; console.error("FAIL:", n, x ?? ""); } };
 
@@ -66,7 +66,7 @@ const P = (q, outs, start, toks = ["t0", "t1"], extra = {}) => ({ question: q, o
 }
 {
   // end-to-end sample with mocked Kalshi, Gamma, CLOB, KV and D1
-  const kv = new Map(); const rows = []; let kalshiCalls = 0; let gammaUrl = ""; let kalshiUa = ""; let bookDown = false; const hookCalls = [];
+  const kv = new Map(); const rows = []; let kalshiCalls = 0; let gammaUrl = ""; let kalshiUa = ""; let bookDown = false; const hookCalls = []; let obCalls = 0; let obDown = false;
   const env = {
     SIGNALS_CACHE: { get: async (k) => { const v = kv.get(k); return v === undefined ? null : JSON.parse(v); }, put: async (k, v) => { kv.set(k, v); } },
     DB: { prepare: (sql) => ({ bind: (...a) => ({ sql, a, run: async () => {} }), run: async () => {} }), batch: async (st) => { rows.push(...st); } },
@@ -76,6 +76,7 @@ const P = (q, outs, start, toks = ["t0", "t1"], extra = {}) => ({ question: q, o
     const u = String(url);
     if (u.includes("kalshi") && u.includes("series_ticker=KXNFLGAME")) { kalshiCalls++; kalshiUa = (opts && opts.headers && opts.headers['user-agent']) || ""; if (kalshiCalls === 1) return { ok: false, status: 429, headers: { get: (h) => (h === "retry-after" ? "1" : null) }, json: async () => ({}) }; return { ok: true, json: async () => ({ markets: [K("KXNFLGAME-26OCT13BUFLA", "Buffalo", "2026-10-13T04:00:00Z", "0.38", "0.39"), K("KXNFLGAME-26OCT13BUFLA", "Los Angeles", "2026-10-13T04:00:00Z", "0.61", "0.62")] }) }; }
     if (u.includes("kalshi") && u.includes("series_ticker=")) { kalshiCalls++; return { ok: true, json: async () => ({ markets: [] }) }; }
+    if (u.includes("kalshi") && u.includes("/markets/orderbooks")) { obCalls++; if (obDown) return { ok: false, status: 500, headers: { get: () => null }, json: async () => ({}) }; return { ok: true, json: async () => ({ orderbooks: [{ ticker: "KXNFLGAME-26OCT13BUFLA-BUF", orderbook_fp: { yes_dollars: [["0.3500", "10.00"], ["0.3700", "50.00"]], no_dollars: [["0.6000", "9.00"], ["0.6100", "40.00"]] } }, { ticker: "KXNFLGAME-26OCT13BUFLA-LOS", orderbook_fp: { yes_dollars: [["0.6100", "5.00"]], no_dollars: [["0.3700", "7.00"]] } }] }) }; }
     if (u.includes("kalshi") && u.includes("tickers=")) return { ok: true, json: async () => ({ markets: [{ ticker: "KXNFLGAME-26OCT13BUFLA-BUF", yes_bid_dollars: "0.3700", yes_ask_dollars: "0.3900", last_price_dollars: "0.3800" }, { ticker: "KXNFLGAME-26OCT13BUFLA-LOS", yes_bid_dollars: "0.6100", yes_ask_dollars: "0.6300" }] }) };
     if (u.includes("gamma-api") && u.includes("tag_slug=nfl")) { gammaUrl = u; return { ok: true, json: async () => [{ title: "Bills vs. Rams", markets: [P("Bills vs. Rams", ["Bills", "Rams"], "2026-10-13T00:15:00Z")] }] }; }
     if (u.includes("gateway.polymarket.us/v2/leagues/nfl/events")) return { ok: true, json: async () => ({ events: [{ title: "BUF Bills vs. LA Rams", startDate: "2026-10-13T00:15:00Z", closed: false, markets: [{ slug: "aec-nfl-buf-lar-2026-10-12", sportsMarketTypeV2: "SPORTS_MARKET_TYPE_MONEYLINE", marketSides: [{ description: "Rams", long: false, team: { name: "Los Angeles Rams" } }, { description: "Bills", long: true, team: { name: "Buffalo Bills" } }] }] }] }) };
@@ -90,6 +91,8 @@ const P = (q, outs, start, toks = ["t0", "t1"], extra = {}) => ({ question: q, o
   check("sample: pairs built, one live game, two rows, correct columns", s1.pairs === 1 && s1.live === 1 && s1.rows === 2 && rows[0].a[0] === Math.floor(now / 1000) && rows[0].a[3] === "Bills" && rows[0].a[4] === "live" && rows[0].a[6] === 0.37 && rows[0].a[7] === 0.39 && rows[0].a[10] === 0.38 && rows[0].a[11] === 0.39 && rows[0].a[13] === 0.03, JSON.stringify({ s1, row: rows[0] && rows[0].a }));
   check("sample: Polymarket US top of book from /book (bids + offers, as the gateway names them) on the long leg (best levels, shares shown) and complemented on the other (sizes swap)", s1.usQuoted === 1 && rows[0].a[14] === 0.38 && rows[0].a[15] === 0.3825 && rows[0].a[16] === null && rows[0].a[17] === 1200.5 && rows[0].a[18] === 800 && rows[1].a[3] === "Rams" && rows[1].a[14] === 0.6175 && rows[1].a[15] === 0.62 && rows[1].a[17] === 800 && rows[1].a[18] === 1200.5, JSON.stringify([rows[0].a.slice(14), rows[1].a.slice(14)]));
   check("sample: afterSample hook receives the live legs with global + US quotes and sizes; its result lands in status.usLane", hookCalls.length === 1 && hookCalls[0].at === now && hookCalls[0].legs.length === 2 && hookCalls[0].legs[0].team === "Bills" && hookCalls[0].legs[0].p_bid === 0.38 && hookCalls[0].legs[0].us_ask === 0.3825 && hookCalls[0].legs[0].us_ask_qty === 800 && hookCalls[0].legs[0].p_token === "t0" && s1.usLane && s1.usLane.events === 0, JSON.stringify({ hookCalls: hookCalls.map(h => h.legs), usLane: s1.usLane }));
+  check("sample: Kalshi's price is its order book's top (one call for the game's markets, repeated tickers), with the contracts there handed to the hook", s1.kalshiSource === "orderbooks" && obCalls === 1 && rows[0].a[6] === 0.37 && rows[0].a[7] === 0.39 && rows[0].a[8] === null && hookCalls[0].legs[0].k_bid === 0.37 && hookCalls[0].legs[0].k_ask === 0.39 && hookCalls[0].legs[0].k_bid_qty === 50 && hookCalls[0].legs[0].k_ask_qty === 40 && hookCalls[0].legs[1].k_bid === 0.61 && hookCalls[0].legs[1].k_ask === 0.63, JSON.stringify({ src: s1.kalshiSource, obCalls, row: rows[0].a.slice(5, 9), leg: hookCalls[0].legs[0] }));
+  check("kalshiTop: best YES bid, best YES offer = 1 - best NO bid, sizes at those levels; an empty side is null", JSON.stringify(kalshiTop({ orderbook_fp: { yes_dollars: [["0.3500", "10"], ["0.3700", "50"]], no_dollars: [["0.6100", "40"], ["0.6000", "9"]] } })) === JSON.stringify({ bid: 0.37, ask: 0.39, last: null, bidQty: 50, askQty: 40 }) && kalshiTop({ orderbook_fp: { yes_dollars: [], no_dollars: [] } }).bid === null && kalshiTop({}).ask === null);
   bookDown = true;
   const sb = await sampleXvenue(env, now + 30e3, { afterSample: async () => { throw new Error("lane boom"); } });
   check("sample: /book down -> /bbo fallback keeps bid/ask (no sizes, last filled); a throwing hook never fails the sample", sb.rows === 2 && rows[2].a[14] === 0.38 && rows[2].a[15] === 0.3825 && rows[2].a[16] === 0.381 && rows[2].a[17] === null && rows[2].a[18] === null && /lane boom/.test(sb.usLaneError || ""), JSON.stringify({ sb, row: rows[2] && rows[2].a.slice(14) }));
@@ -156,6 +159,7 @@ const P = (q, outs, start, toks = ["t0", "t1"], extra = {}) => ({ question: q, o
     if (u.includes("kalshi")) { kalshiReqs.push({ u, h: (opts && opts.headers) || {} }); }
     if (u.includes("kalshi") && u.includes("series_ticker=KXNFLGAME")) return { ok: true, status: 200, json: async () => ({ markets: [K("KXNFLGAME-26OCT13BUFLA", "Buffalo", "2026-10-13T04:00:00Z", "0.38", "0.39"), K("KXNFLGAME-26OCT13BUFLA", "Los Angeles", "2026-10-13T04:00:00Z", "0.61", "0.62")] }) };
     if (u.includes("kalshi") && u.includes("series_ticker=")) return { ok: true, status: 200, json: async () => ({ markets: [] }) };
+    if (u.includes("kalshi") && u.includes("/markets/orderbooks")) return { ok: true, status: 200, json: async () => ({ orderbooks: [{ ticker: "KXNFLGAME-26OCT13BUFLA-BUF", orderbook_fp: { yes_dollars: [["0.3500", "10.00"], ["0.3700", "50.00"]], no_dollars: [["0.6000", "9.00"], ["0.6100", "40.00"]] } }, { ticker: "KXNFLGAME-26OCT13BUFLA-LOS", orderbook_fp: { yes_dollars: [["0.6100", "5.00"]], no_dollars: [["0.3700", "7.00"]] } }] }) };
     if (u.includes("kalshi") && u.includes("tickers=")) return { ok: true, status: 200, json: async () => ({ markets: [{ ticker: "KXNFLGAME-26OCT13BUFLA-BUF", yes_bid_dollars: "0.3700", yes_ask_dollars: "0.3900" }, { ticker: "KXNFLGAME-26OCT13BUFLA-LOS", yes_bid_dollars: "0.6100", yes_ask_dollars: "0.6300" }] }) };
     if (u.includes("gamma-api") && u.includes("tag_slug=nfl")) return { ok: true, json: async () => [{ title: "Bills vs. Rams", markets: [P("Bills vs. Rams", ["Bills", "Rams"], "2026-10-13T00:15:00Z")] }] };
     if (u.includes("gamma-api")) return { ok: true, json: async () => [] };
@@ -165,7 +169,7 @@ const P = (q, outs, start, toks = ["t0", "t1"], extra = {}) => ({ question: q, o
   };
   const st = await sampleXvenue(env, now);
   const q = kalshiReqs.find(r => r.u.includes("tickers="));
-  const signedOk = q && verify(null, Buffer.from(q.h["KALSHI-ACCESS-TIMESTAMP"] + "GET/trade-api/v2/markets"), ed.publicKey, Buffer.from(q.h["KALSHI-ACCESS-SIGNATURE"], "base64"));
+  const signedOk = q && verify(null, Buffer.from(q.h["KALSHI-ACCESS-TIMESTAMP"] + "GET/trade-api/v2/markets/orderbooks"), ed.publicKey, Buffer.from(q.h["KALSHI-ACCESS-SIGNATURE"], "base64"));
   check("signed: series and quote calls carry a valid Kalshi signature; status reports kalshiAuth; Kalshi quotes land", st.kalshiAuth === true && st.kQuoted === 2 && kalshiReqs.length >= 7 && kalshiReqs.every(r => r.h["KALSHI-ACCESS-KEY"] === "kid-1") && signedOk === true && rows[0].a[6] === 0.37, JSON.stringify({ st, nReq: kalshiReqs.length, row: rows[0] && rows[0].a.slice(0, 8) }));
   {
     // the same game a minute later (pairs cached): only the two quote reads go out, each held 25 ms
@@ -180,6 +184,13 @@ const P = (q, outs, start, toks = ["t0", "t1"], extra = {}) => ({ question: q, o
     const st2 = await sampleXvenue(env, now + 60e3);
     globalThis.fetch = base;
     check("sample: the venues are read at the same moment, not one after another (both reads start before either ends), and the status says when each finished", log.length === 4 && log[0][0] === "start" && log[1][0] === "start" && st2.readMs && typeof st2.readMs.kalshi === "number" && typeof st2.readMs.poly === "number" && st2.readMs.us === undefined && st2.skewMs != null && st2.skewMs < 20, JSON.stringify({ log, readMs: st2.readMs, skewMs: st2.skewMs }));
+    // the order-book read fails (not a 429): the cached market list stands in for the minute, and says so
+    const base2 = globalThis.fetch;
+    globalThis.fetch = async (url, opts) => (String(url).includes("/markets/orderbooks") ? { ok: false, status: 500, headers: { get: () => null }, json: async () => ({}) } : base2(url, opts));
+    const nRows = rows.length;
+    const st3 = await sampleXvenue(env, now + 2 * 60e3);
+    globalThis.fetch = base2;
+    check("sample: when the order-book read fails the market list stands in, flagged as the cached fallback", st3.kalshiSource === "market list (cached, fallback)" && /kalshi 500/.test(st3.kalshiError || "") && st3.kQuoted === 2 && rows.length === nRows + 2 && rows[nRows].a[6] === 0.37 && rows[nRows].a[7] === 0.39, JSON.stringify({ src: st3.kalshiSource, err: st3.kalshiError, kQuoted: st3.kQuoted, row: rows[nRows] && rows[nRows].a.slice(5, 9) }));
   }
 }
 // ---------- the US gateway's edge cache (Nov 12 2026): every price read carries a unique query string ----------
