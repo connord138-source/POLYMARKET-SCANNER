@@ -42,6 +42,16 @@ export function priorAttempt(existing, maxAttempts) {
   return { skip: null, attempts: existing.attempts || 0 };
 }
 
+// Should the settlement pass's heal step reset this stored record? Yes when an
+// outage marked it failed (attempts burned, or "permanent"): it goes back to
+// a fresh transient record so every reader sees it as never tried. A record
+// already at zero attempts and transient has nothing to heal (and would
+// otherwise be healed again every pass).
+export function healable(inv) {
+  return !!(inv && typeof inv.status === 'string' && inv.status.indexOf('error') === 0 &&
+    ((inv.attempts || 0) > 0 || inv.status === 'error_permanent') && outageKind(inv.lastError));
+}
+
 // The day's count of researched questions for the cap. A day on which
 // nothing was billed has researched nothing, whatever the counter says (the
 // counter of Nov 19 2026 read 150 on refused calls).

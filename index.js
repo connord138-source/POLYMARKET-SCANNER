@@ -36,7 +36,7 @@ import { sampleXvenue, xvenueReport, XV_SCHEMA, usTopOfBook } from "./src/xvenue
 import { US_LANE_SCHEMA, recordUsLaneEvents, markUsLaneEvents, settleUsLaneEvents, usLaneReport } from "./src/us-lane.js";
 import { SCALP_SCHEMA, runScalpLane, scalpReport, setScalpHalt } from "./src/scalp.js";
 import { CROSS_SCHEMA, runCrossLane, checkCrossHedges, crossReport } from "./src/cross-lane.js";
-import { OUTAGE_KEYS, OUTAGE_TTL_S, outageKind, outageLabel, outageActive, priorAttempt, countedToday, KNOWN_SQL } from "./src/investigator-outage.js";
+import { OUTAGE_KEYS, OUTAGE_TTL_S, outageKind, outageLabel, outageActive, priorAttempt, healable, countedToday, KNOWN_SQL } from "./src/investigator-outage.js";
 import { runMemberScalpers, memberState, connectAccount, updateAccountSettings, disconnectAccount, resumeAccount, setLiveAllowed, listAccounts } from "./src/scalp-accounts.js";
 import { dataApi, dataApiStats, describeFailure, pushScanHistory, scanHistorySummary } from "./src/data-api.js";
 import { scanWindow, scanResultShape, scanParams } from "./src/scan-window.js";
@@ -1995,9 +1995,7 @@ async function settleOpenInvestigations(env) {
     // Heal billing casualties: rows failed (even "permanently") during an
     // out-of-credits outage were never actually investigated — reset their
     // attempts so they retry once the account has credits again.
-    if (inv && inv.status && inv.status.indexOf("error") === 0 &&
-        (inv.attempts || 0) > 0 &&
-        /credit balance is too low/i.test(inv.lastError || "")) {
+    if (healable(inv)) {   // no credits, or a key the API rejected (src/investigator-outage.js)
       inv.status = "error_transient";
       inv.attempts = 0;
       inv.updatedAt = new Date().toISOString();
@@ -2342,12 +2340,21 @@ async function runMispricingSweep(env, budget, deadlineMs) {
     // retry budget left (e.g. healed billing casualties) may try again. The
     // limit is the investigator's own (INVESTIGATION_MAX_ATTEMPTS): a looser
     // one here sent it questions it then refused.
-    if (existing && !(existing.status === "error_transient" && (existing.attempts || 0) < maxTries)) {
+    // priorAttempt (src/investigator-outage.js) is the same judgement
+    // investigateSignal makes: a record an account outage marked failed, even
+    // "permanently", was never researched and is not passed over (Nov 20 2026:
+    // this check had its own rule and kept skipping the questions the rejected
+    // key had marked).
+    var priorS = priorAttempt(existing, maxTries);
+    if (existing && priorS.skip) {
       if (passed.length < 6) passed.push({ slug: String(sig.marketSlug).slice(0, 60), status: existing.status, attempts: existing.attempts || 0 });
       continue;
     }
     res.attempted++;
     var r = await investigateSignal(env, sig, { source: "sweep" });
+    // the account refused the call (no credits, a rejected key): every other
+    // question would be refused too, so stop here until the next re-probe
+    if (!r.ok && outageKind(r.error)) { res.outage = outageLabel(outageKind(r.error)); break; }
     // no model call was made for these: already settled, no market, no criteria, a decided price
     var freeSkip = !!r.skipped || /Gamma market not found|No resolution description/i.test(r.error || "");
     if (!freeSkip) paidCalls++;
@@ -7656,15 +7663,20 @@ export default {
             .filter(isInvestigableSignal)   // no Anthropic spend on sports/esports match outcomes
             .sort((a, b) => b.score - a.score)
             .slice(0, budget);
-          let investigated = 0;
+          let investigated = 0, tried = 0;
           for (const sig of candidates) {
             if (Date.now() > invDeadline) break;
             const r = await investigateSignal(env, sig);
             if (r.ok && !r.skipped) investigated++;
+            tried++;
+            // the account refused the call: one refused call is the whole
+            // re-probe, so no second question and no sweep this cycle
+            if (!r.ok && outageKind(r.error)) { anthropicDown = true; anthropicWhy = outageLabel(outageKind(r.error)); break; }
           }
           cronStatus.investigations = {
-            attempted: candidates.length,
+            attempted: tried,
             completed: investigated,
+            ...(anthropicDown ? { outage: anthropicWhy } : {}),
             spentToday: spentToday + investigated,
             dailyCap: dailyCap,
             spentTodayUsd: spend.usd,
@@ -7688,6 +7700,8 @@ export default {
         cronStatus.overround = { error: e.message };
       }
       let sweepPromise = null;
+      // the account refused a call earlier in this cycle: no sweep until the next re-probe
+      if (anthropicDown && !(cronStatus.sweep && cronStatus.sweep.skipped)) cronStatus.sweep = { skipped: anthropicWhy };
       if (!anthropicDown && env.ANTHROPIC_API_KEY && (env.SWEEP_ENABLED || "true") !== "false") {
         try {
           const dailyCap = parseInt(env.INVESTIGATION_DAILY_CAP || "50", 10);
