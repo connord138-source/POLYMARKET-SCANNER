@@ -846,7 +846,7 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   (the day's question cap gone by midday) and each question was marked
   `error_permanent` after two tries without being researched.
   `src/investigator-outage.js` (pure; test/investigator-outage.test.mjs,
-  12): `outageKind` = 'credits' | 'key' | null; an outage does not count,
+  16): `outageKind` = 'credits' | 'key' | null; an outage does not count,
   burns no attempt, never marks a question permanent, and sets its KV flag
   (`anthropic_billing_down` / `anthropic_key_down`, re-probed after 10
   min); `priorAttempt` lets a question an outage marked failed be tried
@@ -855,7 +855,17 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   billed. cronStatus says `anthropic key rejected` / `anthropic credits
   exhausted`; the report's `budget` carries `keyRejected` and `keyError`.
   The fix on the owner's side: a valid key in the repo secret, then the
-  Push Anthropic Key workflow.
+  Push Anthropic Key workflow. Follow-up (Nov 20 2026, seen in
+  `cronStatus.sweep.passedOver`): the sweep had its own skip rule and kept
+  passing over the questions the outage had marked permanent, the heal
+  step in the settlement pass reset only credit-outage rows, and a
+  re-probe cycle made three refused calls. Now the sweep judges a stored
+  record with `priorAttempt`, the heal step uses `healable` (either
+  outage), and the first refused call ends that cycle's research
+  (`investigations.outage` / `sweep.outage`), so a re-probe is one call.
+  Verified the same night on 16 live games: `xvenue.last.kalshiSource`
+  'orderbooks', Kalshi read in 182 ms, the three venues 85 ms apart, and
+  no sampled cross in the first ten hours on the order-book read.
 - `src/gamma.js` — Gamma API settlement (`findGammaMarket` handles
   closed markets + multi-market moneyline preference).
 - D1 database `polymarket-scanner` — settled signals (`signals` table);

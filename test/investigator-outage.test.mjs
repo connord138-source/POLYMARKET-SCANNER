@@ -1,5 +1,6 @@
 // An Anthropic failure that is the account's, not the question's (src/investigator-outage.js).
-import { OUTAGE_KEYS, OUTAGE_REPROBE_MS, outageKind, outageLabel, outageActive, priorAttempt, countedToday, KNOWN_SQL } from "../src/investigator-outage.js";
+import { readFileSync } from "node:fs";
+import { OUTAGE_KEYS, OUTAGE_REPROBE_MS, outageKind, outageLabel, outageActive, priorAttempt, healable, countedToday, KNOWN_SQL } from "../src/investigator-outage.js";
 let pass = 0, fail = 0;
 const check = (n, c, x) => { if (c) pass++; else { fail++; console.error("FAIL:", n, x === undefined ? "" : JSON.stringify(x)); } };
 const NOW = Date.parse("2026-11-19T15:00:00Z");
@@ -26,6 +27,19 @@ const ECREDIT = 'Anthropic API 400: {"type":"error","error":{"type":"invalid_req
   check("prior: a real permanent failure, or attempts used up on real failures, still skip", priorAttempt({ status: "error_permanent", lastError: "refusal", attempts: 1 }, 2).skip === "permanent_error" && priorAttempt({ status: "error_transient", lastError: "Anthropic API 529: overloaded", attempts: 2 }, 2).skip === "attempts_exhausted");
   check("prior: a question marked failed by an outage was never tried: not skipped, attempts back to zero", JSON.stringify(priorAttempt({ status: "error_permanent", lastError: E401, attempts: 2 }, 2)) === JSON.stringify({ skip: null, attempts: 0 }) && JSON.stringify(priorAttempt({ status: "error_transient", lastError: ECREDIT, attempts: 5 }, 2)) === JSON.stringify({ skip: null, attempts: 0 }));
   check("prior: a transient failure with tries left carries its count", JSON.stringify(priorAttempt({ status: "error_transient", lastError: "timeout", attempts: 1 }, 2)) === JSON.stringify({ skip: null, attempts: 1 }));
+}
+
+// ---------- the heal step ----------
+{
+  check("heal: a record a rejected key or an empty account marked failed is reset", healable({ status: "error_permanent", attempts: 2, lastError: E401 }) === true && healable({ status: "error_transient", attempts: 1, lastError: ECREDIT }) === true && healable({ status: "error_permanent", attempts: 0, lastError: E401 }) === true);
+  check("heal: nothing to heal on a fresh transient record, a real failure, or a finished one", healable({ status: "error_transient", attempts: 0, lastError: E401 }) === false && healable({ status: "error_permanent", attempts: 2, lastError: "refusal" }) === false && healable({ status: "error_transient", attempts: 2, lastError: "timeout" }) === false && healable({ status: "done", attempts: 1, lastError: E401 }) === false && healable(null) === false && healable({}) === false);
+}
+
+// ---------- the worker uses one judgement everywhere ----------
+{
+  const src = readFileSync(new URL("../index.js", import.meta.url), "utf8");
+  check("index: the sweep passes a question over on priorAttempt, not on its own rule", /var priorS = priorAttempt\(existing, maxTries\);\s*if \(existing && priorS\.skip\)/.test(src) && !/existing\.status === "error_transient" && \(existing\.attempts \|\| 0\) < maxTries/.test(src));
+  check("index: the heal step and both research loops know an outage", /if \(healable\(inv\)\)/.test(src) && /res\.outage = outageLabel\(outageKind\(r\.error\)\); break;/.test(src) && /anthropicDown = true; anthropicWhy = outageLabel\(outageKind\(r\.error\)\); break;/.test(src));
 }
 
 // ---------- the day's count ----------
