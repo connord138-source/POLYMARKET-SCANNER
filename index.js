@@ -36,6 +36,7 @@ import { sampleXvenue, xvenueReport, XV_SCHEMA, usTopOfBook } from "./src/xvenue
 import { US_LANE_SCHEMA, recordUsLaneEvents, markUsLaneEvents, settleUsLaneEvents, usLaneReport } from "./src/us-lane.js";
 import { SCALP_SCHEMA, runScalpLane, scalpReport, setScalpHalt } from "./src/scalp.js";
 import { CROSS_SCHEMA, runCrossLane, checkCrossHedges, crossReport } from "./src/cross-lane.js";
+import { brierRecordFromRow, buildBrierFromRecords, readInBatches, settleWithin, BRIER_KV_MAX } from "./src/brier-report.js";
 import { OUTAGE_KEYS, OUTAGE_TTL_S, outageKind, outageLabel, outageActive, priorAttempt, healable, countedToday, KNOWN_SQL } from "./src/investigator-outage.js";
 import { runMemberScalpers, memberState, connectAccount, updateAccountSettings, disconnectAccount, resumeAccount, setLiveAllowed, listAccounts } from "./src/scalp-accounts.js";
 import { dataApi, dataApiStats, describeFailure, pushScanHistory, scanHistorySummary } from "./src/data-api.js";
@@ -2037,88 +2038,21 @@ async function settleOpenInvestigations(env) {
 // (aggregation on read avoids the KV read-modify-write race under concurrent
 // cron invocations).
 async function buildBrierReport(env) {
+  // One D1 read of every investigation (src/brier-report.js). The KV index it
+  // used to walk holds up to 1000 keys and was read one key at a time: past
+  // the subrequest limit, so the route answered nothing from about Nov 2 2026.
+  if (env.DB) {
+    try {
+      var rows = await d1AllRetry(env,
+        "SELECT status, agent_brier, market_brier, edge_pts, y, confidence, source FROM investigations", null, 3);
+      return buildBrierFromRecords(rows.map(brierRecordFromRow), { from: "d1" });
+    } catch (e) { /* fall through to the KV records */ }
+  }
   if (!env.SIGNALS_CACHE) return null;
   var idx = await env.SIGNALS_CACHE.get("investigation_index", { type: "json" }) || [];
-
-  var scored = [];
-  var counts = { total: idx.length, done: 0, pending: 0, error: 0, scored: 0 };
-
-  for (var i = 0; i < idx.length; i++) {
-    var inv = await env.SIGNALS_CACHE.get(idx[i], { type: "json" });
-    if (!inv) continue;
-    if (inv.status === "done") counts.done++;
-    else if (inv.status && inv.status.indexOf("error") === 0) counts.error++;
-    else counts.pending++;
-    if (typeof inv.agentBrier === "number" && typeof inv.marketBrier === "number") {
-      scored.push(inv);
-    }
-  }
-  counts.scored = scored.length;
-
-  if (scored.length === 0) {
-    return {
-      note: "No ground-truth-settled investigations yet. The agent must call markets that later resolve via Gamma before calibration can be measured.",
-      counts: counts,
-      overall: null,
-      byConfidence: null
-    };
-  }
-
-  var sumAgent = 0, sumMarket = 0, agentBeats = 0, edgeDirCorrect = 0, edgeDirTotal = 0;
-  var byConf = {};
-  var bySource = {};
-  for (var s = 0; s < scored.length; s++) {
-    var r = scored[s];
-    sumAgent += r.agentBrier;
-    sumMarket += r.marketBrier;
-    if (r.agentBrier < r.marketBrier) agentBeats++;
-    // Did the sign of the edge predict the outcome? (directional hit-rate)
-    if (typeof r.edgePts === "number" && r.edgePts !== 0) {
-      edgeDirTotal++;
-      if ((r.edgePts > 0 && r.y === 1) || (r.edgePts < 0 && r.y === 0)) edgeDirCorrect++;
-    }
-    var c = r.confidence || "UNKNOWN";
-    if (!byConf[c]) byConf[c] = { n: 0, agent: 0, market: 0 };
-    byConf[c].n++; byConf[c].agent += r.agentBrier; byConf[c].market += r.marketBrier;
-    var src = r.source || "whale";
-    if (!bySource[src]) bySource[src] = { n: 0, agent: 0, market: 0 };
-    bySource[src].n++; bySource[src].agent += r.agentBrier; bySource[src].market += r.marketBrier;
-  }
-
-  var n = scored.length;
-  var round4 = function (x) { return Math.round(x * 10000) / 10000; };
-  var confView = {};
-  for (var key of Object.keys(byConf)) {
-    confView[key] = {
-      n: byConf[key].n,
-      meanAgentBrier: round4(byConf[key].agent / byConf[key].n),
-      meanMarketBrier: round4(byConf[key].market / byConf[key].n)
-    };
-  }
-  var sourceView = {};
-  for (var sk of Object.keys(bySource)) {
-    sourceView[sk] = {
-      n: bySource[sk].n,
-      meanAgentBrier: round4(bySource[sk].agent / bySource[sk].n),
-      meanMarketBrier: round4(bySource[sk].market / bySource[sk].n)
-    };
-  }
-
-  return {
-    note: "Brier score (lower is better). agentBeatsMarket / edgeDirection are honest but small-sample: this is a survivorship-biased set of markets that happened to resolve, self-reported confidence is uncalibrated (shown for description, not weighting), and N is small. Treat as directional until N is large.",
-    counts: counts,
-    overall: {
-      n: n,
-      meanAgentBrier: round4(sumAgent / n),
-      meanMarketBrier: round4(sumMarket / n),
-      meanPairedDiff: round4((sumMarket - sumAgent) / n),   // >0 means agent beats market on average
-      agentBeatsMarketRate: Math.round((agentBeats / n) * 100),
-      edgeDirectionHitRate: edgeDirTotal > 0 ? Math.round((edgeDirCorrect / edgeDirTotal) * 100) : null,
-      edgeDirectionN: edgeDirTotal
-    },
-    byConfidence: confView,
-    bySource: sourceView
-  };
+  // newest keys only, a batch at a time: bounded whatever the index holds
+  var recs = await readInBatches(idx.slice(-BRIER_KV_MAX), function (k) { return env.SIGNALS_CACHE.get(k, { type: "json" }); });
+  return buildBrierFromRecords(recs, { total: idx.length, from: "kv" });
 }
 
 // ============================================================
@@ -2237,6 +2171,7 @@ async function d1AllRetry(env, sql, binds, tries) {
   }
   throw last || new Error("D1 read failed");
 }
+var LIVE_PRICE_WAIT_MS = 8000;   // how long /learning/investigator waits for live prices
 var sweepEventsKey = function () { return "sweep_events:" + new Date().toISOString().slice(0, 10); };
 var sweepPickDiag = null;   // what the last short-dated pick saw (shown on cronStatus.sweep.pick)
 
@@ -7122,11 +7057,7 @@ export default {
         let records = null;
         if (url.searchParams.get("records")) {
           const idx = await env.SIGNALS_CACHE.get("investigation_index", { type: "json" }) || [];
-          records = [];
-          for (const k of idx.slice(-100)) {
-            const inv = await env.SIGNALS_CACHE.get(k, { type: "json" });
-            if (inv) records.push(inv);
-          }
+          records = await readInBatches(idx.slice(-100), (k) => env.SIGNALS_CACHE.get(k, { type: "json" }));
         }
         return new Response(JSON.stringify({ success: true, report: report, records: records }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" }
@@ -7249,7 +7180,15 @@ export default {
           // live prices for the newest open investigations only (bounded Gamma reads)
           const open = rows.filter(r => r.status === "done" && r.y !== 0 && r.y !== 1 && r.market_slug)
             .sort((a, b) => String(b.investigated_at || "").localeCompare(String(a.investigated_at || ""))).slice(0, 60);
-          try { await annotateLivePrices(env, open); } catch (e) { /* the drift read is optional */ }
+          // The drift read is optional and makes up to 60 Gamma lookups: it gets
+          // LIVE_PRICE_WAIT_MS, and whatever has answered by then is used (the
+          // rows are annotated in place). Nov 21 2026: the route failed the
+          // snapshot's 45 seconds on 3 of 24 runs.
+          try {
+            const drift = annotateLivePrices(env, open).catch(() => {});
+            try { if (ctx && ctx.waitUntil) ctx.waitUntil(drift); } catch (e) {}
+            await settleWithin(drift, LIVE_PRICE_WAIT_MS);
+          } catch (e) { /* the drift read is optional */ }
           const report = buildInvestigatorReport(rows);
           // the test lane: the bets a live bot would have placed, read against the outcomes
           let laneRows = [];

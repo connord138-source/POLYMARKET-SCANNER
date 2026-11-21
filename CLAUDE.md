@@ -866,6 +866,22 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   Verified the same night on 16 live games: `xvenue.last.kalshiSource`
   'orderbooks', Kalshi read in 182 ms, the three venues 85 ms apart, and
   no sampled cross in the first ten hours on the order-book read.
+- `src/brier-report.js` — the agent's calibration against the market
+  (`GET /learning/brier`, the Learning page's calibration panel; Nov 21
+  2026). The route walked the KV `investigation_index` (up to 1000 keys)
+  one key at a time: past the Worker's subrequest limit, so it had answered
+  nothing since about Nov 2 (snapshot key `brier` read "fetch failed" every
+  run and nobody was watching it). `buildBrierReport` is now one D1 read of
+  `investigations` (every row, `from: 'd1'`) through pure
+  `buildBrierFromRecords`, with the newest `BRIER_KV_MAX` (300) KV records
+  read `BRIER_KV_BATCH` (25) at a time as the fallback (`readInBatches`).
+  Same day: `/learning/investigator` failed the snapshot's 45 seconds on 3
+  of 24 runs, so its optional live-price read (up to 60 Gamma lookups) now
+  gets `LIVE_PRICE_WAIT_MS` (8s, `settleWithin`; what has answered by then
+  is used) and the Backend Snapshot job tries a failed route once more
+  (`--retry 1`). A snapshot key reading "fetch failed" once is a busy D1;
+  the same key failing run after run is a broken route. Tests:
+  test/brier-report.test.mjs (18).
 - `src/gamma.js` — Gamma API settlement (`findGammaMarket` handles
   closed markets + multi-market moneyline preference).
 - D1 database `polymarket-scanner` — settled signals (`signals` table);
