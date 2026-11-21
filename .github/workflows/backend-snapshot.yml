@@ -71,7 +71,9 @@ jobs:
           for e in "${endpoints[@]}"; do
             name="${e%%|*}"; path="${e#*|}"
             t0=$(date +%s%N)
-            if ! curl -sf --max-time 45 -H "Authorization: Bearer ${ADMIN_TOKEN}" "$BASE$path" -o "/tmp/snap/$name.json" \
+            # one more try on a failure: a route that reads D1 while the 5-min
+            # cycle is busy on it answers a 500 now and then (Nov 21 2026)
+            if ! curl -sf --max-time 45 --retry 1 --retry-delay 3 --retry-all-errors -H "Authorization: Bearer ${ADMIN_TOKEN}" "$BASE$path" -o "/tmp/snap/$name.json" \
                || ! jq -e . "/tmp/snap/$name.json" >/dev/null 2>&1; then
               echo '{"error":"fetch failed"}' > "/tmp/snap/$name.json"
               echo "WARN: $path failed"
