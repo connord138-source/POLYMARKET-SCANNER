@@ -36,6 +36,7 @@ import { sampleXvenue, xvenueReport, XV_SCHEMA, usTopOfBook } from "./src/xvenue
 import { US_LANE_SCHEMA, recordUsLaneEvents, markUsLaneEvents, settleUsLaneEvents, usLaneReport } from "./src/us-lane.js";
 import { SCALP_SCHEMA, runScalpLane, scalpReport, setScalpHalt } from "./src/scalp.js";
 import { CROSS_SCHEMA, runCrossLane, checkCrossHedges, crossReport } from "./src/cross-lane.js";
+import { withStageClock, slowestStages } from "./src/stage-clock.js";
 import { brierRecordFromRow, buildBrierFromRecords, readInBatches, settleWithin, BRIER_KV_MAX } from "./src/brier-report.js";
 import { OUTAGE_KEYS, OUTAGE_TTL_S, outageKind, outageLabel, outageActive, priorAttempt, healable, countedToday, KNOWN_SQL } from "./src/investigator-outage.js";
 import { runMemberScalpers, memberState, connectAccount, updateAccountSettings, disconnectAccount, resumeAccount, setLiveAllowed, listAccounts } from "./src/scalp-accounts.js";
@@ -7500,7 +7501,9 @@ export default {
         await env.SIGNALS_CACHE.put("dedupe_settlements_v1", JSON.stringify({ at: new Date().toISOString(), ...r }));
       }
     } catch (e) { console.error("settlement dedupe migration error:", e.message); }
-    const cronStatus = {
+    // Every stage ends by assigning its result here; the stage clock records
+    // when (stageMs, ms into the cycle), so a slow cycle names its slow stage.
+    const cronStatus = withStageClock({
       startedAt: new Date().toISOString(),
       scan: null,
       settlement: null,
@@ -7510,7 +7513,7 @@ export default {
       lines: null,
       optimization: null,
       error: null
-    };
+    });
     
     try {
       // Crypto fair value first, so this scan's crypto signals carry fresh model prices.
@@ -7816,6 +7819,7 @@ export default {
     
     // The Data API adapter's counters, active blocks and last failure (Nov 3 2026)
     try { cronStatus.dataApi = dataApiStats(); } catch (e) { cronStatus.dataApi = { error: e.message }; }
+    try { cronStatus.slowest = slowestStages(cronStatus.stageMs); } catch (e) {}
 
     // Save cron status to KV for visibility
     if (env.SIGNALS_CACHE) {
