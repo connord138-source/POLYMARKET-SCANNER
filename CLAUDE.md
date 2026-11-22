@@ -893,6 +893,21 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   finishing and the next (the research sweep runs beside the others and
   reads long there without holding the cycle). Read `slowest` on the next
   slow cycle before changing anything. Tests: test/stage-clock.test.mjs (9).
+  What it showed the same day: a normal 123s cycle is the scan (44s) and
+  the settlement stage (52s), everything else 27s together; in the 437s
+  cycle the settlement stage alone took about 285s.
+- `src/settle-queue.js` — the settlement stage's bounds (Nov 22 2026).
+  `processSettledSignals` looked up every pending signal (KV
+  `pending_signals`, up to 500) on Gamma one after another with no time
+  limit, and at the end wrote back the list it had read at the start, so a
+  signal the next cycle's scan added while a slow pass was still running
+  was dropped from the list and never settled. Now the pass has a wall
+  budget (`SETTLE_WALL_MS` 90s, wrangler `SETTLE_WALL_BUDGET_MS`), resumes
+  on the next cycle at KV `settle_cursor` (`settleOrder`), and
+  `nextPendingList` keeps the stored order, the signals the budget did not
+  reach and anything added meanwhile (the list is read again before the
+  write). `cronStatus.settlement` carries `checked` / `deferred` /
+  `pending`. Tests: test/settle-queue.test.mjs (14).
 - `src/gamma.js` — Gamma API settlement (`findGammaMarket` handles
   closed markets + multi-market moneyline preference).
 - D1 database `polymarket-scanner` — settled signals (`signals` table);
