@@ -882,6 +882,17 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   (`--retry 1`). A snapshot key reading "fetch failed" once is a busy D1;
   the same key failing run after run is a broken route. Tests:
   test/brier-report.test.mjs (18).
+- `src/stage-clock.js` — when each stage of the 5-minute cycle finished
+  (Nov 22 2026). The cycle that starts at 15:00 UTC ran 312s, 402s and 437s
+  on three of five days (60-180s otherwise; the whale scan itself took
+  89-135s of it, three times its usual), past the five minutes between
+  cycles, and the status could not say where the rest went. Every stage ends
+  by assigning its result to `cronStatus`, so `withStageClock` (a Proxy)
+  records the assignment times: `cronStatus.lastRun.stageMs.<stage>` = ms
+  into the cycle, `slowest` = the five biggest gaps between one stage
+  finishing and the next (the research sweep runs beside the others and
+  reads long there without holding the cycle). Read `slowest` on the next
+  slow cycle before changing anything. Tests: test/stage-clock.test.mjs (9).
 - `src/gamma.js` — Gamma API settlement (`findGammaMarket` handles
   closed markets + multi-market moneyline preference).
 - D1 database `polymarket-scanner` — settled signals (`signals` table);
