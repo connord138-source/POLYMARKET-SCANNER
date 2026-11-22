@@ -37,6 +37,7 @@ import { US_LANE_SCHEMA, recordUsLaneEvents, markUsLaneEvents, settleUsLaneEvent
 import { SCALP_SCHEMA, runScalpLane, scalpReport, setScalpHalt } from "./src/scalp.js";
 import { CROSS_SCHEMA, runCrossLane, checkCrossHedges, crossReport } from "./src/cross-lane.js";
 import { withStageClock, slowestStages } from "./src/stage-clock.js";
+import { SETTLE_WALL_MS, SETTLE_CURSOR_KEY, settleOrder, nextPendingList } from "./src/settle-queue.js";
 import { brierRecordFromRow, buildBrierFromRecords, readInBatches, settleWithin, BRIER_KV_MAX } from "./src/brier-report.js";
 import { OUTAGE_KEYS, OUTAGE_TTL_S, outageKind, outageLabel, outageActive, priorAttempt, healable, countedToday, KNOWN_SQL } from "./src/investigator-outage.js";
 import { runMemberScalpers, memberState, connectAccount, updateAccountSettings, disconnectAccount, resumeAccount, setLiveAllowed, listAccounts } from "./src/scalp-accounts.js";
@@ -2488,8 +2489,19 @@ async function processSettledSignals(env) {
     const stillPending = [];
     
     console.log(`Checking ${pendingSignals.length} pending signals for settlement...`);
-    
-    for (const signalId of pendingSignals) {
+
+    // A wall budget for the pass (src/settle-queue.js): up to 500 Gamma
+    // lookups in a row took 285s when Gamma was slow and held the cycle past
+    // the next one. The pass resumes at `settle_cursor` on the next cycle.
+    const settleDeadline = Date.now() + parseInt(env.SETTLE_WALL_BUDGET_MS || String(SETTLE_WALL_MS), 10);
+    let settleCursor = null;
+    try { settleCursor = await env.SIGNALS_CACHE.get(SETTLE_CURSOR_KEY); } catch (e) {}
+    const settleList = settleOrder(pendingSignals, settleCursor);
+    let settleChecked = 0;
+
+    for (const signalId of settleList) {
+      if (Date.now() > settleDeadline) break;
+      settleChecked++;
       try {
         // Get signal data
         const signalKey = KV_KEYS.SIGNALS_PREFIX + signalId;
@@ -2640,8 +2652,21 @@ async function processSettledSignals(env) {
       }
     }
     
-    // Update pending list
-    await env.SIGNALS_CACHE.put(KV_KEYS.PENDING_SIGNALS, JSON.stringify(stillPending));
+    // Update pending list: the stored order is kept, signals the budget did
+    // not reach stay on it, and any signal a scan added while this pass ran
+    // (read the list again now) is kept too instead of being overwritten.
+    const settleUnchecked = settleList.slice(settleChecked);
+    let pendingNow = null;
+    try { pendingNow = await env.SIGNALS_CACHE.get(KV_KEYS.PENDING_SIGNALS, { type: "json" }); } catch (e) {}
+    const nextPending = nextPendingList({ start: pendingSignals, kept: stillPending, unchecked: settleUnchecked, fresh: pendingNow });
+    await env.SIGNALS_CACHE.put(KV_KEYS.PENDING_SIGNALS, JSON.stringify(nextPending));
+    try {
+      if (settleUnchecked.length) await env.SIGNALS_CACHE.put(SETTLE_CURSOR_KEY, String(settleUnchecked[0]), { expirationTtl: 3600 });
+      else if (settleCursor) await env.SIGNALS_CACHE.delete(SETTLE_CURSOR_KEY);
+    } catch (e) {}
+    results.checked = settleChecked;
+    results.deferred = settleUnchecked.length;
+    results.pending = nextPending.length;
     
     console.log(`Settlement check complete: ${results.processed} processed, ${results.wins} wins, ${results.losses} losses`);
     
