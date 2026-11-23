@@ -236,6 +236,20 @@ const noSleep = async () => {};
   check("room: over the pairs sent, in shares and dollars", sum.room.n === 3 && sum.room.medShares === 40 && sum.room.maxShares === 300 && sum.room.medUsd === 36 && sum.room.maxUsd === 270 && sum.room.capShares === ROOM_CAP_SHARES, sum.room);
   check("room: each recent row carries it; an old row carries null", sum.recent.find(x => x.game === "C").roomShares === 300 && sum.recent.find(x => x.game === "D").roomShares === null);
   check("room: no rows, no numbers", summarizeCrosses([]).room.n === 0 && summarizeCrosses([]).room.medShares === null);
+  // a deploy whose schema pass missed the new column: the write applies the table's schema and goes through
+  {
+    const kv = new Map(), ran = [], wrote = [];
+    let fails = 1;
+    const env = {
+      SIGNALS_CACHE: { get: async (k, opt) => { const v = kv.get(k); return v == null ? null : opt && opt.type === "json" ? JSON.parse(v) : v; }, put: async (k, v) => { kv.set(k, v); } },
+      DB: {
+        prepare: (sql) => ({ run: async () => { ran.push(sql); return { success: true }; }, bind: (...a) => ({ sql, a }) }),
+        batch: async (stmts) => { if (fails-- > 0) throw new Error("D1_ERROR: table cross_events has no column named room_shares"); wrote.push(...stmts); return []; },
+      },
+    };
+    const out = await runCrossLane(env, { legs: [leg({ k_bid: 0.58, k_ask: 0.60 })], nowMs: NOW, fetchImpl: mkFetch([{ us: US_B, k: K_B }]), sleep: noSleep, clock: () => NOW + 4000 });
+    check("room: a missing column is added by the write itself and the row is kept", out.schemaHealed === true && !out.writeError && wrote.length === 1 && ran.some(q => /ADD COLUMN room_shares/.test(q)) && ran.some(q => /CREATE TABLE IF NOT EXISTS cross_events/.test(q)), { out, ran: ran.length, wrote: wrote.length });
+  }
   check("room: the column is in the schema and the rule's version is untouched", CROSS_SCHEMA.some(q => /ADD COLUMN room_shares REAL/.test(q)) && CROSS.version === 1 && CROSS.stakeUsd === 25);
 }
 

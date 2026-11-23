@@ -464,7 +464,7 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   after the record (and needs Kalshi order keys plus money on both venues).
   Not modelled: the read-to-order latency below the t0-t1 gap, and a game
   the two venues settle differently (a tie, a postponement). Tests:
-  test/cross-lane.test.mjs (60).
+  test/cross-lane.test.mjs (61).
   First night (Nov 17 2026, five NBA games): 9 sampled crosses of 1c+
   (average 2.5c) looked at about 3 seconds after the sample, all 9
   `gone_t0`: read at the same moment the two real books were on average
@@ -523,7 +523,9 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   cap, bounded by `ROOM_CAP_SHARES` 5000 and by the ten Kalshi levels
   read), an observation beside the rule (version 1 and the $25 pair are
   unchanged); report `room` {n, medShares, maxShares, medUsd, maxUsd} over
-  the pairs sent, `recent[].roomShares`. Post-fix rows are those since
+  the pairs sent, `recent[].roomShares`. The row write applies the table's
+  own schema once when a column is missing (`schemaHealed`), since the
+  worker's schema pass swallows a transient failure. Post-fix rows are those since
   2026-11-19T15:19Z (`byDay` from 2026-11-20 on; `recent` holds only 25).
   THE US FEE (found building this, Nov 16 2026): every Polymarket US market
   now states `feeCoefficient` 0.095 (NFL, NBA, NHL, CFB all read that day);

@@ -319,9 +319,21 @@ export async function runCrossLane(env, { legs = [], nowMs = Date.now(), fetchIm
     for (const k of Object.keys(state.last)) if (nowMs - state.last[k] > 6 * 3600e3) delete state.last[k];
     await kvPut(env, CROSS_KEYS.STATE, state, 2 * 86400);
     const stmts = rows.map(r => env.DB.prepare(INSERT).bind(...bindsOf(r, cfg.version)));
+    let healed = false;
     for (let t = 0; ; t++) {
       try { await env.DB.batch(stmts); break; }
-      catch (e) { if (t >= 2) { out.writeError = String(e && e.message).slice(0, 80); break; } await sleep(retryMs * (t + 1)); }
+      catch (e) {
+        // A column this version writes is not on the table yet (the worker's
+        // schema pass swallows a transient failure and does not come back to
+        // it): apply the table's own schema once and write again.
+        if (!healed && /no column named|has no column/i.test(String(e && e.message))) {
+          healed = true; out.schemaHealed = true;
+          for (const q of CROSS_SCHEMA) { try { await env.DB.prepare(q).run(); } catch (_) { /* already there */ } }
+          continue;
+        }
+        if (t >= 2) { out.writeError = String(e && e.message).slice(0, 80); break; }
+        await sleep(retryMs * (t + 1));
+      }
     }
     out.pnlUsd = r2(rows.reduce((a, r) => a + (typeof r.pnl === 'number' ? r.pnl : 0), 0));
     await kvPut(env, CROSS_KEYS.LAST, { at: new Date(nowMs).toISOString(), ...out, rows: rows.map(r => ({ game: r.game, team: r.team, dir: r.dir, sEdgeC: r.sEdgeC, verdict: r.verdict, why: r.why, shares: r.shares, pnl: r.pnl ?? null })) }, 7 * 86400);
