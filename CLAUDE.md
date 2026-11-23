@@ -464,7 +464,7 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   after the record (and needs Kalshi order keys plus money on both venues).
   Not modelled: the read-to-order latency below the t0-t1 gap, and a game
   the two venues settle differently (a tie, a postponement). Tests:
-  test/cross-lane.test.mjs (54).
+  test/cross-lane.test.mjs (60).
   First night (Nov 17 2026, five NBA games): 9 sampled crosses of 1c+
   (average 2.5c) looked at about 3 seconds after the sample, all 9
   `gone_t0`: read at the same moment the two real books were on average
@@ -510,6 +510,21 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   Nov 12 US cache: every sampler number comparing Kalshi with another venue
   is evidence only from this deploy on (xvenue 48h window clean from Nov 21
   2026 about 15:45 UTC).
+  First clean week (Nov 23 2026, four nights on honest prices): 22 sampled
+  crosses looked at (against 18-24 a night of phantoms before), 12 gone at
+  t0, 3 with under a share still crossing, 7 sent: 4 filled on both legs
+  (Rhode Island vs. Bryant and Texas A&M vs. Oklahoma in college football,
+  Ravens vs. Panthers, Blackhawks vs. Canucks; 23-26 shares, 1.5-3c locked,
+  +$2.20 on $96.82), 2 legged on Kalshi's side (the US leg gone ~125 ms
+  later, -$1.58), 1 killed (both gone in 42 ms); net +$0.62, every cross
+  gone again 5 seconds later. Every pair sent hit the $25 stake, so the
+  record could not say how much size was there: each row now also keeps
+  `room_shares` (migration 0019; the same `planCross` walk with no stake
+  cap, bounded by `ROOM_CAP_SHARES` 5000 and by the ten Kalshi levels
+  read), an observation beside the rule (version 1 and the $25 pair are
+  unchanged); report `room` {n, medShares, maxShares, medUsd, maxUsd} over
+  the pairs sent, `recent[].roomShares`. Post-fix rows are those since
+  2026-11-19T15:19Z (`byDay` from 2026-11-20 on; `recent` holds only 25).
   THE US FEE (found building this, Nov 16 2026): every Polymarket US market
   now states `feeCoefficient` 0.095 (NFL, NBA, NHL, CFB all read that day);
   it was 0.0695 through October. The executor and the scalp lane's

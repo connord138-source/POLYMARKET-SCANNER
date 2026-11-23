@@ -143,7 +143,7 @@ const noSleep = async () => {};
   const out = await runCrossLane(env, { legs: [leg({ k_bid: 0.58, k_ask: 0.60 })], nowMs: NOW, fetchImpl: mkFetch([{ us: US_B, k: K_B }], calls), sleep: noSleep, clock: () => NOW + 4000 });
   check("run: a cross that is still on both books at both reads is a filled pair", out.mode === "dry" && out.seen === 1 && out.looked === 1 && out.planned === 1 && out.filled === 1 && out.pnlUsd > 0 && writes.length === 1, out);
   const a = writes[0].a;
-  check("run: the row carries the pair, the fills and the timing (36 values)", a.length === 36 && (writes[0].sql.match(/\?/g) || []).length === 36 && a[34] === 0.51 && a[35] === 0.42 && a[6] === "us_k" && a[8] === "long" && a[10] === "no" && a[17] === "filled" && a[19] === 26 && a[20] === 0.51 && a[21] === 0.42 && a[24] === 0.51 && a[25] === 0.42 && a[29] > 0 && a[16] === 4 && a[32] === 1, a);
+  check("run: the row carries the pair, the fills, the timing and the size that was there (37 values)", a.length === 37 && (writes[0].sql.match(/\?/g) || []).length === 37 && a[34] === 0.51 && a[35] === 0.42 && a[36] === 300 && a[6] === "us_k" && a[8] === "long" && a[10] === "no" && a[17] === "filled" && a[19] === 26 && a[20] === 0.51 && a[21] === 0.42 && a[24] === 0.51 && a[25] === 0.42 && a[29] > 0 && a[16] === 4 && a[32] === 1, a);
   check("run: both books are read three times (plan, fill, the later look) past the US edge cache, and nothing is posted", calls.filter(u => /\/book\?_=/.test(u)).length === 3 && calls.filter(u => /orderbook/.test(u)).length === 3 && calls.every(u => !/\/v1\/orders|portfolio/.test(u)), calls);
   const st = JSON.parse(kv.get("cross_state"));
   check("run: the leg is cooling off and the game counted", Object.keys(st.last).length === 1 && Object.values(st.games)[0] === 1 && JSON.parse(kv.get("cross_last")).rows[0].verdict === "filled");
@@ -214,6 +214,29 @@ const noSleep = async () => {};
   const env = { CROSS_LANE: "dry", SIGNALS_CACHE: { get: async (k) => (kv.has(k) ? JSON.parse(kv.get(k)) : null) }, DB: { prepare: () => ({ bind: () => ({ all: async () => ({ results: rows }) }) }) } };
   const rep = await crossReport(env, { hours: 168, nowMs: NOW });
   check("report: the record with the lane's mode, last run and today's counts", rep.success && rep.mode === "dry" && rep.looked === 9 && rep.last.at === "x" && rep.today.games === 2 && rep.today.looks === 3 && rep.readError === null);
+}
+
+// ---------- how much size was there (an observation beside the rule) ----------
+{
+  const { ROOM_CAP_SHARES, CROSS_SCHEMA } = await import("../src/cross-lane.js");
+  // 100 shares cross at 40c + 50c; the next US level (47c) no longer locks a cent
+  const usLv = [{ price: 0.40, size: 100 }, { price: 0.47, size: 300 }];
+  const kLv = [{ price: 0.50, size: 150 }, { price: 0.60, size: 999 }];
+  const capped = planCross(usLv, kLv, { maxShares: 27, minLockC: 1, minShares: 5 });
+  const room = planCross(usLv, kLv, { maxShares: ROOM_CAP_SHARES, minLockC: 1, minShares: 0 });
+  check("room: the pair sent is still the stake's size; the uncapped walk says what was there", capped.ok === true && capped.shares === 27 && room.offered === 100, { capped, room });
+  check("room: the walks never change the books they were given", usLv[0].size === 100 && kLv[0].size === 150);
+  const TS2 = 1795300000;
+  const r = (o = {}) => ({ ts: TS2, sport: "cfb", game: "A", team: "a1", dir: "us_k", verdict: "filled", s_us_px: 0.5, s_k_px: 0.4, shares: 25, staked_usd: 24, pnl_usd: 0.5, pnl_c: 2, hedge_ok: 1, ...o });
+  const sum = summarizeCrosses([
+    r({ room_shares: 40 }), r({ game: "B", verdict: "legged_kalshi", pnl_usd: -1, room_shares: 26 }), r({ game: "C", verdict: "killed", pnl_usd: 0, room_shares: 300 }),
+    r({ game: "D", room_shares: null }),                                          // a row from before the column
+    r({ game: "E", verdict: "thin_t0", shares: null, pnl_usd: null, room_shares: 0.5 }),   // not sent: not counted
+  ]);
+  check("room: over the pairs sent, in shares and dollars", sum.room.n === 3 && sum.room.medShares === 40 && sum.room.maxShares === 300 && sum.room.medUsd === 36 && sum.room.maxUsd === 270 && sum.room.capShares === ROOM_CAP_SHARES, sum.room);
+  check("room: each recent row carries it; an old row carries null", sum.recent.find(x => x.game === "C").roomShares === 300 && sum.recent.find(x => x.game === "D").roomShares === null);
+  check("room: no rows, no numbers", summarizeCrosses([]).room.n === 0 && summarizeCrosses([]).room.medShares === null);
+  check("room: the column is in the schema and the rule's version is untouched", CROSS_SCHEMA.some(q => /ADD COLUMN room_shares REAL/.test(q)) && CROSS.version === 1 && CROSS.stakeUsd === 25);
 }
 
 console.log(`cross-lane: ${pass} passed, ${fail} failed`);

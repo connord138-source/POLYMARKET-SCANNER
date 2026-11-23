@@ -50,6 +50,7 @@ export const CROSS = {
   delayMs: 5000,         // the third look
   hedgeGapMax: 0.12,     // mean |Kalshi mid - US mid| over the game above this = not the same proposition
 };
+export const ROOM_CAP_SHARES = 5000;   // the uncapped walk's own bound (observation, not the rule)
 export const CROSS_KEYS = { STATE: 'cross_state', LAST: 'cross_last' };
 export const CROSS_SCHEMA = [
   `CREATE TABLE IF NOT EXISTS cross_events (
@@ -62,6 +63,7 @@ export const CROSS_SCHEMA = [
   `CREATE INDEX IF NOT EXISTS idx_cross_ts ON cross_events(ts)`,
   `ALTER TABLE cross_events ADD COLUMN real_us_px REAL`,   // the cheapest real offer on each venue at t0 (Nov 17 2026): which venue's sampled price was off
   `ALTER TABLE cross_events ADD COLUMN real_k_px REAL`,
+  `ALTER TABLE cross_events ADD COLUMN room_shares REAL`,   // shares that still locked minLockC+ at t0 with no stake cap (Nov 23 2026): how much size a real lane could have taken; observation only
 ];
 
 const r2 = (x) => Math.round(x * 100) / 100;
@@ -236,7 +238,7 @@ const view = (m) => (!m ? null : { us: m.us ? [m.us.best ?? null, m.us.filled ? 
 
 // One candidate: t0 (plan on the real books), t1 (the fills). Never throws.
 async function lookAt(env, c, { fetchImpl, nowMs, clock, cfg }) {
-  const row = { ...c, lagS: null, verdict: null, why: null, shares: null, usLimit: null, kLimit: null, realEdgeC: null, realUsPx: null, realKPx: null, lock0C: null, gapMs: null, t2Both: null, reads: {} };
+  const row = { ...c, lagS: null, verdict: null, why: null, shares: null, usLimit: null, kLimit: null, realEdgeC: null, realUsPx: null, realKPx: null, roomShares: null, lock0C: null, gapMs: null, t2Both: null, reads: {} };
   try {
     let market = null;
     const [books0, mk] = await Promise.all([readPair(env, c, { fetchImpl }), fetchUsMarket(env, c.usSlug, { fetchImpl, nowMs }).catch(() => null)]);
@@ -251,6 +253,9 @@ async function lookAt(env, c, { fetchImpl, nowMs, clock, cfg }) {
     row.realUsPx = cheapest(usLv); row.realKPx = cheapest(kLv);   // what each venue really offered, against the sampled s_us_px / s_k_px
     const plan = planCross(usLv, kLv, { maxShares, minLockC: cfg.minLockC, minShares: cfg.minShares, usFeeCoef: feeCoef, step: (market && market.minQty) || 1 });
     row.realEdgeC = plan.topEdgeC;
+    // How much size was really there: the same walk with no stake cap. Not part
+    // of the rule (the pair sent is still the $25 one); read at the decision.
+    try { row.roomShares = planCross(usLv, kLv, { maxShares: ROOM_CAP_SHARES, minLockC: cfg.minLockC, minShares: 0, usFeeCoef: feeCoef, step: 1 }).offered; } catch (e) { row.roomShares = null; }
     if (!plan.ok) {
       const thin = plan.offered > 0;
       return { ...row, verdict: thin ? 'thin_t0' : 'gone_t0', why: thin ? `only ${plan.offered} shares still crossed on the real books` : 'no cross on the real books', reads: { t0: { offered: plan.offered } } };
@@ -270,8 +275,8 @@ async function lookAt(env, c, { fetchImpl, nowMs, clock, cfg }) {
   }
 }
 
-const INSERT = `INSERT OR REPLACE INTO cross_events (id, ts, version, sport, game, team, dir, us_slug, us_side, k_ticker, k_side, s_us_px, s_k_px, s_edge_c, s_us_qty, suspect, lag_s, verdict, why, shares, us_limit, k_limit, real_edge_c, lock0_c, us_px, k_px, fee_us_usd, fee_k_usd, staked_usd, pnl_usd, pnl_c, gap_ms, t2_both, reads, real_us_px, real_k_px) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`;
-const bindsOf = (r, version) => [`cx_${r.ts}_${Math.random().toString(36).slice(2, 8)}`, r.ts, version, r.sport, r.game, r.team, r.dir, r.usSlug, r.usSide, r.kTicker, r.kSide, r.sUsPx, r.sKPx, r.sEdgeC, r.sUsQty ?? null, r.suspect ? 1 : 0, r.lagS ?? null, r.verdict, r.why ?? null, r.shares ?? null, r.usLimit ?? null, r.kLimit ?? null, r.realEdgeC ?? null, r.lock0C ?? null, r.usPx ?? null, r.kPx ?? null, r.feeUs ?? null, r.feeK ?? null, r.staked ?? null, r.pnl ?? null, r.pnlC ?? null, r.gapMs ?? null, r.t2Both ?? null, JSON.stringify(r.reads || {}), r.realUsPx ?? null, r.realKPx ?? null];
+const INSERT = `INSERT OR REPLACE INTO cross_events (id, ts, version, sport, game, team, dir, us_slug, us_side, k_ticker, k_side, s_us_px, s_k_px, s_edge_c, s_us_qty, suspect, lag_s, verdict, why, shares, us_limit, k_limit, real_edge_c, lock0_c, us_px, k_px, fee_us_usd, fee_k_usd, staked_usd, pnl_usd, pnl_c, gap_ms, t2_both, reads, real_us_px, real_k_px, room_shares) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`;
+const bindsOf = (r, version) => [`cx_${r.ts}_${Math.random().toString(36).slice(2, 8)}`, r.ts, version, r.sport, r.game, r.team, r.dir, r.usSlug, r.usSide, r.kTicker, r.kSide, r.sUsPx, r.sKPx, r.sEdgeC, r.sUsQty ?? null, r.suspect ? 1 : 0, r.lagS ?? null, r.verdict, r.why ?? null, r.shares ?? null, r.usLimit ?? null, r.kLimit ?? null, r.realEdgeC ?? null, r.lock0C ?? null, r.usPx ?? null, r.kPx ?? null, r.feeUs ?? null, r.feeK ?? null, r.staked ?? null, r.pnl ?? null, r.pnlC ?? null, r.gapMs ?? null, r.t2Both ?? null, JSON.stringify(r.reads || {}), r.realUsPx ?? null, r.realKPx ?? null, r.roomShares ?? null];
 
 // Called from the minute cron's afterSample hook with this minute's sampled
 // legs. Reads only; returns a small status. Never throws.
@@ -412,6 +417,8 @@ export function summarizeCrosses(rows, { cfg = CROSS } = {}) {
     net: { pnlUsd: r2(all.pnlUsd), stakedUsd: r2(all.stakedUsd), roiPct: all.stakedUsd ? r2(100 * all.pnlUsd / all.stakedUsd) : null, perSentUsd: all.sent ? r2(all.pnlUsd / all.sent) : null, fillPct: pct(all.filled, all.sent), leggedPct: pct(all.legged, all.sent), games: perGame.length, tGames },
     edge: { sampledC: avg(list.map(r => r.s_edge_c).filter(x => typeof x === 'number')), realTopC: avg(list.map(r => r.real_edge_c).filter(x => typeof x === 'number')), plannedC: avg(sentRows.map(r => r.lock0_c).filter(x => typeof x === 'number')), bookedC: avg(good.map(r => r.pnl_c).filter(x => typeof x === 'number')) },
     // cents each venue's real cheapest offer was above the sampled one (positive = the sample was too kind on that venue)
+    // the size that was there on the pairs sent: shares still locking with no stake cap, and that in dollars
+    room: (() => { const xs = sentRows.filter(r => typeof r.room_shares === 'number'); const sh = xs.map(r => r.room_shares).sort((x, y) => x - y); const usd = xs.map(r => r.room_shares * (num(r.s_us_px) + num(r.s_k_px))).sort((x, y) => x - y); const mid = (v) => (v.length ? r2(v.length % 2 ? v[(v.length - 1) / 2] : (v[v.length / 2 - 1] + v[v.length / 2]) / 2) : null); return { n: xs.length, medShares: mid(sh), maxShares: sh.length ? r2(sh[sh.length - 1]) : null, medUsd: mid(usd), maxUsd: usd.length ? r2(usd[usd.length - 1]) : null, capShares: ROOM_CAP_SHARES }; })(),
     drift: (() => { const xs = list.filter(r => typeof r.real_us_px === 'number' && typeof r.real_k_px === 'number' && typeof r.s_us_px === 'number' && typeof r.s_k_px === 'number'); return { n: xs.length, usC: avg(xs.map(r => (r.real_us_px - r.s_us_px) * 100)), kalshiC: avg(xs.map(r => (r.real_k_px - r.s_k_px) * 100)) }; })(),
     timing: { avgLagS: avg(list.map(r => r.lag_s).filter(x => typeof x === 'number')), avgGapMs: avg(sentRows.map(r => r.gap_ms).filter(x => typeof x === 'number')), stillThereAfterDelayPct: pct(t2.filter(r => r.t2_both === 1).length, t2.length), delayS: cfg.delayMs / 1000 },
     suspect: list.filter(r => r.suspect).length,
@@ -419,7 +426,7 @@ export function summarizeCrosses(rows, { cfg = CROSS } = {}) {
     byDir: Object.fromEntries(Object.entries(byDir).map(([k, v]) => [k, fin(v)])),
     byDay: Object.fromEntries(Object.entries(byDay).sort().map(([k, v]) => [k, fin(v)])),
     games,
-    recent: list.slice().sort((a, b) => b.ts - a.ts).slice(0, 25).map(r => ({ at: new Date(r.ts * 1000).toISOString(), sport: r.sport, game: r.game, team: r.team, dir: r.dir, sampledC: r.s_edge_c, realTopC: r.real_edge_c, sUs: r.s_us_px, realUs: r.real_us_px ?? null, sK: r.s_k_px, realK: r.real_k_px ?? null, verdict: r.verdict, why: r.why, shares: r.shares, usPx: r.us_px, kPx: r.k_px, pnlUsd: r.pnl_usd, lockC: r.pnl_c, lagS: r.lag_s, gapMs: r.gap_ms, stillThere: r.t2_both, hedgeOk: r.hedge_ok })),
+    recent: list.slice().sort((a, b) => b.ts - a.ts).slice(0, 25).map(r => ({ at: new Date(r.ts * 1000).toISOString(), sport: r.sport, game: r.game, team: r.team, dir: r.dir, sampledC: r.s_edge_c, realTopC: r.real_edge_c, sUs: r.s_us_px, realUs: r.real_us_px ?? null, sK: r.s_k_px, realK: r.real_k_px ?? null, verdict: r.verdict, why: r.why, shares: r.shares, usPx: r.us_px, kPx: r.k_px, pnlUsd: r.pnl_usd, lockC: r.pnl_c, lagS: r.lag_s, gapMs: r.gap_ms, stillThere: r.t2_both, hedgeOk: r.hedge_ok, roomShares: r.room_shares ?? null })),
     read: 'looked = sampled crosses the lane read the real books for. sent = the real books still crossed, so a live bot would have sent both fill-or-kill orders. filled = both would have filled: the pair is locked and pays $1 a share whoever wins (pnl after both taker fees; held to the end of the game, so the stake is tied up until then). legged = one leg filled alone and was sold straight back (the spread and two fees lost). killed = both gone, nothing happened. net = filled + legged, the number to read; tGames counts each game once. drift = how many cents the real cheapest offer on each venue was above the price the sampler saw (the venue with the big number is the one whose sampled price had already gone). mismatched = filled pairs whose two legs did not track each other over the game (not a hedge), left out of the money. Nothing is ever sent.',
   };
 }
