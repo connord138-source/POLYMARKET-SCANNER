@@ -255,7 +255,8 @@ async function lookAt(env, c, { fetchImpl, nowMs, clock, cfg }) {
     row.realEdgeC = plan.topEdgeC;
     // How much size was really there: the same walk with no stake cap. Not part
     // of the rule (the pair sent is still the $25 one); read at the decision.
-    try { row.roomShares = planCross(usLv, kLv, { maxShares: ROOM_CAP_SHARES, minLockC: cfg.minLockC, minShares: 0, usFeeCoef: feeCoef, step: 1 }).offered; } catch (e) { row.roomShares = null; }
+    // minShares 1: with nothing crossing the walk answers { ok: false, offered: 0 } (0 was a thrown-and-caught null until Nov 24 2026)
+    try { row.roomShares = planCross(usLv, kLv, { maxShares: ROOM_CAP_SHARES, minLockC: cfg.minLockC, minShares: 1, usFeeCoef: feeCoef, step: 1 }).offered; } catch (e) { row.roomShares = null; }
     if (!plan.ok) {
       const thin = plan.offered > 0;
       return { ...row, verdict: thin ? 'thin_t0' : 'gone_t0', why: thin ? `only ${plan.offered} shares still crossed on the real books` : 'no cross on the real books', reads: { t0: { offered: plan.offered } } };
