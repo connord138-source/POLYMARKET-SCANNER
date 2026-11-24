@@ -444,8 +444,16 @@ export function summarizeCrosses(rows, { cfg = CROSS } = {}) {
   };
 }
 
-export async function crossReport(env, { hours = 168, nowMs = Date.now(), cfg = CROSS } = {}) {
-  const since = Math.floor(nowMs / 1000) - hours * 3600;
+// The record on honest prices starts here: the deploy that took the sampler's
+// Kalshi price from its order books (PR #191). Everything before it in the
+// table is the cached-list phantom crosses (52 looks, 1 pair sent).
+export const CROSS_CLEAN_SINCE = '2026-11-19T15:19:00Z';
+
+// `sinceMs` cuts the window's start (the later of it and now - hours wins), so
+// the report can be the post-fix record alone however old its first rows get.
+export async function crossReport(env, { hours = 168, sinceMs = null, nowMs = Date.now(), cfg = CROSS } = {}) {
+  const byHours = Math.floor(nowMs / 1000) - hours * 3600;
+  const since = typeof sinceMs === 'number' && isFinite(sinceMs) ? Math.max(byHours, Math.floor(sinceMs / 1000)) : byHours;
   let rows = [], readError = null;
   for (let t = 0; t < 3; t++) {
     try { const q = await env.DB.prepare(`SELECT * FROM cross_events WHERE ts >= ?1 AND version = ?2 ORDER BY ts DESC LIMIT 5000`).bind(since, cfg.version).all(); rows = (q && q.results) || []; readError = null; break; }
@@ -453,5 +461,5 @@ export async function crossReport(env, { hours = 168, nowMs = Date.now(), cfg = 
   }
   const last = await kvJson(env, CROSS_KEYS.LAST, null);
   const state = await kvJson(env, CROSS_KEYS.STATE, null);
-  return { success: true, mode: crossMode(env), hours, readError, last, today: state ? { day: state.day, games: Object.keys(state.games || {}).length, looks: Object.values(state.games || {}).reduce((a, b) => a + b, 0) } : null, ...summarizeCrosses(rows, { cfg }) };
+  return { success: true, mode: crossMode(env), hours, from: new Date(since * 1000).toISOString(), cleanSince: CROSS_CLEAN_SINCE, readError, last, today: state ? { day: state.day, games: Object.keys(state.games || {}).length, looks: Object.values(state.games || {}).reduce((a, b) => a + b, 0) } : null, ...summarizeCrosses(rows, { cfg }) };
 }

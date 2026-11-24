@@ -35,7 +35,7 @@ import { collectBooks, MM_SCHEMA } from "./src/mm-collector.js";
 import { sampleXvenue, xvenueReport, XV_SCHEMA, usTopOfBook } from "./src/xvenue.js";
 import { US_LANE_SCHEMA, recordUsLaneEvents, markUsLaneEvents, settleUsLaneEvents, usLaneReport } from "./src/us-lane.js";
 import { SCALP_SCHEMA, runScalpLane, scalpReport, setScalpHalt } from "./src/scalp.js";
-import { CROSS_SCHEMA, runCrossLane, checkCrossHedges, crossReport } from "./src/cross-lane.js";
+import { CROSS_SCHEMA, runCrossLane, checkCrossHedges, crossReport, CROSS_CLEAN_SINCE } from "./src/cross-lane.js";
 import { withStageClock, slowestStages } from "./src/stage-clock.js";
 import { SETTLE_WALL_MS, SETTLE_CURSOR_KEY, settleOrder, nextPendingList } from "./src/settle-queue.js";
 import { brierRecordFromRow, buildBrierFromRecords, readInBatches, settleWithin, BRIER_KV_MAX } from "./src/brier-report.js";
@@ -5465,7 +5465,10 @@ export default {
       if (path === "/xvenue/cross" && request.method === "GET") {
         const hours = Math.min(30 * 24, Math.max(1, parseInt(url.searchParams.get("hours") || "168", 10) || 168));
         await ensureSchema(env);
-        return atJson(await crossReport(env, { hours }));
+        // ?since=clean = the record on honest prices only (CROSS_CLEAN_SINCE); an ISO time also works
+        const sinceQ = url.searchParams.get("since");
+        const sinceMs = sinceQ === "clean" ? Date.parse(CROSS_CLEAN_SINCE) : sinceQ ? Date.parse(sinceQ) : null;
+        return atJson(await crossReport(env, { hours, sinceMs: typeof sinceMs === "number" && isFinite(sinceMs) ? sinceMs : null }));
       }
       if (path === "/xvenue/scalp/halt" && request.method === "POST") {
         const body = await request.json().catch(() => ({}));

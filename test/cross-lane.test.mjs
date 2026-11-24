@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 // Kalshi against Polymarket US, tested as live (src/cross-lane.js): what a two-leg bot would have got.
 import { CROSS, crossMode, crossCandidates, pickCandidates, gameKey, legDirKey, kalshiBuyLevels, kalshiSellLevels, kalshiOrderFee, walkBuy, walkSell, planCross, matchPair, unwindLeg, verdictFor, runCrossLane, hedgeVerdict, checkCrossHedges, summarizeCrosses, crossReport } from "../src/cross-lane.js";
 import { kalshiLevelsOf } from "../src/kalshi.js";
@@ -259,6 +260,27 @@ const noSleep = async () => {};
     check("room: a missing column is added by the write itself and the row is kept", out.schemaHealed === true && !out.writeError && wrote.length === 1 && ran.some(q => /ADD COLUMN room_shares/.test(q)) && ran.some(q => /CREATE TABLE IF NOT EXISTS cross_events/.test(q)), { out, ran: ran.length, wrote: wrote.length });
   }
   check("room: the column is in the schema and the rule's version is untouched", CROSS_SCHEMA.some(q => /ADD COLUMN room_shares REAL/.test(q)) && CROSS.version === 1 && CROSS.stakeUsd === 25);
+}
+
+// ---------- the report's window: the record on honest prices alone ----------
+{
+  const { CROSS_CLEAN_SINCE } = await import("../src/cross-lane.js");
+  const bound = [];
+  const env = {
+    SIGNALS_CACHE: { get: async () => null, put: async () => {} },
+    DB: { prepare: (sql) => ({ bind: (...a) => ({ all: async () => { bound.push({ sql, a }); return { results: [] }; } }) }) },
+  };
+  const now = Date.parse("2026-11-30T15:00:00Z");
+  const clean = Date.parse(CROSS_CLEAN_SINCE);
+  const wk = await crossReport(env, { hours: 168, nowMs: now });
+  const all = await crossReport(env, { hours: 720, sinceMs: clean, nowMs: now });
+  const early = await crossReport(env, { hours: 24, sinceMs: clean, nowMs: now });
+  check("window: by default the last week", bound[0].a[0] === Math.floor(now / 1000) - 168 * 3600 && wk.from === "2026-11-23T15:00:00.000Z" && wk.cleanSince === CROSS_CLEAN_SINCE, wk.from);
+  check("window: with the clean start, every row since the Kalshi fix and none before", bound[1].a[0] === Math.floor(clean / 1000) && all.from === "2026-11-19T15:19:00.000Z" && all.hours === 720, all.from);
+  check("window: the later of the two starts wins", bound[2].a[0] === Math.floor(now / 1000) - 24 * 3600 && early.from === "2026-11-29T15:00:00.000Z", early.from);
+  const wf = readFileSync(new URL("../.github/workflows/backend-snapshot.yml", import.meta.url), "utf8");
+  const idx = readFileSync(new URL("../index.js", import.meta.url), "utf8");
+  check("window: the snapshot asks for the clean record and the route understands it", /cross\|\/xvenue\/cross\?hours=720&since=clean/.test(wf) && /sinceQ === "clean" \? Date\.parse\(CROSS_CLEAN_SINCE\)/.test(idx));
 }
 
 console.log(`cross-lane: ${pass} passed, ${fail} failed`);
