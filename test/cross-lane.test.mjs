@@ -226,6 +226,14 @@ const noSleep = async () => {};
   const room = planCross(usLv, kLv, { maxShares: ROOM_CAP_SHARES, minLockC: 1, minShares: 0 });
   check("room: the pair sent is still the stake's size; the uncapped walk says what was there", capped.ok === true && capped.shares === 27 && room.offered === 100, { capped, room });
   check("room: the walks never change the books they were given", usLv[0].size === 100 && kLv[0].size === 150);
+  const none = planCross([{ price: 0.60, size: 100 }], [{ price: 0.50, size: 100 }], { maxShares: ROOM_CAP_SHARES, minLockC: 1, minShares: 1 });
+  check("room: nothing crossing is zero room, not an error", none.ok === false && none.offered === 0, none);
+  {
+    // a look that finds no cross on the real books stores room 0 (the 37th value)
+    const { env, writes } = mkEnv();
+    await runCrossLane(env, { legs: [leg({ k_bid: 0.58, k_ask: 0.60 })], nowMs: NOW, fetchImpl: mkFetch([{ us: usBody([[0.5, 600]], [[0.56, 700]]), k: K_B }]), sleep: noSleep, clock: () => NOW + 4000 });
+    check("room: a gone cross is stored with room 0", writes.length === 1 && writes[0].a[17] === "gone_t0" && writes[0].a[36] === 0, writes[0] && [writes[0].a[17], writes[0].a[36]]);
+  }
   const TS2 = 1795300000;
   const r = (o = {}) => ({ ts: TS2, sport: "cfb", game: "A", team: "a1", dir: "us_k", verdict: "filled", s_us_px: 0.5, s_k_px: 0.4, shares: 25, staked_usd: 24, pnl_usd: 0.5, pnl_c: 2, hedge_ok: 1, ...o });
   const sum = summarizeCrosses([
