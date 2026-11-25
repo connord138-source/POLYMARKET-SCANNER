@@ -1,6 +1,6 @@
 // An Anthropic failure that is the account's, not the question's (src/investigator-outage.js).
 import { readFileSync } from "node:fs";
-import { OUTAGE_KEYS, OUTAGE_REPROBE_MS, outageKind, outageLabel, outageActive, priorAttempt, healable, countedToday, KNOWN_SQL } from "../src/investigator-outage.js";
+import { OUTAGE_KEYS, OUTAGE_REPROBE_MS, outageKind, outageLabel, outageActive, priorAttempt, healable, countedToday, KNOWN_SQL, PAUSED_LABEL, researchPaused } from "../src/investigator-outage.js";
 let pass = 0, fail = 0;
 const check = (n, c, x) => { if (c) pass++; else { fail++; console.error("FAIL:", n, x === undefined ? "" : JSON.stringify(x)); } };
 const NOW = Date.parse("2026-11-19T15:00:00Z");
@@ -50,6 +50,19 @@ const ECREDIT = 'Anthropic API 400: {"type":"error","error":{"type":"invalid_req
 // ---------- the sweep's "already researched" read ----------
 {
   check("known: done and real permanent failures are known; outage failures are not", /status = 'done'/.test(KNOWN_SQL) && /error_permanent/.test(KNOWN_SQL) && /NOT LIKE 'Anthropic API 401%'/.test(KNOWN_SQL) && /NOT LIKE '%credit balance is too low%'/.test(KNOWN_SQL) && /updated_at >= \?1/.test(KNOWN_SQL));
+}
+
+// ---------- the owner's pause ----------
+{
+  check("pause: only the word paused parks the research, however it is typed", researchPaused({ INVESTIGATOR: "paused" }) === true && researchPaused({ INVESTIGATOR: " Paused " }) === true && researchPaused({ INVESTIGATOR: "on" }) === false && researchPaused({ INVESTIGATOR: "" }) === false && researchPaused({}) === false && researchPaused(null) === false);
+  check("pause: it is not an outage and says whose choice it is", PAUSED_LABEL === "paused by the owner" && outageKind(PAUSED_LABEL) === null && outageLabel("key") !== PAUSED_LABEL);
+  const src = readFileSync(new URL("../index.js", import.meta.url), "utf8");
+  check("index: the pause is decided before any flag is read, and both research stages stand down on it", /if \(researchPaused\(env\)\) \{ anthropicDown = true; anthropicWhy = PAUSED_LABEL; \}\s*else try \{\s*for \(const kind of \["key", "credits"\]\)/.test(src) && /if \(!anthropicDown && env\.ANTHROPIC_API_KEY && alertableSignals\.length > 0\)/.test(src) && /if \(!anthropicDown && env\.ANTHROPIC_API_KEY && \(env\.SWEEP_ENABLED \|\| "true"\) !== "false"\)/.test(src));
+  check("index: the report says the test is paused", /paused: researchPaused\(env\) \};/.test(src));
+  const toml = readFileSync(new URL("../wrangler.toml", import.meta.url), "utf8");
+  const m = toml.match(/^INVESTIGATOR = "([^"]*)"$/m);
+  check("wrangler: the switch is a plain variable the worker reads", !!m && (m[1] === "paused" || m[1] === "on"), m && m[1]);
+  check("wrangler: the test's rule settings are untouched by the pause", /^INVESTIGATION_DAILY_USD = "5"$/m.test(toml) && /^SWEEP_MAX_DAYS = "3"$/m.test(toml) && /^SWEEP_EXCLUDE_KINDS = "weather"$/m.test(toml) && /^SWEEP_PER_EVENT = "2"$/m.test(toml));
 }
 
 console.log(`investigator-outage: ${pass} passed, ${fail} failed`);

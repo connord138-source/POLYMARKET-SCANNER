@@ -63,6 +63,12 @@ INVESTIGATION_DAILY_CAP = "150"
 # Nov 18 2026: $10 -> $5 on the owner's "cut budget to 5" (each top-up lasts
 # twice as long; the test takes about twice as long to reach 60 settled bets).
 INVESTIGATION_DAILY_USD = "5"
+# Nov 25 2026 (owner: "I dont have funds to put into a claude key rn"): the
+# research is parked. "paused" = the 5-min cycle makes no research call at all
+# (cronStatus.investigations / sweep read "paused by the owner"); the test's
+# record and its rule (version 1) are untouched. To resume: a working key in
+# the worker (Push Anthropic Key workflow), then delete this line or set "on".
+INVESTIGATOR = "paused"
 # The test lane's sweep: only questions that settle within 3 days, weather
 # left out, at most 2 questions of one event a day.
 SWEEP_MAX_DAYS = "3"
