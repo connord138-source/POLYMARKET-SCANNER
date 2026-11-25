@@ -39,7 +39,7 @@ import { CROSS_SCHEMA, runCrossLane, checkCrossHedges, crossReport, CROSS_CLEAN_
 import { withStageClock, slowestStages } from "./src/stage-clock.js";
 import { SETTLE_WALL_MS, SETTLE_CURSOR_KEY, settleOrder, nextPendingList } from "./src/settle-queue.js";
 import { brierRecordFromRow, buildBrierFromRecords, readInBatches, settleWithin, BRIER_KV_MAX } from "./src/brier-report.js";
-import { OUTAGE_KEYS, OUTAGE_TTL_S, outageKind, outageLabel, outageActive, priorAttempt, healable, countedToday, KNOWN_SQL } from "./src/investigator-outage.js";
+import { OUTAGE_KEYS, OUTAGE_TTL_S, outageKind, outageLabel, outageActive, priorAttempt, healable, countedToday, KNOWN_SQL, PAUSED_LABEL, researchPaused } from "./src/investigator-outage.js";
 import { runMemberScalpers, memberState, connectAccount, updateAccountSettings, disconnectAccount, resumeAccount, setLiveAllowed, listAccounts } from "./src/scalp-accounts.js";
 import { dataApi, dataApiStats, describeFailure, pushScanHistory, scanHistorySummary } from "./src/data-api.js";
 import { scanWindow, scanResultShape, scanParams } from "./src/scan-window.js";
@@ -7231,7 +7231,7 @@ export default {
           try { billingDown = !!(await env.SIGNALS_CACHE.get(OUTAGE_KEYS.credits)); } catch (e) {}
           try { keyDown = await env.SIGNALS_CACHE.get(OUTAGE_KEYS.key, { type: "json" }); } catch (e) {}
           const spendNow = await investigationSpendToday(env);
-          report.budget = { usdToday: Math.round((spendNow.usd || 0) * 100) / 100, usdCap: parseFloat(env.INVESTIGATION_DAILY_USD || "5"), researchedToday: countedToday(spendNow), dailyCap: parseInt(env.INVESTIGATION_DAILY_CAP || "50", 10), maxDays: parseFloat(env.SWEEP_MAX_DAYS || "45"), creditsOut: billingDown, keyRejected: !!keyDown, keyError: keyDown ? String(keyDown.error || "").slice(0, 120) : null };
+          report.budget = { usdToday: Math.round((spendNow.usd || 0) * 100) / 100, usdCap: parseFloat(env.INVESTIGATION_DAILY_USD || "5"), researchedToday: countedToday(spendNow), dailyCap: parseInt(env.INVESTIGATION_DAILY_CAP || "50", 10), maxDays: parseFloat(env.SWEEP_MAX_DAYS || "45"), creditsOut: billingDown, keyRejected: !!keyDown, keyError: keyDown ? String(keyDown.error || "").slice(0, 120) : null, paused: researchPaused(env) };
           return new Response(JSON.stringify(report), {
             headers: { ...corsHeaders, "Content-Type": "application/json" }
           });
@@ -7611,7 +7611,11 @@ export default {
       // so topped-up credits are picked up quickly instead of after an hour.
       // The same for a key the API rejects (KV anthropic_key_down).
       let anthropicWhy = null;
-      try {
+      // The owner's pause (wrangler INVESTIGATOR = "paused") comes first: no
+      // flag is read and no call is made, so a key nobody is paying for is
+      // not re-probed every ten minutes.
+      if (researchPaused(env)) { anthropicDown = true; anthropicWhy = PAUSED_LABEL; }
+      else try {
         for (const kind of ["key", "credits"]) {
           const f = await env.SIGNALS_CACHE.get(OUTAGE_KEYS[kind], { type: "json" });
           if (outageActive(f)) { anthropicDown = true; anthropicWhy = outageLabel(kind); break; }

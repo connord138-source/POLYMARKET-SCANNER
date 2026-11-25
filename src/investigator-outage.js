@@ -30,6 +30,15 @@ export function outageActive(flag, nowMs = Date.now()) {
   return !!flag && !(flag.at && nowMs - flag.at > OUTAGE_REPROBE_MS);
 }
 
+// The owner's own pause (wrangler INVESTIGATOR = "paused", Nov 25 2026: no
+// funds for the research key). Not an outage: nothing is re-probed, no call
+// is made, and the record and the rule stay exactly as they are, so the test
+// picks up where it stopped when the line is taken out.
+export const PAUSED_LABEL = 'paused by the owner';
+export function researchPaused(env) {
+  return String((env && env.INVESTIGATOR) || '').trim().toLowerCase() === 'paused';
+}
+
 // What an existing investigation record means for a new attempt. A record
 // whose last error was an account outage was never really tried: it is not
 // done, not permanent, and its attempts start again.

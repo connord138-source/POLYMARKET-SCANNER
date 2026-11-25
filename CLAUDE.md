@@ -892,6 +892,22 @@ Commits from the snapshot job use `[skip ci]` and `deploy.yml` ignores
   Verified the same night on 16 live games: `xvenue.last.kalshiSource`
   'orderbooks', Kalshi read in 182 ms, the three venues 85 ms apart, and
   no sampled cross in the first ten hours on the order-book read.
+  PARKED (Nov 25 2026, owner's "I dont have funds to put into a claude key
+  rn"): wrangler `INVESTIGATOR = "paused"` (`researchPaused` / `PAUSED_LABEL`
+  in investigator-outage.js). The 5-min cycle decides it before any flag is
+  read: no research call, no re-probe of the rejected key;
+  `cronStatus.investigations` and `cronStatus.sweep` read `skipped: "paused
+  by the owner"`, the report's `budget.paused` is true (and `keyRejected`
+  goes false within the hour because nothing probes the key any more: that
+  is not the key working). The record stands at 96 researched, 12 bets, 11
+  settled (6 won, -$22.79 after Kalshi fees on $275), one bet open; rule
+  version 1 and its settings are untouched, so the test resumes where it
+  stopped (about $80 of research short of 60 bets at $5 a day). To resume:
+  a working, funded key in the repo secret, the Push Anthropic Key workflow,
+  then delete the `INVESTIGATOR` line. Do not remind the owner about the
+  key; it is their choice. The manual admin routes (`/investigate`,
+  `/sweep/opportunities?run=1`) are not gated by the pause, and the Agent
+  Crew's chat still tries the key and falls back to its rules.
 - `src/brier-report.js` — the agent's calibration against the market
   (`GET /learning/brier`, the Learning page's calibration panel; Nov 21
   2026). The route walked the KV `investigation_index` (up to 1000 keys)
